@@ -1,0 +1,26 @@
+# Environment and Keys
+.env
+.env.local
+keys/
+api/gemapikey*.txt
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Runtime and Workspace outputs
+workspace/
+uploads/
+*.log
+sample_test_target_app/test_target.db
+
+# IDE settings
+.vscode/
+.idea/
