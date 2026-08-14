@@ -60,7 +60,7 @@ describe('NavigationHeader Tab Gating', () => {
 });
 
 describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
-  test('renders orchestration container, upcoming agent preview, and subagents', () => {
+  test('renders top subagent stream tracker and side-by-side upload lanes', () => {
     render(
       <HomeUploadPage
         appState={null}
@@ -71,16 +71,17 @@ describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
     );
 
     expect(screen.getByText(/Execution Workspace & Agent Orchestration/i)).toBeInTheDocument();
-    expect(screen.getByText(/Upcoming Agent:/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/1. Requirement Understanding Agent/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/2. Document Intake Agent/i)).toBeInTheDocument();
-    expect(screen.getByText(/3. Application Understanding Agent/i)).toBeInTheDocument();
-    expect(screen.getByText('Active Hero')).toBeInTheDocument();
     expect(screen.getByText(/Subagent Stream & Live Status/i)).toBeInTheDocument();
-    expect(screen.getByText(/Requirement Parser & 15-Point Checklist Evaluator/i)).toBeInTheDocument();
+    expect(screen.getByText(/Requirement Parser/i)).toBeInTheDocument();
+    expect(screen.getByText(/Codebase AST Extractor/i)).toBeInTheDocument();
+    expect(screen.getByText(/1. Requirement Understanding Agent/i)).toBeInTheDocument();
+    expect(screen.getByText(/2. Document Intake Agent/i)).toBeInTheDocument();
+    expect(screen.getByText('Active Hero')).toBeInTheDocument();
+    expect(screen.getByText(/Click to Browse or Drag & Drop Documents/i)).toBeInTheDocument();
+    expect(screen.getByText(/Click to Browse or Drag & Drop Source ZIP/i)).toBeInTheDocument();
   });
 
-  test('supports dual upload lane expansion, filtering, and retry invalidation', async () => {
+  test('supports automatic post-upload live metrics card, tiny re-upload, and expandable filters', async () => {
     retryRun.mockResolvedValue({
       run_id: 'RUN-20260814-001',
       reset_generation: 2,
@@ -121,18 +122,18 @@ describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
       />
     );
 
-    expect(screen.getByText('1 Docs Indexed')).toBeInTheDocument();
-    expect(screen.getByText('42 Files Extracted')).toBeInTheDocument();
-    expect(screen.getByText('Requirement Documents Lane')).toBeInTheDocument();
-    expect(screen.getByText('Target Codebase ZIP Lane')).toBeInTheDocument();
+    // Live Metrics Card verification
+    expect(screen.getByText(/1 Requirement Document\(s\) Indexed/i)).toBeInTheDocument();
+    expect(screen.getByText(/42 Source Files Extracted & Indexed/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Re-upload').length).toBeGreaterThan(0);
 
-    // Expand ZIP details and filter
-    const expandBtn = screen.getByText('Expand File List');
+    // Expand ZIP file details
+    const expandBtn = screen.getByText(/Expand File Details/i);
     fireEvent.click(expandBtn);
     expect(screen.getByText('src/App.tsx')).toBeInTheDocument();
 
-    // Click retry step on Requirement Understanding Agent
-    const retryButtons = screen.getAllByText('Retry Step');
+    // Verify retry button calls retryRun
+    const retryButtons = screen.getAllByTitle(/Retry step and clear downstream data/i);
     expect(retryButtons.length).toBeGreaterThan(0);
     fireEvent.click(retryButtons[0]);
 
@@ -141,7 +142,7 @@ describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
     });
   });
 
-  test('displays live processing activity text and active subagents during AI stage', () => {
+  test('displays live processing activity text during AI understanding stage', () => {
     const mockRunningState: AppState = {
       run_id: 'RUN-20260814-RUNNING',
       project_name: 'CFA Digital Journey',
