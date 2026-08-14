@@ -58,7 +58,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     setUploadingDocs(true);
     setDocError(null);
     setDocSuccess(null);
-    try:
+    try {
       const res = await uploadDocuments(runId, files);
       setDocSuccess(`Successfully uploaded ${res.uploaded_count} requirement document(s).`);
       onRefreshStatus();

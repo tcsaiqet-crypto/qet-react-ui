@@ -9,8 +9,8 @@ export interface IntakeManifest {
   upload_id: string;
   zip_filename: string;
   extracted_path: string;
-  total_files: int | number;
-  total_size_bytes: int | number;
+  total_files: number;
+  total_size_bytes: number;
   files?: FileMetadata[];
   doc_files?: string[];
   created_at: string;
