@@ -1,4 +1,5 @@
 import { 
+  AISettingsResponse,
   CreateRunResponse, 
   DocumentUploadResponse, 
   CodebaseUploadResponse, 
@@ -8,6 +9,28 @@ import {
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '/api/v1';
+
+/** Error carrying structured backend diagnostics (error_code/diagnostics) instead of just a message. */
+export class ApiError extends Error {
+  error_code?: string;
+  diagnostics?: Record<string, any>;
+
+  constructor(message: string, error_code?: string, diagnostics?: Record<string, any>) {
+    super(message);
+    this.name = 'ApiError';
+    this.error_code = error_code;
+    this.diagnostics = diagnostics;
+  }
+}
+
+async function throwApiError(res: Response, fallbackMessage: string): Promise<never> {
+  const errorData = await res.json().catch(() => ({ detail: res.statusText }));
+  const detail = errorData?.detail;
+  if (detail && typeof detail === 'object') {
+    throw new ApiError(detail.error_message || fallbackMessage, detail.error_code, detail.diagnostics);
+  }
+  throw new ApiError((typeof detail === 'string' && detail) || fallbackMessage);
+}
 
 export async function createRun(projectName = 'CFA Digital Journey'): Promise<CreateRunResponse> {
   const res = await fetch(`${API_BASE_URL}/runs`, {
@@ -30,8 +53,7 @@ export async function uploadDocuments(runId: string, files: File[]): Promise<Doc
     body: formData,
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(errorData.detail || 'Document upload failed');
+    await throwApiError(res, 'Document upload failed');
   }
   return res.json();
 }
@@ -45,8 +67,7 @@ export async function uploadCodebase(runId: string, file: File): Promise<Codebas
     body: formData,
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(errorData.detail || 'Codebase ZIP upload failed');
+    await throwApiError(res, 'Codebase ZIP upload failed');
   }
   return res.json();
 }
@@ -81,6 +102,29 @@ export async function getUnderstanding(runId: string): Promise<{
   const res = await fetch(`${API_BASE_URL}/runs/${runId}/understanding`);
   if (!res.ok) {
     throw new Error(`Failed to retrieve understanding result: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function getAISettings(): Promise<AISettingsResponse> {
+  const res = await fetch(`${API_BASE_URL}/ai/settings`);
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to load AI settings');
+  }
+  return res.json();
+}
+
+export async function updateAISettings(payload: {
+  active_provider: 'gemini' | 'gpt';
+  provider_keys: Partial<Record<'gemini' | 'gpt', string>>;
+}): Promise<AISettingsResponse> {
+  const res = await fetch(`${API_BASE_URL}/ai/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to save AI settings');
   }
   return res.json();
 }

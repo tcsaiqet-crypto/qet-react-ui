@@ -28,6 +28,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
   onRefreshStatus
 }) => {
   const [isRunning, setIsRunning] = useState(false);
+  const [understanding, setUnderstanding] = useState<ApplicationUnderstanding | undefined>(appState?.understanding);
   const [errorDetails, setErrorDetails] = useState<{
     error_code: string;
     error_message: string;
@@ -37,7 +38,6 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
 
   const runId = appState?.run_id || '';
   const currentStatus = appState?.status || 'idle';
-  const understanding: ApplicationUnderstanding | undefined = appState?.understanding;
 
   useEffect(() => {
     if (runId && (currentStatus === 'ai_understanding_running' || currentStatus === 'understanding_ready')) {
@@ -59,6 +59,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
         setIsRunning(false);
       } else if (res.status === 'ready' && res.understanding) {
         setErrorDetails(null);
+        setUnderstanding(res.understanding);
         setIsRunning(false);
         onRefreshStatus();
       } else if (res.status === 'running') {
@@ -150,7 +151,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
 
       {/* Error Diagnostics Surface (AI Fail-Fast Observability) */}
       {(errorDetails || currentStatus === 'error') && (
-        <div className="rounded-xl bg-rose-950/40 border border-rose-800/80 p-6 space-y-4 shadow-xl">
+        <div className="rounded-xl bg-rose-950/40 border border-rose-800/80 p-6 space-y-4 shadow-xl animate-fade-in">
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-3 text-rose-300">
               <ShieldAlert className="w-6 h-6 text-rose-400 shrink-0" />

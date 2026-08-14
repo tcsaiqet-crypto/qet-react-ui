@@ -31,6 +31,13 @@ def is_junk_member(filename: str) -> bool:
     return bool(parts & config.junk_dir_patterns)
 
 
+def is_excluded_member(filename: str) -> bool:
+    """True if the file should be ignored for safe analysis intake instead of extracted."""
+    path = Path(filename)
+    ext = path.suffix.lower()
+    return is_junk_member(filename) or ext in config.forbidden_extensions
+
+
 def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[FileMetadata], int, int, int]:
     """
     Safely extract ZIP archive, skipping noisy dependency/build/VCS folders and
@@ -61,8 +68,8 @@ def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[Fil
             if member.is_dir():
                 continue
 
-            # 1. Skip noisy dependency/build/VCS folders entirely (not extracted, not counted)
-            if is_junk_member(member.filename):
+            # 1. Skip noisy dependency/build/VCS folders and executable helpers entirely.
+            if is_excluded_member(member.filename):
                 excluded_count += 1
                 continue
 
@@ -72,12 +79,7 @@ def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[Fil
                     f"File {member.filename} size ({member.file_size} bytes) exceeds limit of {config.max_single_file_bytes} bytes"
                 )
 
-            # 3. Extension check
             ext = Path(member.filename).suffix.lower()
-            if ext in config.forbidden_extensions:
-                raise SecurityError(
-                    f"Forbidden file extension '{ext}' detected in member '{member.filename}'"
-                )
 
             total_files += 1
             total_bytes += member.file_size

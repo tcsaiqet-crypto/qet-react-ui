@@ -43,3 +43,11 @@ keys/
 !walkthrough.md
 !requirements.md
 
+# Scratch scripts & temporary zip files
+update_*.py
+move_*.py
+print_*.py
+*.zip
+!cfa_digital_journey_sample.zip
+
+

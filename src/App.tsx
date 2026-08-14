@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { ZoomIn, ZoomOut } from 'lucide-react';
+import { AISettingsPanel } from './components/AISettingsPanel';
 import { NavigationHeader, TabId } from './components/NavigationHeader';
 import { HomeUploadPage } from './components/HomeUploadPage';
 import { UnderstandingPage } from './components/UnderstandingPage';
@@ -9,10 +11,19 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
   const [appState, setAppState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [zoomLevel, setZoomLevel] = useState<number>(() => {
+    const stored = window.localStorage.getItem('qet-ui-zoom');
+    const parsed = stored ? Number(stored) : 100;
+    return Number.isFinite(parsed) && parsed >= 80 && parsed <= 140 ? parsed : 100;
+  });
 
   useEffect(() => {
     initRun();
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem('qet-ui-zoom', String(zoomLevel));
+  }, [zoomLevel]);
 
   useEffect(() => {
     if (!appState?.run_id) return;
@@ -68,8 +79,15 @@ export const App: React.FC = () => {
 
   const isUnderstandingReady = Boolean(appState?.understanding || appState?.status === 'understanding_ready');
 
+  const adjustZoom = (delta: number) => {
+    setZoomLevel((prev) => Math.max(80, Math.min(140, prev + delta)));
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-white">
+    <div
+      className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-white"
+      style={{ zoom: `${zoomLevel}%` }}
+    >
       
       {/* Navigation Header */}
       <NavigationHeader
@@ -79,6 +97,10 @@ export const App: React.FC = () => {
         isUnderstandingReady={isUnderstandingReady}
         runId={appState?.run_id}
         onResetRun={initRun}
+        zoomLevel={zoomLevel}
+        onZoomIn={() => adjustZoom(10)}
+        onZoomOut={() => adjustZoom(-10)}
+        onZoomReset={() => setZoomLevel(100)}
       />
 
       {/* Main Container */}
@@ -91,12 +113,15 @@ export const App: React.FC = () => {
         ) : (
           <>
             {activeTab === 'home' && (
-              <HomeUploadPage
-                appState={appState}
-                onRefreshStatus={() => refreshStatus()}
-                onProceedToUnderstanding={() => setActiveTab('understanding')}
-                onCreateNewRun={initRun}
-              />
+              <div className="space-y-8">
+                <AISettingsPanel />
+                <HomeUploadPage
+                  appState={appState}
+                  onRefreshStatus={() => refreshStatus()}
+                  onProceedToUnderstanding={() => setActiveTab('understanding')}
+                  onCreateNewRun={initRun}
+                />
+              </div>
             )}
 
             {activeTab === 'understanding' && (
@@ -129,6 +154,30 @@ export const App: React.FC = () => {
           </>
         )}
       </main>
+
+      <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950/90 px-2 py-2 shadow-2xl shadow-black/40 backdrop-blur-md">
+        <button
+          onClick={() => adjustZoom(-10)}
+          title="Zoom out"
+          className="rounded-xl border border-slate-800 bg-slate-900 p-2 text-slate-300 transition-colors hover:border-cyan-700 hover:text-cyan-300"
+        >
+          <ZoomOut className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => setZoomLevel(100)}
+          title="Reset zoom"
+          className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-bold text-cyan-300 transition-colors hover:border-cyan-700"
+        >
+          {zoomLevel}%
+        </button>
+        <button
+          onClick={() => adjustZoom(10)}
+          title="Zoom in"
+          className="rounded-xl border border-slate-800 bg-slate-900 p-2 text-slate-300 transition-colors hover:border-cyan-700 hover:text-cyan-300"
+        >
+          <ZoomIn className="h-4 w-4" />
+        </button>
+      </div>
 
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-6 text-center text-xs text-slate-600">

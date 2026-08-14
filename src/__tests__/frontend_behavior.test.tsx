@@ -17,6 +17,10 @@ describe('NavigationHeader Tab Gating', () => {
         isIntakeReady={false}
         isUnderstandingReady={false}
         runId="RUN-TEST-001"
+        zoomLevel={100}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onZoomReset={vi.fn()}
       />
     );
 
@@ -41,6 +45,10 @@ describe('NavigationHeader Tab Gating', () => {
         isIntakeReady={true}
         isUnderstandingReady={false}
         runId="RUN-TEST-001"
+        zoomLevel={100}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onZoomReset={vi.fn()}
       />
     );
 

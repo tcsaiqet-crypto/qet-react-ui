@@ -20,6 +20,7 @@ for /f "tokens=5" %%P in ('netstat -ano ^| findstr :8080 ^| findstr LISTENING') 
 echo [3/3] Starting FastAPI app on http://localhost:8000 ...
 cd /d "%~dp0backend"
 set PYTHONPATH=.
+set QET_ENABLE_REQUIREMENT_CATEGORIZATION=true
 python -m uvicorn src.api.fastapi_app:app --host 127.0.0.1 --port 8000
 
 endlocal

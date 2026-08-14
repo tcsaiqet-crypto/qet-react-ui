@@ -13,7 +13,27 @@ export interface IntakeManifest {
   total_size_bytes: number;
   files?: FileMetadata[];
   doc_files?: string[];
+  excluded_file_count?: number;
   created_at: string;
+}
+
+export interface RequirementValidationItem {
+  item_id: number;
+  item_name: string;
+  status: string;
+  evidence_source: string;
+  confidence: string;
+  observations: string;
+}
+
+export interface RequirementValidationReport {
+  quality_score_percentage: number;
+  evaluated_items_count: number;
+  present_count: number;
+  partial_count: number;
+  missing_count: number;
+  not_applicable_count: number;
+  items: RequirementValidationItem[];
 }
 
 export interface RequirementGap {
@@ -89,6 +109,7 @@ export interface ApplicationUnderstanding {
   flows: ApplicationFlow[];
   entry_points: string[];
   gaps: RequirementGap[];
+  validation_report?: RequirementValidationReport;
   ui_inventory?: UIInventory;
   api_inventory?: APIInventory;
   testability_observations: string[];
@@ -137,4 +158,22 @@ export interface StatusResponse {
   error?: ErrorPayload;
   intake_manifest?: IntakeManifest;
   stage_timestamps?: Record<string, string>;
+}
+
+export interface AIProviderConfig {
+  key_present: boolean;
+  display_name: string;
+}
+
+export interface AISettingsResponse {
+  active_provider: 'gemini' | 'gpt';
+  llm_enabled: boolean;
+  providers: Record<'gemini' | 'gpt', AIProviderConfig>;
+  runtime_state: {
+    provider: string;
+    enabled: boolean;
+    has_key: boolean;
+    state: string;
+  };
+  gemini_candidate_models: string[];
 }

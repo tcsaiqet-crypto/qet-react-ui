@@ -8,7 +8,9 @@ import {
   PlayCircle, 
   BarChart3, 
   Lock, 
-  Sparkles 
+  Sparkles,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 
 export type TabId = 'home' | 'understanding' | 'test_cases' | 'synthetic_data' | 'playwright' | 'execution' | 'report';
@@ -20,6 +22,10 @@ interface NavigationHeaderProps {
   isUnderstandingReady: boolean;
   runId?: string;
   onResetRun?: () => void;
+  zoomLevel: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
 }
 
 export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
@@ -28,7 +34,11 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   isIntakeReady,
   isUnderstandingReady,
   runId,
-  onResetRun
+  onResetRun,
+  zoomLevel,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset
 }) => {
   const tabs = [
     { id: 'home' as TabId, label: 'Home', icon: Home, enabled: true, tooltip: 'Intake & Upload dashboard' },
@@ -65,23 +75,48 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
             </div>
           </div>
 
-          {/* Current Run ID Badge */}
-          {runId && (
-            <div className="hidden md:flex items-center space-x-3 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
-              <span className="text-xs text-slate-400 font-medium">Active Run:</span>
-              <code className="text-xs font-mono font-semibold text-cyan-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                {runId}
-              </code>
-              {onResetRun && (
-                <button
-                  onClick={onResetRun}
-                  className="text-xs text-slate-400 hover:text-cyan-400 transition-colors font-medium underline"
-                >
-                  New Run
-                </button>
-              )}
+          <div className="hidden md:flex items-center space-x-3">
+            <div className="flex items-center rounded-lg border border-slate-800 bg-slate-900/80 p-1">
+              <button
+                onClick={onZoomOut}
+                title="Zoom out"
+                className="rounded-md px-2 py-1 text-slate-300 transition-colors hover:bg-slate-800 hover:text-cyan-300"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </button>
+              <button
+                onClick={onZoomReset}
+                title="Reset zoom"
+                className="min-w-[56px] rounded-md px-2 py-1 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-800 hover:text-cyan-300"
+              >
+                {zoomLevel}%
+              </button>
+              <button
+                onClick={onZoomIn}
+                title="Zoom in"
+                className="rounded-md px-2 py-1 text-slate-300 transition-colors hover:bg-slate-800 hover:text-cyan-300"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </button>
             </div>
-          )}
+
+            {runId && (
+              <div className="flex items-center space-x-3 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
+                <span className="text-xs text-slate-400 font-medium">Active Run:</span>
+                <code className="text-xs font-mono font-semibold text-cyan-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                  {runId}
+                </code>
+                {onResetRun && (
+                  <button
+                    onClick={onResetRun}
+                    className="text-xs text-slate-400 hover:text-cyan-400 transition-colors font-medium underline"
+                  >
+                    New Run
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Tab Navigation Ribbon */}

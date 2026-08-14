@@ -4,16 +4,16 @@ import {
   FileText, 
   FileArchive, 
   CheckCircle2, 
-  AlertCircle, 
   ArrowRight, 
   Loader2, 
   RotateCcw,
   Sparkles,
   Layers,
-  Code
+  Code,
+  ShieldAlert
 } from 'lucide-react';
 import { AppState } from '../types';
-import { uploadDocuments, uploadCodebase } from '../services/apiClient';
+import { uploadDocuments, uploadCodebase, ApiError } from '../services/apiClient';
 
 interface HomeUploadPageProps {
   appState: AppState | null;
@@ -34,11 +34,14 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   const [uploadingDocs, setUploadingDocs] = useState(false);
   const [uploadingZip, setUploadingZip] = useState(false);
 
-  const [docError, setDocError] = useState<string | null>(null);
-  const [zipError, setZipError] = useState<string | null>(null);
+  const [docError, setDocError] = useState<Error | null>(null);
+  const [zipError, setZipError] = useState<Error | null>(null);
 
   const [docSuccess, setDocSuccess] = useState<string | null>(null);
   const [zipSuccess, setZipSuccess] = useState<string | null>(null);
+
+  const [isDraggingDocs, setIsDraggingDocs] = useState(false);
+  const [isDraggingZip, setIsDraggingZip] = useState(false);
 
   const runId = appState?.run_id || '';
   const currentStatus = appState?.status || 'idle';
@@ -63,10 +66,19 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
       setDocSuccess(`Successfully uploaded ${res.uploaded_count} requirement document(s).`);
       onRefreshStatus();
     } catch (err: any) {
-      setDocError(err.message || 'Failed to upload document files.');
+      setDocError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setUploadingDocs(false);
     }
+  };
+
+  const handleDocDrop = async (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsDraggingDocs(false);
+    if (uploadingDocs || !e.dataTransfer.files.length) return;
+    const selected = Array.from(e.dataTransfer.files);
+    setDocFiles(selected);
+    await performDocUpload(selected);
   };
 
   // Handle ZIP drop or select
@@ -74,7 +86,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     if (!e.target.files || e.target.files.length === 0) return;
     const selected = e.target.files[0];
     if (!selected.name.endsWith('.zip')) {
-      setZipError('Invalid file format. Please upload a .zip archive.');
+      setZipError(new Error('Invalid file format. Please upload a .zip archive.'));
       return;
     }
     setZipFile(selected);
@@ -91,10 +103,23 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
       setZipSuccess(`Codebase ZIP uploaded and indexed (${res.intake_manifest.total_files} files extracted).`);
       onRefreshStatus();
     } catch (err: any) {
-      setZipError(err.message || 'Failed to upload codebase ZIP.');
+      setZipError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setUploadingZip(false);
     }
+  };
+
+  const handleZipDrop = async (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setIsDraggingZip(false);
+    if (uploadingZip || !e.dataTransfer.files.length) return;
+    const selected = e.dataTransfer.files[0];
+    if (!selected.name.endsWith('.zip')) {
+      setZipError(new Error('Invalid file format. Please upload a .zip archive.'));
+      return;
+    }
+    setZipFile(selected);
+    await performZipUpload(selected);
   };
 
   const isIntakeReady = Boolean(
@@ -109,6 +134,28 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     { key: 'ai_understanding_running', label: 'AI Understanding Running' },
     { key: 'understanding_ready', label: 'Understanding Ready' },
   ];
+
+  const renderUploadError = (err: Error) => {
+    const apiErr = err instanceof ApiError ? err : null;
+    return (
+      <div className="rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs animate-fade-in overflow-hidden">
+        <div className="p-3 flex items-start space-x-2">
+          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+          <div className="space-y-1 flex-1">
+            <span>{err.message}</span>
+            {apiErr?.error_code && (
+              <div className="font-mono text-[10px] text-rose-400/80">error_code: {apiErr.error_code}</div>
+            )}
+          </div>
+        </div>
+        {apiErr?.diagnostics && (
+          <pre className="bg-slate-950/80 border-t border-rose-900/50 p-2.5 text-[10px] font-mono text-rose-200/90 overflow-x-auto">
+            {JSON.stringify(apiErr.diagnostics, null, 2)}
+          </pre>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8 pb-12">
@@ -176,7 +223,16 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
             </div>
 
             {/* Dropzone area */}
-            <label className="relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-700/80 hover:border-indigo-500/80 rounded-xl cursor-pointer bg-slate-950/50 hover:bg-slate-950/80 transition-all p-4 text-center group">
+            <label
+              onDragOver={(e) => { e.preventDefault(); if (!uploadingDocs) setIsDraggingDocs(true); }}
+              onDragLeave={() => setIsDraggingDocs(false)}
+              onDrop={handleDocDrop}
+              className={`relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer transition-all p-4 text-center group ${
+                isDraggingDocs
+                  ? 'border-indigo-400 bg-indigo-950/40 scale-[1.02] shadow-lg shadow-indigo-500/10'
+                  : 'border-slate-700/80 hover:border-indigo-500/80 bg-slate-950/50 hover:bg-slate-950/80'
+              }`}
+            >
               <input
                 type="file"
                 multiple
@@ -185,27 +241,22 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 className="hidden"
                 disabled={uploadingDocs}
               />
-              <UploadCloud className="w-8 h-8 text-indigo-400 group-hover:scale-110 transition-transform mb-2" />
+              <UploadCloud className={`w-8 h-8 text-indigo-400 mb-2 transition-transform ${isDraggingDocs ? 'scale-125' : 'group-hover:scale-110'}`} />
               <p className="text-xs font-semibold text-slate-300">
-                {uploadingDocs ? 'Uploading documents...' : 'Click or Drag & Drop Requirement Docs'}
+                {uploadingDocs ? 'Uploading documents...' : isDraggingDocs ? 'Release to upload' : 'Click or Drag & Drop Requirement Docs'}
               </p>
               <p className="text-[11px] text-slate-500 mt-1">Supports Markdown, PDF, Text, and Word</p>
             </label>
 
             {/* Selected File Feedback */}
             {docSuccess && (
-              <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 text-xs flex items-center space-x-2">
+              <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 text-xs flex items-center space-x-2 animate-fade-in">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>{docSuccess}</span>
               </div>
             )}
 
-            {docError && (
-              <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>{docError}</span>
-              </div>
-            )}
+            {docError && renderUploadError(docError)}
 
             {/* Document Inventory count */}
             {manifest?.doc_files && manifest.doc_files.length > 0 && (
@@ -240,7 +291,16 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
             </div>
 
             {/* Dropzone area */}
-            <label className="relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-slate-700/80 hover:border-cyan-500/80 rounded-xl cursor-pointer bg-slate-950/50 hover:bg-slate-950/80 transition-all p-4 text-center group">
+            <label
+              onDragOver={(e) => { e.preventDefault(); if (!uploadingZip) setIsDraggingZip(true); }}
+              onDragLeave={() => setIsDraggingZip(false)}
+              onDrop={handleZipDrop}
+              className={`relative flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer transition-all p-4 text-center group ${
+                isDraggingZip
+                  ? 'border-cyan-400 bg-cyan-950/40 scale-[1.02] shadow-lg shadow-cyan-500/10'
+                  : 'border-slate-700/80 hover:border-cyan-500/80 bg-slate-950/50 hover:bg-slate-950/80'
+              }`}
+            >
               <input
                 type="file"
                 accept=".zip"
@@ -248,27 +308,22 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 className="hidden"
                 disabled={uploadingZip}
               />
-              <FileArchive className="w-8 h-8 text-cyan-400 group-hover:scale-110 transition-transform mb-2" />
+              <FileArchive className={`w-8 h-8 text-cyan-400 mb-2 transition-transform ${isDraggingZip ? 'scale-125' : 'group-hover:scale-110'}`} />
               <p className="text-xs font-semibold text-slate-300">
-                {uploadingZip ? 'Extracting & Indexing ZIP...' : 'Click or Drag & Drop Source Code ZIP'}
+                {uploadingZip ? 'Extracting & Indexing ZIP...' : isDraggingZip ? 'Release to upload' : 'Click or Drag & Drop Source Code ZIP'}
               </p>
               <p className="text-[11px] text-slate-500 mt-1">Accepts React, TypeScript, Python, HTML source archives</p>
             </label>
 
             {/* Selected File Feedback */}
             {zipSuccess && (
-              <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 text-xs flex items-center space-x-2">
+              <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 text-xs flex items-center space-x-2 animate-fade-in">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>{zipSuccess}</span>
               </div>
             )}
 
-            {zipError && (
-              <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>{zipError}</span>
-              </div>
-            )}
+            {zipError && renderUploadError(zipError)}
 
             {/* Codebase Manifest Details */}
             {manifest && manifest.total_files > 0 && (
@@ -277,6 +332,12 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                   <span>Extracted Files Count:</span>
                   <span className="font-mono text-cyan-300 font-bold">{manifest.total_files} files</span>
                 </div>
+                {typeof manifest.excluded_file_count === 'number' && manifest.excluded_file_count > 0 && (
+                  <div className="flex justify-between">
+                    <span>Excluded Noise / Unsafe Files:</span>
+                    <span className="font-mono text-amber-300 font-bold">{manifest.excluded_file_count} files</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Total Code Size:</span>
                   <span className="font-mono text-slate-300">{(manifest.total_size_bytes / 1024).toFixed(1)} KB</span>
@@ -306,9 +367,16 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
         {/* Progress Bar */}
         <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
           <div 
-            className="bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 h-full transition-all duration-300"
+            className="relative bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 h-full transition-all duration-500 overflow-hidden"
             style={{ width: `${progress}%` }}
-          />
+          >
+            {currentStatus.includes('running') && (
+              <div
+                className="absolute inset-0 animate-shimmer"
+                style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)', backgroundSize: '400px 100%' }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Stage Nodes Grid */}
@@ -320,9 +388,10 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
             return (
               <div 
                 key={st.key}
-                className={`p-3 rounded-lg border text-center transition-all ${
+                style={{ animationDelay: `${idx * 60}ms` }}
+                className={`p-3 rounded-lg border text-center transition-all animate-fade-in-scale ${
                   isCurrent 
-                    ? 'bg-cyan-950/60 border-cyan-500/80 text-cyan-300 shadow-md shadow-cyan-500/10'
+                    ? 'bg-cyan-950/60 border-cyan-500/80 text-cyan-300 shadow-md shadow-cyan-500/20 ring-2 ring-cyan-500/30 animate-pulse'
                     : isCompleted
                       ? 'bg-slate-900 border-slate-800 text-slate-300'
                       : 'bg-slate-950/50 border-slate-900 text-slate-600'

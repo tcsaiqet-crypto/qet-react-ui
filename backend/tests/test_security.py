@@ -75,15 +75,21 @@ def test_zip_skips_junk_dependency_folders(tmp_path: Path, monkeypatch: pytest.M
     assert (extract_dir / "src" / "app.py").exists()
 
 
-def test_zip_forbidden_extension(tmp_path: Path) -> None:
+def test_zip_forbidden_extension_is_excluded(tmp_path: Path) -> None:
     zip_path = tmp_path / "malicious.zip"
     extract_dir = tmp_path / "output"
     
     with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("safe/readme.md", "# allowed")
         zf.writestr("payload.exe", "binary payload")
-        
-    with pytest.raises(SecurityError, match="Forbidden file extension"):
-        validate_and_extract_zip(zip_path, extract_dir)
+
+    extracted_files, count, _total_bytes, excluded_count = validate_and_extract_zip(zip_path, extract_dir)
+
+    assert count == 1
+    assert excluded_count == 1
+    assert len(extracted_files) == 1
+    assert (extract_dir / "safe" / "readme.md").exists()
+    assert not (extract_dir / "payload.exe").exists()
 
 
 def test_zip_slip_traversal_blocked(tmp_path: Path) -> None:
