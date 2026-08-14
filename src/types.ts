@@ -1,4 +1,4 @@
-export interface FileMetadata {
+﻿export interface FileMetadata {
   rel_path: string;
   size_bytes: number;
   extension: string;
@@ -228,8 +228,12 @@ export interface RunSummary {
   updated_at?: string;
   total_files: number;
   doc_count: number;
+  has_html_report?: boolean;
+  has_pdf_report?: boolean;
+  has_understanding?: boolean;
 }
 
 export interface RunListResponse {
   runs: RunSummary[];
 }
+

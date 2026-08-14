@@ -359,3 +359,34 @@ def test_get_requirement_coverage_endpoint_with_seeded_state():
     assert cat_map["CAT-FUNC"]["total_requirements"] == 2
     assert cat_map["CAT-FUNC"]["covered_requirements"] == 1
     assert cat_map["CAT-FUNC"]["coverage_percentage"] == 50.0
+
+
+def test_list_runs_and_get_full_state():
+    """Verify GET /api/v1/runs lists saved runs and GET /api/v1/runs/{id} returns full state."""
+    # 1. Create a run
+    create_resp = client.post("/api/v1/runs", json={"project_name": "CFA Digital Journey"})
+    assert create_resp.status_code == 200
+    run_id = create_resp.json()["run_id"]
+
+    # 2. List runs
+    list_resp = client.get("/api/v1/runs")
+    assert list_resp.status_code == 200
+    runs = list_resp.json().get("runs", [])
+    assert len(runs) > 0
+    matched = [r for r in runs if r["run_id"] == run_id]
+    assert len(matched) == 1
+    assert matched[0]["project_name"] == "CFA Digital Journey"
+    assert "has_html_report" in matched[0]
+    assert "has_understanding" in matched[0]
+
+    # 3. Get full state
+    get_resp = client.get(f"/api/v1/runs/{run_id}")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["run_id"] == run_id
+    assert get_resp.json()["state"]["status"] == "idle"
+
+
+def test_get_nonexistent_run_returns_404():
+    """Verify GET /api/v1/runs/nonexistent returns 404."""
+    resp = client.get("/api/v1/runs/RUN-NONEXISTENT-999999")
+    assert resp.status_code == 404

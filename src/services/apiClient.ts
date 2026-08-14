@@ -1,4 +1,4 @@
-import { 
+﻿import { 
   AISettingsResponse,
   VerifyAISettingsResponse,
   CreateRunResponse, 
@@ -82,6 +82,14 @@ export async function getRunStatus(runId: string): Promise<StatusResponse> {
   return res.json();
 }
 
+export async function getRunFullState(runId: string): Promise<CreateRunResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}`);
+  if (!res.ok) {
+    await throwApiError(res, `Failed to load run ${runId}`);
+  }
+  return res.json();
+}
+
 export async function listRuns(): Promise<RunListResponse> {
   const res = await fetch(`${API_BASE_URL}/runs`);
   if (!res.ok) {
@@ -149,3 +157,4 @@ export async function verifyAISettings(): Promise<VerifyAISettingsResponse> {
   }
   return res.json();
 }
+

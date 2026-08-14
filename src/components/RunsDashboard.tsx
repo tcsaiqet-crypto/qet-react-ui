@@ -1,5 +1,15 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { Clock3, FolderKanban, RefreshCcw, ArrowRight } from 'lucide-react';
+import { 
+  Clock3, 
+  FolderKanban, 
+  RefreshCcw, 
+  ArrowRight, 
+  FileText, 
+  BrainCircuit, 
+  FileCode, 
+  ExternalLink,
+  CheckCircle2
+} from 'lucide-react';
 import { listRuns } from '../services/apiClient';
 import { RunSummary } from '../types';
 
@@ -18,7 +28,7 @@ export const RunsDashboard: React.FC<RunsDashboardProps> = ({ onOpenRun, activeR
     setError(null);
     try {
       const data = await listRuns();
-      setRuns(data.runs);
+      setRuns(data.runs || []);
     } catch (err: any) {
       setError(err?.message || 'Failed to load previous runs.');
     } finally {
@@ -32,8 +42,9 @@ export const RunsDashboard: React.FC<RunsDashboardProps> = ({ onOpenRun, activeR
 
   return (
     <div className="space-y-6 pb-12">
+      {/* Header */}
       <div className="qet-panel p-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="inline-flex items-center space-x-2 px-3 py-1 text-xs font-semibold qet-badge-accent">
               <FolderKanban className="h-3.5 w-3.5" />
@@ -43,12 +54,12 @@ export const RunsDashboard: React.FC<RunsDashboardProps> = ({ onOpenRun, activeR
               Run History Dashboard
             </h2>
             <p className="max-w-2xl text-xs" style={{ color: 'var(--qet-text-muted)' }}>
-              Browse earlier runs, reopen them, and inspect previous test executions without re-uploading sources.
+              Browse earlier runs, reopen them into the execution workspace, and inspect generated report artifacts.
             </p>
           </div>
           <button
             onClick={() => void loadRuns()}
-            className="qet-btn-secondary inline-flex items-center space-x-2 px-4 py-2 text-xs font-semibold"
+            className="qet-btn-secondary inline-flex items-center space-x-2 px-4 py-2 text-xs font-semibold cursor-pointer"
           >
             <RefreshCcw className="h-3.5 w-3.5" />
             <span>Refresh</span>
@@ -56,6 +67,7 @@ export const RunsDashboard: React.FC<RunsDashboardProps> = ({ onOpenRun, activeR
         </div>
       </div>
 
+      {/* Content */}
       {loading ? (
         <div className="qet-panel p-10 text-center text-xs" style={{ color: 'var(--qet-text-muted)' }}>
           Loading runs...
@@ -73,45 +85,97 @@ export const RunsDashboard: React.FC<RunsDashboardProps> = ({ onOpenRun, activeR
             return (
               <div
                 key={run.run_id}
-                className={`qet-panel p-5 space-y-3 transition-all ${
-                  isActive ? 'ring-2 ring-blue-500/40 shadow-sm' : ''
+                className={`qet-panel p-5 space-y-4 transition-all ${
+                  isActive ? 'ring-2 ring-blue-500/50 shadow-md' : ''
                 }`}
               >
+                {/* Header Row */}
                 <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--qet-text-muted)' }}>
                       {run.project_name}
                     </div>
                     <div className="font-mono text-sm font-bold" style={{ color: 'var(--qet-accent)' }}>
                       {run.run_id}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="qet-badge-neutral px-2 py-0.5 font-semibold">Status: {run.status}</span>
-                      <span className="qet-badge-neutral px-2 py-0.5 font-semibold">Progress: {run.progress}%</span>
-                      <span className="qet-badge-neutral px-2 py-0.5">Files: {run.total_files}</span>
-                      <span className="qet-badge-neutral px-2 py-0.5">Docs: {run.doc_count}</span>
-                    </div>
                   </div>
-                  {isActive && (
+                  {isActive ? (
                     <span className="qet-badge-accent px-2.5 py-1 text-[11px] font-bold">
-                      Active
+                      Active Workspace
+                    </span>
+                  ) : (
+                    <span className="qet-badge-neutral px-2 py-0.5 text-[11px] font-medium">
+                      {run.status}
                     </span>
                   )}
                 </div>
 
+                {/* Metrics Badges */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="qet-card-elevated px-2.5 py-1 font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
+                    Progress: {run.progress}%
+                  </span>
+                  <span className="qet-card-elevated px-2.5 py-1" style={{ color: 'var(--qet-text-secondary)' }}>
+                    Codebase: {run.total_files} files
+                  </span>
+                  <span className="qet-card-elevated px-2.5 py-1" style={{ color: 'var(--qet-text-secondary)' }}>
+                    Requirements: {run.doc_count} docs
+                  </span>
+                  {run.has_understanding && (
+                    <span className="qet-badge-accent px-2 py-0.5 text-[11px] inline-flex items-center gap-1">
+                      <BrainCircuit className="w-3 h-3" />
+                      <span>Understanding Ready</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Reports / Artifacts Links */}
+                {(run.has_html_report || run.has_pdf_report) && (
+                  <div className="pt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-[11px] font-semibold" style={{ color: 'var(--qet-text-muted)' }}>
+                      Saved Artifacts:
+                    </span>
+                    {run.has_html_report && (
+                      <a
+                        href={`/api/v1/runs/${run.run_id}/reports/quality_report.html`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="qet-badge-success px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1 hover:underline"
+                      >
+                        <FileText className="w-3 h-3" />
+                        <span>HTML Report</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                      </a>
+                    )}
+                    {run.has_pdf_report && (
+                      <a
+                        href={`/api/v1/runs/${run.run_id}/reports/quality_report.pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="qet-badge-accent px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-1 hover:underline"
+                      >
+                        <FileText className="w-3 h-3" />
+                        <span>PDF Report</span>
+                        <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer Actions */}
                 <div
                   className="mt-3 pt-3 flex items-center justify-between text-xs border-t"
                   style={{ borderColor: 'var(--qet-border)', color: 'var(--qet-text-muted)' }}
                 >
                   <div className="inline-flex items-center gap-1.5">
                     <Clock3 className="h-3.5 w-3.5" />
-                    <span>{run.updated_at || run.created_at || 'Unknown time'}</span>
+                    <span>{run.updated_at ? new Date(run.updated_at).toLocaleString() : (run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown')}</span>
                   </div>
                   <button
                     onClick={() => onOpenRun(run.run_id)}
-                    className="qet-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold cursor-pointer"
+                    className="qet-btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold cursor-pointer shadow-xs"
                   >
-                    <span>Open run</span>
+                    <span>Open in Workspace</span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>

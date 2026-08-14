@@ -13,7 +13,8 @@ import {
   Bot,
   FileCode,
   Check,
-  AlertCircle
+  RefreshCw,
+  PlusCircle
 } from 'lucide-react';
 import { AppState } from '../types';
 import { uploadDocuments, uploadCodebase, ApiError } from '../services/apiClient';
@@ -46,13 +47,19 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   const [isDraggingDocs, setIsDraggingDocs] = useState(false);
   const [isDraggingZip, setIsDraggingZip] = useState(false);
 
+  const [forceExpandDocs, setForceExpandDocs] = useState(false);
+  const [forceExpandZip, setForceExpandZip] = useState(false);
+
   const runId = appState?.run_id || '';
   const currentStatus = appState?.status || 'idle';
   const progress = appState?.progress || 0;
   const manifest = appState?.intake_manifest;
 
+  const hasDocsUploaded = Boolean(manifest?.doc_files && manifest.doc_files.length > 0);
+  const hasZipUploaded = Boolean(manifest && manifest.total_files > 0);
+
   const statusToAgent: Record<string, string> = {
-    idle: 'Intake Coordinator',
+    idle: 'Requirement Understanding Agent',
     uploading: 'Document Intake Agent',
     processing_zip: 'ZIP Processing Agent',
     indexing: 'Source Inventory Agent',
@@ -60,7 +67,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     understanding_ready: 'Understanding Agent',
     error: 'Recovery / Diagnostics Agent',
   };
-  const activeAgent = statusToAgent[currentStatus] || 'Intake Coordinator';
+  const activeAgent = statusToAgent[currentStatus] || 'Requirement Understanding Agent';
 
   // Handle doc drop or select
   const handleDocSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,6 +85,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     try {
       const res = await uploadDocuments(runId, files);
       setDocSuccess(`Successfully indexed ${res.uploaded_count} requirement document(s).`);
+      setForceExpandDocs(false);
       onRefreshStatus();
     } catch (err: any) {
       setDocError(err instanceof Error ? err : new Error(String(err)));
@@ -115,6 +123,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     try {
       const res = await uploadCodebase(runId, file);
       setZipSuccess(`Archive unpacked: ${res.intake_manifest.total_files} files indexed.`);
+      setForceExpandZip(false);
       onRefreshStatus();
     } catch (err: any) {
       setZipError(err instanceof Error ? err : new Error(String(err)));
@@ -152,7 +161,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   const renderUploadError = (err: Error) => {
     const apiErr = err instanceof ApiError ? err : null;
     return (
-      <div className="qet-badge-danger p-3 text-xs space-y-1.5">
+      <div className="qet-badge-danger p-3 text-xs space-y-1.5 animate-file-item">
         <div className="flex items-start gap-2">
           <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="flex-1">
@@ -193,18 +202,18 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
             </div>
           </div>
 
-          {/* Actions & Status */}
+          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
             <button
               onClick={onCreateNewRun}
-              className="qet-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold"
+              className="qet-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold cursor-pointer"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>New Run</span>
             </button>
             <button
               onClick={onRefreshStatus}
-              className="qet-btn-primary inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold shadow-sm"
+              className="qet-btn-primary inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold shadow-sm cursor-pointer"
             >
               <Loader2 className={`h-3.5 w-3.5 ${currentStatus.includes('running') ? 'animate-spin' : ''}`} />
               <span>Poll Status</span>
@@ -269,38 +278,86 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
         </div>
       </div>
 
-      {/* ── 3. Source Upload Cards ──────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Card A: Requirement Specifications */}
-        <div className="qet-panel p-6 space-y-4 flex flex-col justify-between">
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center shadow-xs"
-                  style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
-                >
-                  <FileText className="w-5 h-5" style={{ color: 'var(--qet-accent)' }} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
-                    1. Requirement Specifications
-                  </h3>
-                  <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
-                    Upload Markdown, PDF, Word, or text specs
-                  </p>
-                </div>
-              </div>
-              {docSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+      {/* ── 3. Vertical Step Rail: Requirement Understanding Agent ── */}
+      <div className="qet-panel p-6 space-y-6">
+        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: 'var(--qet-border)' }}>
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
+            >
+              <Bot className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
             </div>
+            <div>
+              <h3 className="text-base font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                Requirement Understanding Agent
+              </h3>
+              <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+                Intake specifications, codebase architecture, and discover application testability.
+              </p>
+            </div>
+          </div>
+          <span className="qet-badge-neutral px-2.5 py-1 text-xs font-semibold">
+            {isIntakeReady ? 'Intake Complete' : 'Awaiting Sources'}
+          </span>
+        </div>
 
-            {/* Normal Clean Dropzone */}
+        {/* Step 1: Requirement Documents */}
+        <div className="qet-card p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-8 h-8 rounded-md flex items-center justify-center"
+                style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
+              >
+                <FileText className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                  Step 1 &middot; Requirement Specifications
+                </h4>
+                <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+                  Markdown, PDF, Word, or text requirement documents (.md, .pdf, .docx, .txt)
+                </p>
+              </div>
+            </div>
+            {hasDocsUploaded && !forceExpandDocs ? (
+              <span className="qet-badge-success px-2.5 py-1 text-xs font-bold inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{manifest?.doc_files?.length || 0} Docs Indexed</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* Compact Summary View after upload */}
+          {hasDocsUploaded && !forceExpandDocs ? (
+            <div className="qet-card-elevated p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-file-item">
+              <div className="flex items-center gap-2 flex-wrap max-w-2xl">
+                {manifest?.doc_files?.map((df, i) => (
+                  <span
+                    key={i}
+                    className="qet-badge-neutral px-2.5 py-1 text-xs font-mono font-medium inline-flex items-center gap-1.5"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-blue-500" />
+                    <span>{df}</span>
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={() => setForceExpandDocs(true)}
+                className="qet-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold self-start sm:self-auto cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Replace / Add Docs</span>
+              </button>
+            </div>
+          ) : (
+            /* Expanded Dropzone */
             <label
               onDragOver={(e) => { e.preventDefault(); if (!uploadingDocs) setIsDraggingDocs(true); }}
               onDragLeave={() => setIsDraggingDocs(false)}
               onDrop={handleDocDrop}
-              className={`qet-dropzone relative flex flex-col items-center justify-center w-full min-h-[170px] p-6 text-center cursor-pointer group ${
+              className={`qet-dropzone relative flex flex-col items-center justify-center w-full min-h-[140px] p-6 text-center cursor-pointer group ${
                 isDraggingDocs ? 'ring-2 ring-blue-500 bg-blue-50/20' : ''
               }`}
             >
@@ -313,13 +370,13 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 disabled={uploadingDocs}
               />
               <div
-                className="w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-transform group-hover:scale-105"
+                className="w-10 h-10 rounded-full flex items-center justify-center mb-2.5 transition-transform group-hover:scale-105"
                 style={{ backgroundColor: 'var(--qet-surface-elevated)' }}
               >
                 {uploadingDocs ? (
-                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--qet-accent)' }} />
+                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--qet-accent)' }} />
                 ) : (
-                  <UploadCloud className="w-6 h-6" style={{ color: 'var(--qet-accent)' }} />
+                  <UploadCloud className="w-5 h-5" style={{ color: 'var(--qet-accent)' }} />
                 )}
               </div>
               <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
@@ -329,75 +386,69 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 Supports Markdown, PDF, Text, and Word (.md, .pdf, .txt, .docx)
               </p>
             </label>
+          )}
 
-            {/* Error Message */}
-            {docError && renderUploadError(docError)}
-
-            {/* Uploaded Documents List (Smooth Animation) */}
-            {manifest?.doc_files && manifest.doc_files.length > 0 && (
-              <div className="space-y-2 pt-2 animate-file-item">
-                <div className="flex items-center justify-between text-xs font-semibold" style={{ color: 'var(--qet-text-secondary)' }}>
-                  <span>Uploaded Documents ({manifest.doc_files.length})</span>
-                  <span className="qet-badge-success px-2 py-0.5 text-[10px]">Indexed</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
-                  {manifest.doc_files.map((df, i) => (
-                    <div
-                      key={i}
-                      className="qet-card-elevated flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-medium"
-                      style={{ color: 'var(--qet-text-primary)' }}
-                    >
-                      <FileText className="w-3.5 h-3.5 text-blue-500" />
-                      <span className="truncate max-w-[220px]">{df}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Status footer */}
-          <div
-            className="flex items-center justify-between pt-3 mt-4 border-t text-xs"
-            style={{ borderColor: 'var(--qet-border)', color: 'var(--qet-text-muted)' }}
-          >
-            <span>Indexed requirement files</span>
-            <span className="font-bold font-mono" style={{ color: 'var(--qet-accent)' }}>
-              {manifest?.doc_files?.length || 0} files
-            </span>
-          </div>
+          {docError && renderUploadError(docError)}
         </div>
 
-        {/* Card B: Target Codebase ZIP */}
-        <div className="qet-panel p-6 space-y-4 flex flex-col justify-between">
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center shadow-xs"
-                  style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
-                >
-                  <FileArchive className="w-5 h-5" style={{ color: 'var(--qet-accent)' }} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
-                    2. Target Application Codebase
-                  </h3>
-                  <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
-                    Upload source archive (.zip)
-                  </p>
-                </div>
+        {/* Step 2: Target Codebase ZIP */}
+        <div className="qet-card p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className="w-8 h-8 rounded-md flex items-center justify-center"
+                style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
+              >
+                <FileArchive className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
               </div>
-              {zipSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+              <div>
+                <h4 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                  Step 2 &middot; Target Application Codebase
+                </h4>
+                <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+                  Source archive (.zip) containing React, TypeScript, Python, or HTML code
+                </p>
+              </div>
             </div>
+            {hasZipUploaded && !forceExpandZip ? (
+              <span className="qet-badge-success px-2.5 py-1 text-xs font-bold inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{manifest?.total_files || 0} Files Extracted</span>
+              </span>
+            ) : null}
+          </div>
 
-            {/* Normal Clean Dropzone */}
+          {/* Compact Summary View after upload */}
+          {hasZipUploaded && !forceExpandZip ? (
+            <div className="qet-card-elevated p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-file-item">
+              <div className="flex items-center gap-3 text-xs flex-wrap">
+                <span className="font-mono font-bold" style={{ color: 'var(--qet-accent)' }}>
+                  {manifest?.total_files} files
+                </span>
+                <span style={{ color: 'var(--qet-text-muted)' }}>
+                  ({(((manifest?.total_size_bytes || 0)) / 1024).toFixed(1)} KB uncompressed)
+                </span>
+                {typeof manifest?.excluded_file_count === 'number' && manifest.excluded_file_count > 0 && (
+                  <span className="qet-badge-warning px-2 py-0.5 text-[10px] font-semibold">
+                    {manifest.excluded_file_count} binary assets excluded
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setForceExpandZip(true)}
+                className="qet-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold self-start sm:self-auto cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Replace Codebase ZIP</span>
+              </button>
+            </div>
+          ) : (
+            /* Expanded Dropzone */
             <label
               onDragOver={(e) => { e.preventDefault(); if (!uploadingZip) setIsDraggingZip(true); }}
               onDragLeave={() => setIsDraggingZip(false)}
               onDrop={handleZipDrop}
-              className={`qet-dropzone relative flex flex-col items-center justify-center w-full min-h-[170px] p-6 text-center cursor-pointer group ${
+              className={`qet-dropzone relative flex flex-col items-center justify-center w-full min-h-[140px] p-6 text-center cursor-pointer group ${
                 isDraggingZip ? 'ring-2 ring-cyan-500 bg-cyan-50/20' : ''
               }`}
             >
@@ -409,13 +460,13 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 disabled={uploadingZip}
               />
               <div
-                className="w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-transform group-hover:scale-105"
+                className="w-10 h-10 rounded-full flex items-center justify-center mb-2.5 transition-transform group-hover:scale-105"
                 style={{ backgroundColor: 'var(--qet-surface-elevated)' }}
               >
                 {uploadingZip ? (
-                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--qet-accent)' }} />
+                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--qet-accent)' }} />
                 ) : (
-                  <FileArchive className="w-6 h-6" style={{ color: 'var(--qet-accent)' }} />
+                  <FileArchive className="w-5 h-5" style={{ color: 'var(--qet-accent)' }} />
                 )}
               </div>
               <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
@@ -425,78 +476,34 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 Accepts React, TypeScript, Python, and HTML archives (.zip)
               </p>
             </label>
+          )}
 
-            {/* Error Message */}
-            {zipError && renderUploadError(zipError)}
-
-            {/* Codebase Extraction Summary (Smooth Animation) */}
-            {manifest && manifest.total_files > 0 && (
-              <div className="space-y-2 pt-2 animate-file-item">
-                <div className="qet-card-elevated p-3 space-y-1.5 text-xs">
-                  <div className="flex justify-between items-center">
-                    <span style={{ color: 'var(--qet-text-muted)' }}>Extracted Code Files:</span>
-                    <span className="font-mono font-bold" style={{ color: 'var(--qet-accent)' }}>
-                      {manifest.total_files} files
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span style={{ color: 'var(--qet-text-muted)' }}>Total Code Size:</span>
-                    <span className="font-mono font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
-                      {(manifest.total_size_bytes / 1024).toFixed(1)} KB
-                    </span>
-                  </div>
-                  {typeof manifest.excluded_file_count === 'number' && manifest.excluded_file_count > 0 && (
-                    <div className="flex justify-between items-center">
-                      <span style={{ color: 'var(--qet-text-muted)' }}>Binary / Excluded Assets:</span>
-                      <span className="qet-badge-warning px-1.5 py-0.2 text-[10px]">
-                        {manifest.excluded_file_count} files
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Status footer */}
-          <div
-            className="flex items-center justify-between pt-3 mt-4 border-t text-xs"
-            style={{ borderColor: 'var(--qet-border)', color: 'var(--qet-text-muted)' }}
-          >
-            <span>Extracted codebase files</span>
-            <span className="font-bold font-mono" style={{ color: 'var(--qet-accent)' }}>
-              {manifest?.total_files || 0} files
-            </span>
-          </div>
+          {zipError && renderUploadError(zipError)}
         </div>
+
+        {/* Step 3: AI Understanding Action */}
+        {isIntakeReady && (
+          <div className="qet-card-elevated p-5 flex flex-col sm:flex-row items-center justify-between gap-4 animate-file-item border" style={{ borderColor: 'var(--qet-accent-border)', backgroundColor: 'var(--qet-accent-subtle)' }}>
+            <div className="space-y-1 text-center sm:text-left">
+              <h4 className="text-sm font-bold flex items-center justify-center sm:justify-start gap-2" style={{ color: 'var(--qet-text-primary)' }}>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>Step 3 &middot; Application Architecture Understanding</span>
+              </h4>
+              <p className="text-xs" style={{ color: 'var(--qet-text-secondary)' }}>
+                Sources are validated and indexed. Launch the AI Understanding agent to discover components, user flows, and requirement gaps.
+              </p>
+            </div>
+            <button
+              onClick={onProceedToUnderstanding}
+              className="qet-btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold shadow-md whitespace-nowrap cursor-pointer"
+            >
+              <span>Start AI Understanding</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* ── 4. Proceed to Understanding Call-to-Action ───────────────── */}
-      {isIntakeReady && (
-        <div
-          className="qet-panel p-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-file-item"
-          style={{
-            borderLeft: '4px solid var(--qet-accent)',
-          }}
-        >
-          <div className="space-y-1 text-center sm:text-left">
-            <h3 className="text-base font-bold flex items-center justify-center sm:justify-start gap-2" style={{ color: 'var(--qet-text-primary)' }}>
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-              <span>Intake Complete & Codebase Indexed</span>
-            </h3>
-            <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
-              All sources have been validated. Proceed to generate architecture diagrams, requirements catalog, and gap analysis.
-            </p>
-          </div>
-          <button
-            onClick={onProceedToUnderstanding}
-            className="qet-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold shadow-md whitespace-nowrap"
-          >
-            <span>Proceed to Understanding</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   );
 };
+

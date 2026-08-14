@@ -6,7 +6,7 @@ import { TabId } from './components/NavigationHeader';
 import { HomeUploadPage } from './components/HomeUploadPage';
 import { UnderstandingPage } from './components/UnderstandingPage';
 import { AISettingsResponse, AppState } from './types';
-import { createRun, getAISettings, getRunStatus, updateAISettings } from './services/apiClient';
+import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings } from './services/apiClient';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -122,8 +122,17 @@ export const App: React.FC = () => {
   };
 
   const openExistingRun = async (runId: string) => {
-    await refreshStatus(runId);
-    setActiveTab('home');
+    try {
+      setLoading(true);
+      const res = await getRunFullState(runId);
+      setAppState(res.state);
+    } catch (err) {
+      console.error('Failed to open run full state:', err);
+      await refreshStatus(runId);
+    } finally {
+      setLoading(false);
+      setActiveTab('home');
+    }
   };
 
   const isIntakeReady = Boolean(
@@ -429,3 +438,4 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
