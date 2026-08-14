@@ -25,12 +25,19 @@ def is_safe_path(base_dir: Path, target_path: Path) -> bool:
         return False
 
 
-def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[FileMetadata], int, int]:
+def is_junk_member(filename: str) -> bool:
+    """True if any path segment matches a known dependency/build/VCS noise folder."""
+    parts = {part.lower() for part in Path(filename).parts}
+    return bool(parts & config.junk_dir_patterns)
+
+
+def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[FileMetadata], int, int, int]:
     """
-    Safely extract ZIP archive enforcing limits and path traversal checks.
-    
+    Safely extract ZIP archive, skipping noisy dependency/build/VCS folders and
+    enforcing size limits and path traversal checks on the remaining useful files.
+
     Returns:
-        Tuple[List[FileMetadata], total_file_count, total_bytes_extracted]
+        Tuple[List[FileMetadata], total_file_count, total_bytes_extracted, excluded_count]
     """
     if not zip_path.exists():
         raise SecurityError(f"ZIP file does not exist at {zip_path}")
@@ -43,19 +50,20 @@ def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[Fil
     extracted_files: List[FileMetadata] = []
     total_files = 0
     total_bytes = 0
+    excluded_count = 0
 
     with zipfile.ZipFile(zip_path, 'r') as zf:
         infolist = zf.infolist()
-        
-        # 1. Limit Check: Total file count
-        if len(infolist) > config.max_zip_file_count:
-            raise SecurityError(
-                f"ZIP contains {len(infolist)} files, exceeding maximum limit of {config.max_zip_file_count}"
-            )
+        useful_members = []
 
         for member in infolist:
             # Ignore directory entries for size/limit checks
             if member.is_dir():
+                continue
+
+            # 1. Skip noisy dependency/build/VCS folders entirely (not extracted, not counted)
+            if is_junk_member(member.filename):
+                excluded_count += 1
                 continue
 
             # 2. Limit Check: Single file size
@@ -74,7 +82,7 @@ def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[Fil
             total_files += 1
             total_bytes += member.file_size
 
-            # 4. Limit Check: Cumulative total bytes
+            # 4. Limit Check: Cumulative total bytes (useful files only)
             if total_bytes > config.max_zip_total_bytes:
                 raise SecurityError(
                     f"Total uncompressed ZIP size exceeds maximum limit of {config.max_zip_total_bytes} bytes"
@@ -87,10 +95,16 @@ def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[Fil
                     f"Potential Zip Slip path traversal detected: '{member.filename}'"
                 )
 
+            useful_members.append(member)
+
+        # 6. Limit Check: Total useful file count (sanity ceiling, after junk exclusion)
+        if total_files > config.max_zip_file_count:
+            raise SecurityError(
+                f"ZIP contains {total_files} useful files, exceeding maximum limit of {config.max_zip_file_count}"
+            )
+
         # Extraction loop after passing all validations
-        for member in infolist:
-            if member.is_dir():
-                continue
+        for member in useful_members:
             dest_path = target_dir / member.filename
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             
@@ -107,7 +121,7 @@ def validate_and_extract_zip(zip_path: Path, target_dir: Path) -> Tuple[List[Fil
                 )
             )
 
-    return extracted_files, total_files, total_bytes
+    return extracted_files, total_files, total_bytes, excluded_count
 
 
 def sanitize_log_message(msg: str) -> str:

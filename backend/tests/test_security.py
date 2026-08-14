@@ -32,10 +32,11 @@ def test_valid_zip_extraction(tmp_path: Path) -> None:
         zf.writestr("component.js", "console.log('hello');")
         zf.writestr("docs/readme.md", "# Test Project")
         
-    extracted_files, count, total_bytes = validate_and_extract_zip(zip_path, extract_dir)
+    extracted_files, count, total_bytes, excluded_count = validate_and_extract_zip(zip_path, extract_dir)
     
     assert count == 2
     assert total_bytes > 0
+    assert excluded_count == 0
     assert len(extracted_files) == 2
     assert (extract_dir / "component.js").exists()
     assert (extract_dir / "docs" / "readme.md").exists()
@@ -53,6 +54,25 @@ def test_zip_exceeding_file_count_limit(tmp_path: Path, monkeypatch: pytest.Monk
         
     with pytest.raises(SecurityError, match="exceeding maximum limit"):
         validate_and_extract_zip(zip_path, extract_dir)
+
+
+def test_zip_skips_junk_dependency_folders(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "max_zip_file_count", 2)
+    zip_path = tmp_path / "with_junk.zip"
+    extract_dir = tmp_path / "output"
+
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("src/app.py", "print('hi')")
+        zf.writestr("README.md", "# Project")
+        for i in range(50):
+            zf.writestr(f"node_modules/pkg/lib{i}.js", "module.exports = {};")
+
+    extracted_files, count, total_bytes, excluded_count = validate_and_extract_zip(zip_path, extract_dir)
+
+    assert count == 2
+    assert excluded_count == 50
+    assert not (extract_dir / "node_modules").exists()
+    assert (extract_dir / "src" / "app.py").exists()
 
 
 def test_zip_forbidden_extension(tmp_path: Path) -> None:

@@ -35,3 +35,11 @@ yarn-error.log*
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Credentials & Keys
+keys/
+*.txt
+!README.md
+!walkthrough.md
+!requirements.md
+

@@ -39,6 +39,7 @@ class IntakeManifest(BaseModel):
     total_size_bytes: int
     files: List[FileMetadata] = Field(default_factory=list)
     doc_files: List[str] = Field(default_factory=list)
+    excluded_file_count: int = 0
     created_at: str
 
 

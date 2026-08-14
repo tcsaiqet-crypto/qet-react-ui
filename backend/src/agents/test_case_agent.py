@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional
 from schemas.contracts import AppState, TestCase, TestSuite
 from src.agents.base_agent import BaseAgent
 from src.services.llm_service import LLMService
+from src.utils.errors import AIRequiredFailureException
 from src.utils.logger import logger
 
 
@@ -24,25 +25,31 @@ class TestCaseAgent(BaseAgent):
         self.llm = LLMService()
 
     def run(self, state: AppState) -> AppState:
-        """Execute Phase 3 Test Case Generation and save artifacts."""
+        """Execute Phase 3 Test Case Generation and save artifacts. AI-required: raises
+        AIRequiredFailureException with diagnostics instead of falling back to sample data."""
         logger.info("Executing Phase 3 Test Case Generation Agent...")
 
-        test_cases = self._generate_test_cases(state)
-        fallback_used = True
+        if not self.llm.is_enabled():
+            raise AIRequiredFailureException(
+                error_code="provider_disabled",
+                error_message="No AI provider is enabled/configured for test case generation.",
+                diagnostics={"remediation": "Configure GEMINI_API_KEY/OPENAI_API_KEY or a key file under backend/keys/."}
+            )
+
+        test_cases = self._generate_ai_test_cases(state)
+        if not test_cases:
+            raise AIRequiredFailureException(
+                error_code="invalid_model_json",
+                error_message="AI provider did not return usable test cases.",
+                diagnostics={"provider": self.llm._active_provider(), **(self.llm.last_error or {})}
+            )
+
         provenance = {
             "generator": "TestCaseAgent",
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "mode": "derived-fallback",
-            "provider": "deterministic",
+            "mode": "ai-first",
+            "provider": self.llm._active_provider(),
         }
-
-        if self.llm.is_enabled():
-            ai_cases = self._generate_ai_test_cases(state)
-            if ai_cases:
-                test_cases = ai_cases
-                fallback_used = False
-                provenance["mode"] = "ai-first"
-                provenance["provider"] = self.llm._active_provider()
 
         suite = TestSuite(
             suite_id="TS-CFA-V1",
@@ -51,7 +58,7 @@ class TestCaseAgent(BaseAgent):
             test_cases=test_cases,
             provenance=provenance,
             validation_status="VALIDATED",
-            fallback_used=fallback_used,
+            fallback_used=False,
         )
 
         state.test_suite = suite
