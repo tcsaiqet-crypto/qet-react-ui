@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Cpu, KeyRound, Save, Sparkles } from 'lucide-react';
-import { AISettingsResponse } from '../types';
-import { ApiError, getAISettings, updateAISettings } from '../services/apiClient';
+import { AlertTriangle, CheckCircle2, Cpu, KeyRound, Save, Sparkles } from 'lucide-react';
+import { AISettingsResponse, VerifyAISettingsResponse } from '../types';
+import { ApiError, getAISettings, updateAISettings, verifyAISettings } from '../services/apiClient';
 
 interface AISettingsPanelProps {
   onSaved?: (settings: AISettingsResponse) => void;
@@ -16,6 +16,10 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [clearGemini, setClearGemini] = useState(false);
+  const [clearGpt, setClearGpt] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<VerifyAISettingsResponse | null>(null);
 
   useEffect(() => {
     void loadSettings();
@@ -40,17 +44,24 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
     setError(null);
     setMessage(null);
     try {
+      const clearProviderKeys: Array<'gemini' | 'gpt'> = [];
+      if (clearGemini) clearProviderKeys.push('gemini');
+      if (clearGpt) clearProviderKeys.push('gpt');
+
       const data = await updateAISettings({
         active_provider: activeProvider,
         provider_keys: {
           gemini: geminiKey,
           gpt: gptKey,
         },
+        clear_provider_keys: clearProviderKeys,
       });
       setSettings(data);
       setGeminiKey('');
       setGptKey('');
-      setMessage('AI settings saved. New runs and retries will use the selected provider.');
+      setClearGemini(false);
+      setClearGpt(false);
+      setMessage('AI settings saved. Invalid placeholder keys are blocked; you can also clear stored keys explicitly.');
       onSaved?.(data);
     } catch (err: any) {
       const apiErr = err as ApiError;
@@ -60,8 +71,24 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
     }
   };
 
+  const handleVerify = async () => {
+    setVerifying(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await verifyAISettings();
+      setVerifyResult(result);
+      setMessage('Verification finished. Review provider readiness and model visibility below.');
+    } catch (err: any) {
+      const apiErr = err as ApiError;
+      setError(apiErr.message || 'Failed to verify provider keys.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
-    <section className="rounded-2xl bg-slate-900/75 border border-slate-800 shadow-xl p-6 space-y-5 animate-fade-in">
+    <section className="qet-panel p-6 space-y-5 animate-fade-in">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1.5">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-950/50 border border-cyan-800/60 text-cyan-300 text-xs font-semibold">
@@ -74,9 +101,12 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
           </p>
         </div>
         {settings && (
-          <div className="rounded-xl bg-slate-950/80 border border-slate-800 px-4 py-3 text-xs space-y-1 min-w-[180px]">
+          <div className="qet-card px-4 py-3 text-xs space-y-1 min-w-[180px]">
             <div className="text-slate-500 uppercase tracking-wider font-semibold">Current Runtime</div>
             <div className="font-mono text-cyan-300">{settings.runtime_state.provider}</div>
+            <div className="text-slate-400">
+              Model: <span className="font-mono text-slate-200">{settings.runtime_state.model || 'Unavailable'}</span>
+            </div>
             <div className={`font-semibold ${settings.runtime_state.state === 'Ready' ? 'text-emerald-400' : 'text-amber-400'}`}>
               {settings.runtime_state.state}
             </div>
@@ -89,7 +119,7 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
       ) : (
         <>
           <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_1fr] gap-5">
-            <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-5 space-y-4">
+            <div className="qet-card p-5 space-y-4">
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active provider</label>
                 <select
@@ -116,6 +146,15 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
                     />
                   </div>
                   <div className="text-xs text-slate-500">Status: {settings?.providers.gemini.key_present ? 'configured' : 'missing'}</div>
+                  <label className="inline-flex items-center gap-2 text-xs text-rose-300">
+                    <input
+                      type="checkbox"
+                      checked={clearGemini}
+                      onChange={(e) => setClearGemini(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-900"
+                    />
+                    Clear stored Gemini key on save
+                  </label>
                 </div>
 
                 <div className="space-y-2">
@@ -131,6 +170,15 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
                     />
                   </div>
                   <div className="text-xs text-slate-500">Status: {settings?.providers.gpt.key_present ? 'configured' : 'missing'}</div>
+                  <label className="inline-flex items-center gap-2 text-xs text-rose-300">
+                    <input
+                      type="checkbox"
+                      checked={clearGpt}
+                      onChange={(e) => setClearGpt(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-900"
+                    />
+                    Clear stored OpenAI key on save
+                  </label>
                 </div>
               </div>
 
@@ -142,9 +190,18 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
                 {saving ? <Sparkles className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 <span>{saving ? 'Saving AI settings...' : 'Save AI Settings'}</span>
               </button>
+
+              <button
+                onClick={handleVerify}
+                disabled={verifying}
+                className={`ml-3 inline-flex items-center space-x-2 px-5 py-3 rounded-xl text-sm font-bold transition-all ${verifying ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'qet-btn-secondary text-slate-100'}`}
+              >
+                {verifying ? <Sparkles className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
+                <span>{verifying ? 'Verifying...' : 'Verify Keys & Model Access'}</span>
+              </button>
             </div>
 
-            <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-5 space-y-4">
+            <div className="qet-card p-5 space-y-4">
               <div>
                 <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Supported right now</div>
                 <div className="space-y-2 text-sm text-slate-300">
@@ -180,6 +237,52 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
 
           {message && <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300">{message}</div>}
           {error && <div className="rounded-lg border border-rose-800/50 bg-rose-950/40 px-4 py-3 text-sm text-rose-300">{error}</div>}
+
+          {verifyResult && (
+            <div className="qet-card p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Verification Result</p>
+                  <p className="text-sm text-slate-300">Checked at {new Date(verifyResult.verified_at).toLocaleString()}</p>
+                </div>
+                <p className="text-xs text-slate-400">Active provider: <span className="font-mono text-cyan-300">{verifyResult.active_provider}</span></p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(['gemini', 'gpt'] as const).map((provider) => {
+                  const result = verifyResult.results[provider];
+                  const ok = result?.success;
+                  return (
+                    <div key={provider} className={`rounded-lg border p-4 space-y-2 ${ok ? 'border-emerald-700/60 bg-emerald-950/20' : 'border-rose-700/60 bg-rose-950/20'}`}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-slate-100">{provider === 'gemini' ? 'Google Gemini' : 'OpenAI GPT'}</p>
+                        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>
+                          {ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                          {ok ? 'Ready' : 'Action needed'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Configured: <span className="font-mono text-slate-200">{result?.configured ? 'yes' : 'no'}</span>
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Model: <span className="font-mono text-cyan-300">{result?.model || 'Unavailable'}</span>
+                      </p>
+                      {!!result?.error_message && <p className="text-xs text-rose-300">{result.error_message}</p>}
+                      {result?.candidates?.length ? (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {result.candidates.slice(0, 6).map((model) => (
+                            <span key={model} className="text-[11px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-900 text-cyan-300">
+                              {model}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
     </section>

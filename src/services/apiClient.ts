@@ -1,8 +1,10 @@
 import { 
   AISettingsResponse,
+  VerifyAISettingsResponse,
   CreateRunResponse, 
   DocumentUploadResponse, 
   CodebaseUploadResponse, 
+  RunListResponse,
   StatusResponse, 
   ApplicationUnderstanding,
   ErrorPayload
@@ -80,6 +82,14 @@ export async function getRunStatus(runId: string): Promise<StatusResponse> {
   return res.json();
 }
 
+export async function listRuns(): Promise<RunListResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs`);
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to load previous runs');
+  }
+  return res.json();
+}
+
 export async function startUnderstanding(runId: string): Promise<{ status: string; run_id: string }> {
   const res = await fetch(`${API_BASE_URL}/runs/${runId}/understanding/start`, {
     method: 'POST',
@@ -117,6 +127,7 @@ export async function getAISettings(): Promise<AISettingsResponse> {
 export async function updateAISettings(payload: {
   active_provider: 'gemini' | 'gpt';
   provider_keys: Partial<Record<'gemini' | 'gpt', string>>;
+  clear_provider_keys?: Array<'gemini' | 'gpt'>;
 }): Promise<AISettingsResponse> {
   const res = await fetch(`${API_BASE_URL}/ai/settings`, {
     method: 'POST',
@@ -125,6 +136,16 @@ export async function updateAISettings(payload: {
   });
   if (!res.ok) {
     await throwApiError(res, 'Failed to save AI settings');
+  }
+  return res.json();
+}
+
+export async function verifyAISettings(): Promise<VerifyAISettingsResponse> {
+  const res = await fetch(`${API_BASE_URL}/ai/settings/verify`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to verify provider keys');
   }
   return res.json();
 }

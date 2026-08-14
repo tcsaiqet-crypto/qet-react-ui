@@ -6,14 +6,9 @@ from src.models.schemas import AppState, ExecutionMode, ExecutionRequest
 from src.services.zip_service import ZipService
 from src.services.execution_engine import ExecutionEngine, ExecutionNotAllowedError
 from src.workflows.pipeline import SequentialQETPipeline
-from src.agents.test_case_agent import TestCaseAgent
 
 
-def test_end_to_end_mvp_pipeline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # TestCaseAgent is AI-required (no silent fallback); stub its AI call with the
-    # deterministic builder so this plumbing test doesn't depend on live network/API keys.
-    monkeypatch.setattr(TestCaseAgent, "_generate_ai_test_cases", lambda self, state: self._generate_test_cases(state))
-
+def test_end_to_end_mvp_pipeline(tmp_path: Path) -> None:
     sample_zip = Path("cfa_digital_journey_sample.zip")
     assert sample_zip.exists(), "Sample ZIP archive must exist"
     

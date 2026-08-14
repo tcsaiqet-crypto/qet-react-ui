@@ -14,7 +14,6 @@ from src.models.schemas import (
     QualityReport,
 )
 from src.workflows.pipeline import SequentialQETPipeline
-from src.agents.test_case_agent import TestCaseAgent
 
 
 def test_appstate_hardened_fields_initialization():
@@ -85,9 +84,8 @@ def test_stage_models_provenance_and_validation_fields():
     assert script.selector_confidence_map["username"] == "High"
 
 
-def test_pipeline_records_stage_timestamps_and_validation(tmp_path, monkeypatch):
+def test_pipeline_records_stage_timestamps_and_validation(tmp_path):
     """Verify pipeline records timestamps, validation status, and provenance on stage run."""
-    monkeypatch.setattr(TestCaseAgent, "_generate_ai_test_cases", lambda self, state: self._generate_test_cases(state))
     manifest = IntakeManifest(
         upload_id="RUN-TEST-001",
         zip_filename="test.zip",
@@ -120,9 +118,8 @@ def test_pipeline_records_stage_timestamps_and_validation(tmp_path, monkeypatch)
     assert state.stage_validation["Report"] == "VALIDATED"
 
 
-def test_pipeline_downstream_reset_clears_metadata(tmp_path, monkeypatch):
+def test_pipeline_downstream_reset_clears_metadata(tmp_path):
     """Verify retrying an upstream stage clears downstream outputs and tracking metadata."""
-    monkeypatch.setattr(TestCaseAgent, "_generate_ai_test_cases", lambda self, state: self._generate_test_cases(state))
     manifest = IntakeManifest(
         upload_id="RUN-TEST-002",
         zip_filename="test.zip",

@@ -5,18 +5,183 @@
 :root {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   color-scheme: dark;
+  --qet-page-bg: #020617;
+  --qet-page-fg: #f8fafc;
+  --qet-surface: #0f172a;
+  --qet-surface-elevated: #111827;
+  --qet-surface-soft: #1e293b;
+  --qet-border: #334155;
+  --qet-text-primary: #f8fafc;
+  --qet-text-secondary: #cbd5e1;
+  --qet-text-muted: #94a3b8;
+  --qet-accent: #22d3ee;
+  --qet-accent-strong: #818cf8;
+  --qet-danger: #fb7185;
+  --qet-warning: #fbbf24;
+  --qet-success: #34d399;
 }
 
 body {
   margin: 0;
-  background-color: #020617;
-  color: #f8fafc;
+  background-color: var(--qet-page-bg);
+  color: var(--qet-page-fg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code, pre {
   font-family: 'JetBrains Mono', monospace;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --qet-page-bg: #f1f5f9;
+  --qet-page-fg: #0f172a;
+  --qet-surface: #ffffff;
+  --qet-surface-elevated: #f8fafc;
+  --qet-surface-soft: #e2e8f0;
+  --qet-border: #cbd5e1;
+  --qet-text-primary: #0f172a;
+  --qet-text-secondary: #334155;
+  --qet-text-muted: #475569;
+  --qet-accent: #0e7490;
+  --qet-accent-strong: #4338ca;
+  --qet-danger: #be123c;
+  --qet-warning: #b45309;
+  --qet-success: #047857;
+}
+
+[data-theme='light'].bg-slate-950 {
+  background-color: #f1f5f9 !important;
+}
+
+[data-theme='light'].text-slate-100 {
+  color: #0f172a !important;
+}
+
+[data-theme='light'] .bg-slate-950,
+[data-theme='light'] .bg-slate-950\/85,
+[data-theme='light'] .bg-slate-950\/80,
+[data-theme='light'] .bg-slate-900,
+[data-theme='light'] .bg-slate-900\/90,
+[data-theme='light'] .bg-slate-900\/80,
+[data-theme='light'] .bg-slate-900\/75,
+[data-theme='light'] .bg-slate-900\/60,
+[data-theme='light'] .bg-slate-900\/50,
+[data-theme='light'] .bg-slate-800,
+[data-theme='light'] .bg-slate-800\/60 {
+  background-color: var(--qet-surface) !important;
+}
+
+[data-theme='light'] .border-slate-900,
+[data-theme='light'] .border-slate-800,
+[data-theme='light'] .border-slate-700 {
+  border-color: var(--qet-border) !important;
+}
+
+[data-theme='light'] .text-slate-100,
+[data-theme='light'] .text-slate-200,
+[data-theme='light'] .text-slate-300 {
+  color: var(--qet-text-primary) !important;
+}
+
+[data-theme='light'] .text-slate-400,
+[data-theme='light'] .text-slate-500,
+[data-theme='light'] .text-slate-600 {
+  color: var(--qet-text-muted) !important;
+}
+
+[data-theme='light'] .hover\:bg-slate-800:hover,
+[data-theme='light'] .hover\:bg-slate-900:hover {
+  background-color: #e2e8f0 !important;
+}
+
+[data-theme='light'] .hover\:text-slate-100:hover {
+  color: #0f172a !important;
+}
+
+/* Make dark hero gradients actually light in light mode */
+[data-theme='light'] .bg-gradient-to-br {
+  background-image: linear-gradient(135deg, #f8fafc 0%, #eef2ff 52%, #e0f2fe 100%) !important;
+}
+
+/* Preserve brand gradients for CTA buttons but keep readable shadows */
+[data-theme='light'] .bg-gradient-to-r {
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.18) !important;
+}
+
+/* Improve readability for accent text in light mode */
+[data-theme='light'] .text-cyan-300,
+[data-theme='light'] .text-cyan-400,
+[data-theme='light'] .text-cyan-500 {
+  color: var(--qet-accent) !important;
+}
+
+[data-theme='light'] .text-indigo-300,
+[data-theme='light'] .text-indigo-400,
+[data-theme='light'] .text-indigo-500,
+[data-theme='light'] .text-purple-300,
+[data-theme='light'] .text-purple-400,
+[data-theme='light'] .text-purple-500 {
+  color: var(--qet-accent-strong) !important;
+}
+
+[data-theme='light'] .text-emerald-300,
+[data-theme='light'] .text-emerald-400 {
+  color: var(--qet-success) !important;
+}
+
+[data-theme='light'] .text-amber-300,
+[data-theme='light'] .text-amber-400 {
+  color: var(--qet-warning) !important;
+}
+
+[data-theme='light'] .text-rose-300,
+[data-theme='light'] .text-rose-400 {
+  color: var(--qet-danger) !important;
+}
+
+/* Ensure accent chips and diagnostic blocks are light-surface friendly */
+[data-theme='light'] .bg-cyan-950,
+[data-theme='light'] .bg-cyan-950\/60,
+[data-theme='light'] .bg-cyan-950\/50,
+[data-theme='light'] .bg-indigo-950,
+[data-theme='light'] .bg-indigo-950\/40,
+[data-theme='light'] .bg-indigo-950\/80,
+[data-theme='light'] .bg-purple-950,
+[data-theme='light'] .bg-purple-950\/40,
+[data-theme='light'] .bg-purple-950\/60,
+[data-theme='light'] .bg-emerald-950,
+[data-theme='light'] .bg-emerald-950\/40,
+[data-theme='light'] .bg-amber-950,
+[data-theme='light'] .bg-amber-950\/30,
+[data-theme='light'] .bg-rose-950,
+[data-theme='light'] .bg-rose-950\/30,
+[data-theme='light'] .bg-rose-950\/40 {
+  background-color: var(--qet-surface-elevated) !important;
+}
+
+[data-theme='light'] .border-cyan-800,
+[data-theme='light'] .border-cyan-700,
+[data-theme='light'] .border-cyan-600,
+[data-theme='light'] .border-indigo-800,
+[data-theme='light'] .border-purple-800,
+[data-theme='light'] .border-emerald-800,
+[data-theme='light'] .border-amber-800,
+[data-theme='light'] .border-rose-800,
+[data-theme='light'] .border-rose-900 {
+  border-color: var(--qet-border) !important;
+}
+
+/* Keep gradient text readable in light mode */
+[data-theme='light'] .bg-clip-text.text-transparent {
+  background-image: linear-gradient(90deg, var(--qet-text-primary), var(--qet-accent), var(--qet-accent-strong)) !important;
+}
+
+/* Better field focus visibility */
+[data-theme='light'] .focus\:border-cyan-500:focus,
+[data-theme='light'] .focus\:border-cyan-600:focus {
+  border-color: var(--qet-accent) !important;
 }
 
 /* Custom Utilities */
@@ -26,4 +191,56 @@ code, pre {
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Semantic design utilities for consistent component theming */
+.qet-panel {
+  background-color: color-mix(in oklab, var(--qet-surface) 92%, transparent);
+  border: 1px solid var(--qet-border);
+  border-radius: 1rem;
+  box-shadow: 0 18px 36px -24px rgba(2, 6, 23, 0.72);
+}
+
+.qet-card {
+  background-color: color-mix(in oklab, var(--qet-surface-elevated) 94%, transparent);
+  border: 1px solid var(--qet-border);
+  border-radius: 0.85rem;
+}
+
+.qet-pill {
+  border: 1px solid var(--qet-border);
+  background-color: color-mix(in oklab, var(--qet-surface-elevated) 94%, transparent);
+  border-radius: 9999px;
+}
+
+.qet-text-primary {
+  color: var(--qet-text-primary) !important;
+}
+
+.qet-text-secondary {
+  color: var(--qet-text-secondary) !important;
+}
+
+.qet-text-muted {
+  color: var(--qet-text-muted) !important;
+}
+
+.qet-btn-secondary {
+  border: 1px solid var(--qet-border);
+  background-color: color-mix(in oklab, var(--qet-surface-elevated) 92%, transparent);
+  color: var(--qet-text-secondary);
+  border-radius: 0.75rem;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+
+.qet-btn-secondary:hover {
+  border-color: var(--qet-accent);
+  color: var(--qet-accent);
+}
+
+[data-theme='light'] .qet-panel,
+[data-theme='light'] .qet-card,
+[data-theme='light'] .qet-pill,
+[data-theme='light'] .qet-btn-secondary {
+  box-shadow: 0 10px 24px -20px rgba(15, 23, 42, 0.35);
 }
