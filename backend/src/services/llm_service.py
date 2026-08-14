@@ -7,15 +7,25 @@ from the caller's own key via the ListModels endpoint and cached in-process.
 
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 
 from src.config import config
 from src.utils.logger import logger
 
-# Process-wide cache of discovered Gemini model name, keyed by API key.
-_GEMINI_MODEL_CACHE: Dict[str, str] = {}
+# Process-wide caches keyed by API key: full ranked candidate list, and the
+# first candidate that has actually succeeded a real generateContent call
+# (ListModels metadata can list models that are deprecated/restricted per-key
+# even though they claim to support generateContent).
+_GEMINI_CANDIDATES_CACHE: Dict[str, list] = {}
+_GEMINI_WORKING_MODEL_CACHE: Dict[str, str] = {}
+
+# Preview/specialized model families excluded from text-generation candidate ranking.
+_GEMINI_EXCLUDE_KEYWORDS = (
+    "preview", "tts", "image", "computer-use", "robotics",
+    "lyria", "deep-research", "antigravity", "nano-banana", "customtools", "gemma",
+)
 
 
 class LLMService:
@@ -97,12 +107,46 @@ class LLMService:
             return None
 
         provider = self._active_provider()
-        return self._generate_with_gpt(prompt) if provider == "gpt" else self._generate_with_gemini(prompt)
+        if provider == "gpt":
+            return self._generate_with_gpt(prompt)
+
+        api_key = self._provider_key("gemini")
+        if not api_key:
+            self.last_error = {"error_code": "provider_key_missing", "error_message": "Gemini API key not configured."}
+            return None
+        text, attempts = self.generate_with_gemini(prompt, api_key)
+        if text is None and attempts:
+            self.last_error = attempts[-1]
+        return text
 
     def get_gemini_model(self, api_key: str) -> Optional[str]:
-        """Resolve a Gemini model that supports generateContent for this API key, caching the result."""
-        if api_key in _GEMINI_MODEL_CACHE:
-            return _GEMINI_MODEL_CACHE[api_key]
+        """Return the best-known working Gemini model for this key (for display/provenance)."""
+        if api_key in _GEMINI_WORKING_MODEL_CACHE:
+            return _GEMINI_WORKING_MODEL_CACHE[api_key]
+        candidates = self.list_gemini_candidates(api_key)
+        return candidates[0] if candidates else None
+
+    @staticmethod
+    def _rank_gemini_candidates(names: list) -> list:
+        def excluded(name: str) -> bool:
+            return any(keyword in name for keyword in _GEMINI_EXCLUDE_KEYWORDS)
+
+        filtered = [n for n in names if n and not excluded(n)] or [n for n in names if n]
+
+        def score(name: str) -> tuple:
+            is_latest = name.endswith("-latest")
+            is_flash = "flash" in name and "lite" not in name
+            is_flash_lite = "flash" in name and "lite" in name
+            is_pro = "pro" in name
+            tier = 0 if is_flash else (1 if is_flash_lite else (2 if is_pro else 3))
+            return (0 if is_latest else 1, tier, name)
+
+        return sorted(filtered, key=score)
+
+    def list_gemini_candidates(self, api_key: str) -> list:
+        """Discover and rank Gemini models supporting generateContent for this API key, caching the list."""
+        if api_key in _GEMINI_CANDIDATES_CACHE:
+            return _GEMINI_CANDIDATES_CACHE[api_key]
 
         try:
             response = requests.get(
@@ -116,91 +160,89 @@ class LLMService:
                     "error_message": f"Gemini ListModels returned status {response.status_code}.",
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300]},
                 }
-                return None
+                return []
 
             models = response.json().get("models") or []
-            candidates = [
+            names = [
                 m.get("name", "").removeprefix("models/")
                 for m in models
                 if "generateContent" in (m.get("supportedGenerationMethods") or [])
             ]
-            candidates = [c for c in candidates if c]
-            if not candidates:
+            names = [n for n in names if n]
+            if not names:
                 self.last_error = {
                     "error_code": "model_discovery_failed",
                     "error_message": "No Gemini models supporting generateContent are available for this API key.",
                     "diagnostics": {"model_count": len(models)},
                 }
-                return None
+                return []
 
-            # Prefer the fastest/cheapest tier, falling back to whatever is available.
-            resolved = next((c for c in candidates if "flash" in c), None) or \
-                next((c for c in candidates if "pro" in c), None) or candidates[0]
-            _GEMINI_MODEL_CACHE[api_key] = resolved
-            return resolved
+            ranked = self._rank_gemini_candidates(names)
+            _GEMINI_CANDIDATES_CACHE[api_key] = ranked
+            return ranked
         except Exception as exc:
             self.last_error = {
                 "error_code": "model_discovery_failed",
                 "error_message": f"Gemini ListModels request error: {exc}",
                 "diagnostics": {"exception": str(exc)},
             }
-            return None
+            return []
 
-    def _generate_with_gemini(self, prompt: str) -> Optional[str]:
-        api_key = self._provider_key("gemini")
-        if not api_key:
-            self.last_error = {"error_code": "provider_key_missing", "error_message": "Gemini API key not configured."}
-            return None
-
-        model = self.get_gemini_model(api_key)
-        if not model:
-            return None
-
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent?key={api_key}"
-        )
+    def _call_gemini_model(self, model: str, api_key: str, prompt: str) -> Optional[str]:
+        """Single-attempt raw call to one Gemini model. Sets `last_error` and returns None on failure."""
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         payload = {
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 900,
-            },
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 900},
             "contents": [{"parts": [{"text": prompt}]}],
         }
-
         try:
             response = requests.post(
-                url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=self.timeout_seconds,
+                url, json=payload, headers={"Content-Type": "application/json"}, timeout=self.timeout_seconds,
             )
             if response.status_code != 200:
-                logger.warning("Gemini call failed with status %s.", response.status_code)
                 self.last_error = {
-                    "error_code": "provider_disabled",
-                    "error_message": f"Gemini API returned status {response.status_code}.",
+                    "error_code": "provider_disabled" if response.status_code == 404 else "invalid_model_json",
+                    "error_message": f"Gemini model '{model}' returned status {response.status_code}.",
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300], "model": model},
                 }
                 return None
 
             body = response.json()
             candidates = body.get("candidates") or []
-            if not candidates:
-                self.last_error = {"error_code": "invalid_model_json", "error_message": "Gemini returned no candidates.", "diagnostics": {"model": model}}
+            parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+            text = parts[0].get("text") if parts else None
+            if not isinstance(text, str) or not text.strip():
+                self.last_error = {"error_code": "invalid_model_json", "error_message": f"Gemini model '{model}' returned no usable content.", "diagnostics": {"model": model}}
                 return None
-
-            parts = candidates[0].get("content", {}).get("parts", [])
-            if not parts:
-                self.last_error = {"error_code": "invalid_model_json", "error_message": "Gemini candidate had no content parts.", "diagnostics": {"model": model}}
-                return None
-
-            text = parts[0].get("text")
-            return text.strip() if isinstance(text, str) else None
-        except Exception as exc:
-            logger.warning("Gemini call error: %s", exc)
-            self.last_error = {"error_code": "invalid_model_json", "error_message": f"Gemini connection error: {exc}", "diagnostics": {"exception": str(exc)}}
+            return text.strip()
+        except requests.exceptions.Timeout:
+            self.last_error = {"error_code": "model_timeout", "error_message": f"Gemini model '{model}' request timed out.", "diagnostics": {"model": model, "timeout_seconds": self.timeout_seconds}}
             return None
+        except Exception as exc:
+            self.last_error = {"error_code": "invalid_model_json", "error_message": f"Gemini connection error: {exc}", "diagnostics": {"model": model, "exception": str(exc)}}
+            return None
+
+    def generate_with_gemini(self, prompt: str, api_key: str) -> Tuple[Optional[str], list]:
+        """Try candidate Gemini models in priority order until one actually succeeds.
+
+        Returns (text, attempts). `text` is None only if every candidate failed;
+        `attempts` always lists every model tried with its failure diagnostics.
+        """
+        candidates = self.list_gemini_candidates(api_key)
+        if not candidates:
+            return None, [{"error_code": "model_discovery_failed", **(self.last_error or {})}]
+
+        working = _GEMINI_WORKING_MODEL_CACHE.get(api_key)
+        order = ([working] if working else []) + [c for c in candidates if c != working]
+
+        attempts = []
+        for model in order:
+            text = self._call_gemini_model(model, api_key, prompt)
+            if text:
+                _GEMINI_WORKING_MODEL_CACHE[api_key] = model
+                return text, attempts
+            attempts.append({"model": model, **(self.last_error or {})})
+        return None, attempts
 
     def _generate_with_gpt(self, prompt: str) -> Optional[str]:
         api_key = self._provider_key("gpt")
