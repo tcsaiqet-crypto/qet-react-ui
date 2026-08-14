@@ -57,8 +57,8 @@ describe('NavigationHeader Tab Gating', () => {
   });
 });
 
-describe('HomeUploadPage Vertical Step Rail & Compaction', () => {
-  test('renders empty dropzones initially', () => {
+describe('HomeUploadPage Staged Hero Agent UX & Compaction', () => {
+  test('renders Hero Agent 1 and empty dropzones initially', () => {
     render(
       <HomeUploadPage
         appState={null}
@@ -68,14 +68,16 @@ describe('HomeUploadPage Vertical Step Rail & Compaction', () => {
       />
     );
 
-    expect(screen.getAllByText('Requirement Understanding Agent').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Step 1 · Requirement Specifications/i)).toBeInTheDocument();
-    expect(screen.getByText(/Step 2 · Target Application Codebase/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Requirement Understanding Agent/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('1. Requirement Understanding Agent')).toBeInTheDocument();
+    expect(screen.getByText('2. Document Intake Agent · Codebase Intake')).toBeInTheDocument();
+    expect(screen.getByText('3. Application Understanding Agent')).toBeInTheDocument();
+    expect(screen.getByText('Active Hero')).toBeInTheDocument();
     expect(screen.getByText('Click to Browse or Drag & Drop Documents')).toBeInTheDocument();
     expect(screen.getByText('Click to Browse or Drag & Drop Source ZIP')).toBeInTheDocument();
   });
 
-  test('compacts upload states when files are indexed and reveals Step 3', () => {
+  test('compacts completed upload states and promotes Agent 3 to Hero', () => {
     const mockState: AppState = {
       run_id: 'RUN-20260814-001',
       project_name: 'CFA Digital Journey',
@@ -92,7 +94,6 @@ describe('HomeUploadPage Vertical Step Rail & Compaction', () => {
         created_at: '2026-08-14T00:00:00Z',
       },
       stage_timestamps: {},
-      
     };
 
     render(
@@ -108,7 +109,38 @@ describe('HomeUploadPage Vertical Step Rail & Compaction', () => {
     expect(screen.getByText('42 Files Extracted')).toBeInTheDocument();
     expect(screen.getByText('Replace / Add Docs')).toBeInTheDocument();
     expect(screen.getByText('Replace Codebase ZIP')).toBeInTheDocument();
-    expect(screen.getByText(/Step 3 · Application Architecture Understanding/i)).toBeInTheDocument();
+    expect(screen.getByText('Start AI Understanding')).toBeInTheDocument();
+  });
+
+  test('displays live processing activity text during AI understanding stage', () => {
+    const mockRunningState: AppState = {
+      run_id: 'RUN-20260814-RUNNING',
+      project_name: 'CFA Digital Journey',
+      status: 'ai_understanding_running',
+      progress: 80.0,
+      intake_manifest: {
+        upload_id: 'up_02',
+        zip_filename: 'cfa_app.zip',
+        extracted_path: '/uploads/extracted',
+        total_files: 10,
+        total_size_bytes: 51200,
+        doc_files: ['spec.md'],
+        files: [],
+        created_at: '2026-08-14T00:00:00Z',
+      },
+      stage_timestamps: {},
+    };
+
+    render(
+      <HomeUploadPage
+        appState={mockRunningState}
+        onRefreshStatus={vi.fn()}
+        onProceedToUnderstanding={vi.fn()}
+        onCreateNewRun={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Parsing TypeScript & React component AST/i)).toBeInTheDocument();
   });
 });
 
@@ -143,5 +175,3 @@ describe('RunsDashboard previous runs and report artifacts', () => {
     expect(handleOpenRun).toHaveBeenCalledWith('RUN-HISTORICAL-001');
   });
 });
-
-
