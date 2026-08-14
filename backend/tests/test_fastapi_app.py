@@ -69,7 +69,7 @@ def test_understanding_ai_failfast_when_no_key(monkeypatch: pytest.MonkeyPatch):
     run_id = run_resp.json()["run_id"]
 
     from src.config import config
-    monkeypatch.setattr(type(config), "get_provider_api_key", lambda self, provider: "")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: [])
 
     agent = UnderstandingAgent(run_id=run_id)
 
@@ -161,7 +161,7 @@ def test_ai_settings_rejects_placeholder_keys():
 def test_verify_ai_settings_reports_missing_keys(monkeypatch: pytest.MonkeyPatch):
     from src.config import config
 
-    monkeypatch.setattr(type(config), "get_provider_api_key", lambda self, provider: "")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: [])
 
     resp = client.post("/api/v1/ai/settings/verify")
     assert resp.status_code == 200
