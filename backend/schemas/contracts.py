@@ -43,6 +43,24 @@ class IntakeManifest(BaseModel):
     created_at: str
 
 
+class ZipFileDecision(BaseModel):
+    rel_path: str
+    extension: str
+    size_bytes: int
+    decision: str
+    reason: str
+    source: str
+
+
+class ZipProcessingSummary(BaseModel):
+    total_members: int = 0
+    included_count: int = 0
+    excluded_count: int = 0
+    reviewed_by_ai_count: int = 0
+    current_step: str = "idle"
+    decisions: List[ZipFileDecision] = Field(default_factory=list)
+
+
 class RequirementValidationItem(BaseModel):
     item_id: int
     item_name: str

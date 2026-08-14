@@ -103,7 +103,7 @@ class UnderstandingAgent(BaseAgent):
 
         Raises AIRequiredFailureException with per-attempt diagnostics if all candidates fail.
         """
-        text, attempts = self.llm.generate_with_gemini(prompt, api_key)
+        text, attempts = self.llm.generate_with_gemini(prompt, [api_key])
         if text:
             return text
 
@@ -125,14 +125,14 @@ class UnderstandingAgent(BaseAgent):
         logger.info(f"Executing AI-Required Understanding analysis for run {self.run_id}...")
 
         preferred_provider = self.llm._active_provider()
-        gemini_key = self.llm._provider_key("gemini")
-        gpt_key = self.llm._provider_key("gpt")
-        provider_keys = {"gemini": gemini_key, "gpt": gpt_key}
+        gemini_keys = self.llm._provider_keys("gemini")
+        gpt_keys = self.llm._provider_keys("gpt")
+        provider_keys = {"gemini": gemini_keys, "gpt": gpt_keys}
 
         # Try the configured provider first, then fall back to the other configured
         # provider (still a real AI call, never sample/deterministic data).
         provider_order = [preferred_provider] + [p for p in ("gemini", "gpt") if p != preferred_provider]
-        provider_order = [p for p in provider_order if provider_keys.get(p) and "placeholder" not in provider_keys[p].lower()]
+        provider_order = [p for p in provider_order if provider_keys.get(p)]
 
         if not provider_order:
             raise AIRequiredFailureException(
@@ -164,14 +164,32 @@ class UnderstandingAgent(BaseAgent):
         provider = provider_order[0]
         attempt_failures: List[Dict[str, Any]] = []
         for candidate in provider_order:
-            try:
-                llm_text = self._call_gpt(prompt, provider_keys["gpt"]) if candidate == "gpt" else self._call_gemini(prompt, provider_keys["gemini"])
-                provider = candidate
-                break
-            except AIRequiredFailureException as exc:
-                attempt_failures.append({"provider": candidate, "error_code": exc.error_code, "error_message": exc.error_message, "diagnostics": exc.diagnostics})
-                llm_text = ""
-                continue
+            if candidate == "gpt":
+                for key_index, api_key in enumerate(provider_keys["gpt"]):
+                    try:
+                        llm_text = self._call_gpt(prompt, api_key)
+                        if llm_text:
+                            provider = candidate
+                            break
+                    except AIRequiredFailureException as exc:
+                        attempt_failures.append({"provider": candidate, "key_index": key_index, "error_code": exc.error_code, "error_message": exc.error_message, "diagnostics": exc.diagnostics})
+                        llm_text = ""
+                        continue
+                if llm_text:
+                    break
+            else:
+                for key_index, api_key in enumerate(provider_keys["gemini"]):
+                    try:
+                        llm_text = self._call_gemini(prompt, api_key)
+                        if llm_text:
+                            provider = candidate
+                            break
+                    except AIRequiredFailureException as exc:
+                        attempt_failures.append({"provider": candidate, "key_index": key_index, "error_code": exc.error_code, "error_message": exc.error_message, "diagnostics": exc.diagnostics})
+                        llm_text = ""
+                        continue
+                if llm_text:
+                    break
 
         if not llm_text:
             raise AIRequiredFailureException(
@@ -180,13 +198,14 @@ class UnderstandingAgent(BaseAgent):
                 diagnostics={"attempts": attempt_failures}
             )
 
-        llm_data = self.llm.parse_json_payload(llm_text)
+        llm_data, parse_diag = self.llm.parse_json_payload_with_diagnostics(llm_text)
         if not llm_data or not isinstance(llm_data, dict):
             raise AIRequiredFailureException(
                 error_code="invalid_model_json",
                 error_message="Model returned response that could not be parsed as valid JSON.",
                 diagnostics={
                     "provider": provider,
+                    "parser": parse_diag or {},
                     "raw_preview": (llm_text[:300] if llm_text else "")
                 }
             )
@@ -233,7 +252,7 @@ class UnderstandingAgent(BaseAgent):
 
         provenance = {
             "provider": provider,
-            "model": self.llm.gpt_model if provider == "gpt" else self.llm.get_gemini_model(provider_keys["gemini"]),
+            "model": self.llm.gpt_model if provider == "gpt" else next((self.llm.get_gemini_model(api_key) for api_key in provider_keys["gemini"] if self.llm.get_gemini_model(api_key)), None),
             "prompt_version": "understanding-v2-ai-required",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "fallback_used": False,
@@ -318,7 +337,7 @@ class UnderstandingAgent(BaseAgent):
                 f"Source snapshot:\n{source_snapshot}\n"
             )
             llm_text = self.llm.generate_text(prompt)
-            llm_data = self.llm.parse_json_payload(llm_text)
+            llm_data, _ = self.llm.parse_json_payload_with_diagnostics(llm_text)
             if llm_data:
                 provider_used = self.llm._active_provider()
                 analysis_mode = "ai-first"

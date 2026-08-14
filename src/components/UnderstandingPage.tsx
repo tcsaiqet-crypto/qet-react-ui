@@ -102,6 +102,23 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
   };
 
   const provenance = understanding?.provenance;
+  const providerFailures = Array.isArray(errorDetails?.diagnostics?.attempts)
+    ? errorDetails?.diagnostics?.attempts
+    : [];
+  const keyRemediationHints = providerFailures
+    .map((attempt: any) => {
+      const provider = attempt?.provider === 'gpt' ? 'OpenAI' : attempt?.provider === 'gemini' ? 'Gemini' : String(attempt?.provider || 'provider');
+      const code = String(attempt?.error_code || '');
+      const status = attempt?.diagnostics?.status_code;
+      if (code === 'provider_key_missing' || status === 401 || status === 403) {
+        return `${provider}: key rejected (auth failure).`;
+      }
+      if (code === 'model_discovery_failed') {
+        return `${provider}: key invalid for model discovery.`;
+      }
+      return `${provider}: ${attempt?.error_message || 'request failed'}`;
+    })
+    .filter(Boolean);
 
   return (
     <div className="space-y-8 pb-12">
@@ -186,6 +203,17 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
 
           {errorDetails?.diagnostics && (
             <div className="space-y-1.5">
+              {keyRemediationHints.length > 0 && (
+                <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+                  <p className="font-semibold text-amber-300">Immediate fix</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                    {keyRemediationHints.map((hint, idx) => (
+                      <li key={idx}>{hint}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-amber-200/90">Go to Tools tab, clear invalid stored keys, paste valid keys, then retry analysis.</p>
+                </div>
+              )}
               <span className="text-[11px] font-semibold text-rose-400 uppercase">Diagnostics Payload:</span>
               <pre className="bg-slate-950 p-3 rounded-lg border border-rose-950 text-[11px] font-mono text-rose-200 overflow-x-auto">
                 {JSON.stringify(errorDetails.diagnostics, null, 2)}
@@ -200,7 +228,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
         <div className="space-y-6">
           
           {/* AI Provenance Metadata Badge Box (F05 Observability) */}
-          <div className="rounded-xl bg-slate-900/90 border border-slate-800 p-5 space-y-3 shadow-xl">
+          <div className="qet-panel p-5 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2 text-slate-200 text-xs font-bold">
                 <Cpu className="w-4 h-4 text-cyan-400" />
@@ -211,7 +239,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs qet-text-secondary">
               <div>
                 <span className="text-slate-500 text-[10px] uppercase font-semibold">Provider</span>
                 <p className="font-mono text-slate-200 font-bold">{provenance?.provider || 'gemini'}</p>
@@ -235,18 +263,18 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
 
           {/* Executive Summary & Architecture Notes */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-3 shadow-lg">
+            <div className="qet-panel p-6 space-y-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Executive Application Summary</h3>
               <p className="text-sm text-slate-200 leading-relaxed">{understanding.summary}</p>
             </div>
-            <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-3 shadow-lg">
+            <div className="qet-panel p-6 space-y-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Architecture & Tech Stack Notes</h3>
               <p className="text-sm text-slate-200 leading-relaxed">{understanding.architecture_notes}</p>
             </div>
           </div>
 
           {/* Component Inventory Cards */}
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-4 shadow-lg">
+          <div className="qet-panel p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <FileCode className="w-4 h-4 text-indigo-400" />
@@ -256,7 +284,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {understanding.components.map((comp) => (
-                <div key={comp.component_id} className="p-4 rounded-lg bg-slate-950 border border-slate-800 hover:border-indigo-500/50 transition-all space-y-2">
+                <div key={comp.component_id} className="qet-card p-4 hover:border-indigo-500/50 transition-all space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-indigo-300">{comp.name}</span>
                     <span className="text-[10px] font-mono bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded border border-indigo-800">
@@ -273,7 +301,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
           </div>
 
           {/* Business Process Flows */}
-          <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-4 shadow-lg">
+          <div className="qet-panel p-6 space-y-4">
             <div className="flex items-center space-x-2">
               <Workflow className="w-4 h-4 text-cyan-400" />
               <h3 className="text-sm font-bold text-slate-200">Discovered User Flows ({understanding.flows.length})</h3>
@@ -281,7 +309,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
 
             <div className="space-y-3">
               {understanding.flows.map((fl) => (
-                <div key={fl.flow_id} className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                <div key={fl.flow_id} className="qet-card p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-200">{fl.name}</span>
                     <div className="flex items-center space-x-2 text-[11px] font-mono text-slate-400">
@@ -293,7 +321,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
                   <p className="text-xs text-slate-400">{fl.description}</p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     {fl.steps.map((st, idx) => (
-                      <span key={idx} className="text-[11px] bg-slate-900 text-slate-300 px-2 py-1 rounded border border-slate-800">
+                      <span key={idx} className="qet-pill text-[11px] text-slate-300 px-2 py-1">
                         {idx + 1}. {st}
                       </span>
                     ))}
@@ -307,14 +335,14 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Gaps */}
-            <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-4 shadow-lg">
+            <div className="qet-panel p-6 space-y-4">
               <div className="flex items-center space-x-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
                 <h3 className="text-sm font-bold text-slate-200">Inferred Requirement Gaps ({understanding.gaps.length})</h3>
               </div>
               <div className="space-y-3">
                 {understanding.gaps.map((gp) => (
-                  <div key={gp.gap_id} className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
+                  <div key={gp.gap_id} className="qet-card p-3 space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-amber-300">{gp.title}</span>
                       <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800">
@@ -328,14 +356,14 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
             </div>
 
             {/* Entry Points & Testability Observations */}
-            <div className="rounded-xl bg-slate-900/80 border border-slate-800 p-6 space-y-4 shadow-lg">
+            <div className="qet-panel p-6 space-y-4">
               <div className="flex items-center space-x-2">
                 <Info className="w-4 h-4 text-purple-400" />
                 <h3 className="text-sm font-bold text-slate-200">Testability Observations</h3>
               </div>
               <div className="space-y-2">
                 {understanding.testability_observations.map((obs, idx) => (
-                  <div key={idx} className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300 flex items-start space-x-2">
+                  <div key={idx} className="qet-card p-3 text-xs text-slate-300 flex items-start space-x-2">
                     <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                     <span>{obs}</span>
                   </div>

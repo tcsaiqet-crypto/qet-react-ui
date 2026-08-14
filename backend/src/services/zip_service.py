@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 from src.config import config
 from src.models.schemas import IntakeManifest, FileMetadata
+from src.services.zip_processing_program import ZipProcessingProgram
 from src.utils.security import validate_and_extract_zip, SecurityError
 from src.utils.logger import logger
 
@@ -14,13 +15,16 @@ class ZipService:
 
     def __init__(self, target_dir: Optional[Path] = None):
         self.target_dir = target_dir or config.get_extracted_source_dir()
+        self.processor = ZipProcessingProgram()
 
-    def process_zip_upload(self, upload_id: str, zip_path: Path, filename: str) -> IntakeManifest:
+    def process_zip_upload(self, upload_id: str, zip_path: Path, filename: str) -> tuple[IntakeManifest, Dict[str, Any]]:
         """Extract and index uploaded ZIP archive safely."""
         logger.info(f"Processing ZIP archive upload '{filename}' with ID {upload_id}")
         
         extracted_dir = self.target_dir / upload_id
-        file_metadatas, total_files, total_bytes, excluded_count = validate_and_extract_zip(zip_path, extracted_dir)
+        processing = self.processor.process_zip(zip_path)
+        allowed_paths = set(processing["included_paths"])
+        file_metadatas, total_files, total_bytes, excluded_count = validate_and_extract_zip(zip_path, extracted_dir, allowed_paths=allowed_paths)
 
         doc_files: List[str] = []
         for file_meta in file_metadatas:
@@ -38,7 +42,7 @@ class ZipService:
             excluded_file_count=excluded_count,
             created_at="2026-08-13T14:00:00Z"
         )
-        return manifest
+        return manifest, processing["summary"]
 
     def inspect_source_files(self, extracted_path: str) -> Dict[str, str]:
         """Read text content of source files for agent analysis."""

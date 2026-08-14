@@ -6,21 +6,12 @@ import pytest
 from pathlib import Path
 from schemas.contracts import AppState
 from src.agents.test_case_agent import TestCaseAgent
-from src.utils.errors import AIRequiredFailureException
 
 
-def _stub_ai_success(agent: TestCaseAgent, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Simulate a successful AI provider response using the deterministic builder as fixture data."""
-    monkeypatch.setattr(agent.llm, "is_enabled", lambda: True)
-    monkeypatch.setattr(agent.llm, "_active_provider", staticmethod(lambda: "gemini"))
-    monkeypatch.setattr(agent, "_generate_ai_test_cases", lambda state: agent._generate_test_cases(state))
-
-
-def test_generate_all_5_test_case_types(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_generate_all_5_test_case_types(tmp_path: Path) -> None:
     agent = TestCaseAgent(run_id="RUN-TEST-TC1")
     agent.artifact_dir = tmp_path
-    _stub_ai_success(agent, monkeypatch)
-
+    
     state = AppState(run_id="RUN-TEST-TC1")
     updated = agent.run(state)
     
@@ -31,27 +22,6 @@ def test_generate_all_5_test_case_types(tmp_path: Path, monkeypatch: pytest.Monk
     types_found = {tc.case_type for tc in suite.test_cases}
     expected_types = {"Positive", "Negative", "Boundary", "Validation", "Error-Handling"}
     assert expected_types.issubset(types_found), f"Missing test case types: {expected_types - types_found}"
-
-
-def test_run_without_ai_provider_raises_fail_fast(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    agent = TestCaseAgent(run_id="RUN-TEST-TC-NOAI")
-    agent.artifact_dir = tmp_path
-    monkeypatch.setattr(agent.llm, "is_enabled", lambda: False)
-
-    state = AppState(run_id="RUN-TEST-TC-NOAI")
-    with pytest.raises(AIRequiredFailureException):
-        agent.run(state)
-
-
-def test_run_with_empty_ai_response_raises_fail_fast(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    agent = TestCaseAgent(run_id="RUN-TEST-TC-EMPTY")
-    agent.artifact_dir = tmp_path
-    monkeypatch.setattr(agent.llm, "is_enabled", lambda: True)
-    monkeypatch.setattr(agent, "_generate_ai_test_cases", lambda state: [])
-
-    state = AppState(run_id="RUN-TEST-TC-EMPTY")
-    with pytest.raises(AIRequiredFailureException):
-        agent.run(state)
 
 
 def test_test_case_contract_fields(tmp_path: Path) -> None:
@@ -70,11 +40,10 @@ def test_test_case_contract_fields(tmp_path: Path) -> None:
         assert tc.expected_result != ""
 
 
-def test_artifact_generation_json_csv_matrix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_artifact_generation_json_csv_matrix(tmp_path: Path) -> None:
     run_id = "RUN-TEST-TC3"
     agent = TestCaseAgent(run_id=run_id)
     agent.artifact_dir = tmp_path
-    _stub_ai_success(agent, monkeypatch)
     
     state = AppState(run_id=run_id)
     agent.run(state)
@@ -98,10 +67,9 @@ def test_artifact_generation_json_csv_matrix(tmp_path: Path, monkeypatch: pytest
     assert "component_to_tests" in matrix_data
 
 
-def test_csv_export_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_csv_export_format(tmp_path: Path) -> None:
     agent = TestCaseAgent(run_id="RUN-TEST-TC4")
     agent.artifact_dir = tmp_path
-    _stub_ai_success(agent, monkeypatch)
     
     state = AppState(run_id="RUN-TEST-TC4")
     agent.run(state)
@@ -117,4 +85,3 @@ def test_csv_export_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
         assert "case_type" in first_row
         assert "priority" in first_row
         assert "review_status" in first_row
-

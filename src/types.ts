@@ -5,6 +5,24 @@ export interface FileMetadata {
   is_binary: boolean;
 }
 
+export interface ZipFileDecision {
+  rel_path: string;
+  extension: string;
+  size_bytes: number;
+  decision: string;
+  reason: string;
+  source: string;
+}
+
+export interface ZipProcessingSummary {
+  total_members: number;
+  included_count: number;
+  excluded_count: number;
+  reviewed_by_ai_count: number;
+  current_step: string;
+  decisions: ZipFileDecision[];
+}
+
 export interface IntakeManifest {
   upload_id: string;
   zip_filename: string;
@@ -134,6 +152,10 @@ export interface AppState {
   understanding?: ApplicationUnderstanding;
   last_error?: ErrorPayload;
   stage_timestamps?: Record<string, string>;
+  launcher_state?: {
+    zip_processing?: ZipProcessingSummary;
+    [key: string]: any;
+  };
 }
 
 export interface CreateRunResponse {
@@ -158,6 +180,7 @@ export interface StatusResponse {
   error?: ErrorPayload;
   intake_manifest?: IntakeManifest;
   stage_timestamps?: Record<string, string>;
+  launcher_state?: AppState['launcher_state'];
 }
 
 export interface AIProviderConfig {
@@ -174,6 +197,39 @@ export interface AISettingsResponse {
     enabled: boolean;
     has_key: boolean;
     state: string;
+    model?: string | null;
   };
   gemini_candidate_models: string[];
+}
+
+export interface AIProviderVerificationResult {
+  provider: 'gemini' | 'gpt' | string;
+  configured: boolean;
+  success: boolean;
+  model?: string | null;
+  candidates: string[];
+  error_code?: string | null;
+  error_message?: string | null;
+  diagnostics?: Record<string, any> | null;
+}
+
+export interface VerifyAISettingsResponse {
+  active_provider: 'gemini' | 'gpt';
+  verified_at: string;
+  results: Record<'gemini' | 'gpt', AIProviderVerificationResult>;
+}
+
+export interface RunSummary {
+  run_id: string;
+  project_name: string;
+  status: AppState['status'] | string;
+  progress: number;
+  created_at?: string;
+  updated_at?: string;
+  total_files: number;
+  doc_count: number;
+}
+
+export interface RunListResponse {
+  runs: RunSummary[];
 }

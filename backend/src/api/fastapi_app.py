@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
+import requests
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -61,6 +62,7 @@ class StatusResponse(BaseModel):
     error: Optional[Dict[str, Any]] = None
     intake_manifest: Optional[IntakeManifest] = None
     stage_timestamps: Dict[str, str] = {}
+    launcher_state: Dict[str, Any] = {}
 
 
 class AIProviderConfig(BaseModel):
@@ -79,6 +81,24 @@ class AISettingsResponse(BaseModel):
 class UpdateAISettingsRequest(BaseModel):
     active_provider: str
     provider_keys: Dict[str, str] = {}
+    clear_provider_keys: List[str] = []
+
+
+class AIProviderVerificationResult(BaseModel):
+  provider: str
+  configured: bool
+  success: bool
+  model: Optional[str] = None
+  candidates: List[str] = []
+  error_code: Optional[str] = None
+  error_message: Optional[str] = None
+  diagnostics: Optional[Dict[str, Any]] = None
+
+
+class VerifyAISettingsResponse(BaseModel):
+  active_provider: str
+  verified_at: str
+  results: Dict[str, AIProviderVerificationResult]
 
 
 @app.get("/api/v1/health")
@@ -101,9 +121,12 @@ def _build_ai_settings_response() -> AISettingsResponse:
         ),
     }
     gemini_models: List[str] = []
-    gemini_key = config.get_provider_api_key("gemini")
-    if gemini_key:
-        gemini_models = llm.list_gemini_candidates(gemini_key)
+    for gemini_key in config.get_provider_api_keys("gemini"):
+      candidates = llm.list_gemini_candidates(gemini_key)
+      if candidates:
+        for model in candidates:
+          if model not in gemini_models:
+            gemini_models.append(model)
     return AISettingsResponse(
         active_provider=active_provider,
         llm_enabled=config.is_llm_enabled(),
@@ -126,14 +149,159 @@ def update_ai_settings(req: UpdateAISettingsRequest):
     if not isinstance(provider_keys, dict):
         provider_keys = {}
 
+    clear_set = {
+        "gpt" if str(provider).strip().lower() == "gpt" else "gemini"
+        for provider in (req.clear_provider_keys or [])
+    }
+    for provider in clear_set:
+        provider_keys.pop(provider, None)
+
+    invalid_keys: Dict[str, str] = {}
+
     for provider, value in req.provider_keys.items():
         normalized_provider = "gpt" if str(provider).strip().lower() == "gpt" else "gemini"
         clean_value = str(value).strip()
         if clean_value:
-            provider_keys[normalized_provider] = clean_value
+            sanitized = config._sanitize_provider_key(clean_value)
+            if not sanitized:
+                invalid_keys[normalized_provider] = "Looks like a placeholder or test key. Paste a real provider API key."
+                continue
+            provider_keys[normalized_provider] = sanitized
+
+    if invalid_keys:
+        err = {
+            "error_code": "invalid_provider_key",
+            "error_message": "One or more provider keys look invalid or placeholder.",
+            "diagnostics": {
+                "invalid_keys": invalid_keys,
+                "remediation": "Open Tools > AI Settings and paste a valid production key for Gemini or OpenAI.",
+            },
+        }
+        raise HTTPException(status_code=400, detail=err)
 
     save_ai_settings_dict(active_provider=active_provider, provider_keys=provider_keys)
     return _build_ai_settings_response()
+
+
+def _verify_gpt_key(llm: LLMService, api_keys: List[str]) -> AIProviderVerificationResult:
+  if not api_keys:
+    return AIProviderVerificationResult(
+      provider="gpt",
+      configured=False,
+      success=False,
+      error_code="provider_key_missing",
+      error_message="OpenAI API key is not configured.",
+    )
+
+  failures: List[Dict[str, Any]] = []
+  for key_index, api_key in enumerate(api_keys):
+    try:
+      response = requests.get(
+        "https://api.openai.com/v1/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=llm.timeout_seconds,
+      )
+      if response.status_code != 200:
+        status = response.status_code
+        error_code = "provider_auth_failed" if status in (401, 403) else "provider_validation_failed"
+        failures.append({
+          "key_index": key_index,
+          "error_code": error_code,
+          "error_message": f"OpenAI model discovery returned status {status}.",
+          "diagnostics": {"status_code": status, "response": response.text[:300]},
+        })
+        continue
+
+      data = response.json().get("data") or []
+      model_ids = [item.get("id") for item in data if isinstance(item, dict) and item.get("id")]
+      selected_model = llm.gpt_model if llm.gpt_model in model_ids else (model_ids[0] if model_ids else llm.gpt_model)
+      return AIProviderVerificationResult(
+        provider="gpt",
+        configured=True,
+        success=True,
+        model=selected_model,
+        candidates=model_ids[:8],
+      )
+    except requests.exceptions.Timeout:
+      failures.append({
+        "key_index": key_index,
+        "error_code": "provider_timeout",
+        "error_message": "OpenAI model discovery timed out.",
+        "diagnostics": {"timeout_seconds": llm.timeout_seconds},
+      })
+    except Exception as exc:
+      failures.append({
+        "key_index": key_index,
+        "error_code": "provider_validation_failed",
+        "error_message": f"OpenAI verification request failed: {exc}",
+        "diagnostics": {"exception": str(exc)},
+      })
+
+  last_error = failures[-1] if failures else {}
+  return AIProviderVerificationResult(
+    provider="gpt",
+    configured=True,
+    success=False,
+    error_code=last_error.get("error_code", "provider_validation_failed"),
+    error_message=last_error.get("error_message", "OpenAI model discovery failed."),
+    diagnostics={"attempts": failures},
+  )
+
+
+def _verify_gemini_key(llm: LLMService, api_keys: List[str]) -> AIProviderVerificationResult:
+  if not api_keys:
+    return AIProviderVerificationResult(
+      provider="gemini",
+      configured=False,
+      success=False,
+      error_code="provider_key_missing",
+      error_message="Gemini API key is not configured.",
+    )
+
+  failures: List[Dict[str, Any]] = []
+  for key_index, api_key in enumerate(api_keys):
+    candidates = llm.list_gemini_candidates(api_key)
+    if candidates:
+      working_model = llm.get_gemini_model(api_key) or candidates[0]
+      return AIProviderVerificationResult(
+        provider="gemini",
+        configured=True,
+        success=True,
+        model=working_model,
+        candidates=candidates[:8],
+      )
+    failures.append({
+      "key_index": key_index,
+      "error_code": (llm.last_error or {}).get("error_code", "model_discovery_failed"),
+      "error_message": (llm.last_error or {}).get("error_message", "Gemini model discovery failed."),
+      "diagnostics": (llm.last_error or {}).get("diagnostics", {}),
+    })
+
+  last_error = failures[-1] if failures else {}
+  return AIProviderVerificationResult(
+    provider="gemini",
+    configured=True,
+    success=False,
+    error_code=last_error.get("error_code", "model_discovery_failed"),
+    error_message=last_error.get("error_message", "Gemini model discovery failed."),
+    diagnostics={"attempts": failures},
+  )
+
+
+@app.post("/api/v1/ai/settings/verify", response_model=VerifyAISettingsResponse)
+def verify_ai_settings():
+    llm = LLMService()
+    gemini_keys = config.get_provider_api_keys("gemini")
+    gpt_keys = config.get_provider_api_keys("gpt")
+    results = {
+        "gemini": _verify_gemini_key(llm, gemini_keys),
+        "gpt": _verify_gpt_key(llm, gpt_keys),
+    }
+    return VerifyAISettingsResponse(
+        active_provider=config.get_active_provider(),
+        verified_at=datetime.now(timezone.utc).isoformat(),
+        results=results,
+    )
 
 
 @app.post("/api/v1/runs", response_model=CreateRunResponse)
@@ -200,7 +368,7 @@ async def upload_codebase(run_id: str, file: UploadFile = File(...)):
 
     try:
         zip_service = ZipService(target_dir=Path("uploads"))
-        manifest = zip_service.process_zip_upload(run_id, zip_path, file.filename)
+        manifest, zip_processing = zip_service.process_zip_upload(run_id, zip_path, file.filename)
     except Exception as e:
         error_code = "zip_validation_failed" if isinstance(e, SecurityError) else "zip_extraction_failed"
         err = {"error_code": error_code, "error_message": str(e), "diagnostics": {"file": file.filename}}
@@ -212,6 +380,7 @@ async def upload_codebase(run_id: str, file: UploadFile = File(...)):
         manifest.doc_files = list(set(manifest.doc_files + state.intake_manifest.doc_files))
 
     state.intake_manifest = manifest
+    state.launcher_state["zip_processing"] = zip_processing
     save_run_state(state)
     update_run_status(run_id, status="indexing", progress=60.0)
 
@@ -231,7 +400,8 @@ def get_run_status(run_id: str):
         progress=state.progress,
         error=state.last_error,
         intake_manifest=state.intake_manifest,
-        stage_timestamps=state.stage_timestamps
+      stage_timestamps=state.stage_timestamps,
+      launcher_state=state.launcher_state,
     )
 
 

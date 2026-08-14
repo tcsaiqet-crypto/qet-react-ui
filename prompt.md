@@ -1,16 +1,15 @@
 # Prompt For Antigravity (Root)
 
-Use this prompt file to execute the latest requirement intelligence work.
+Use this prompt to execute the current stability hotfix cycle.
 
 ## Active Spec-Kit
-C:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/005-requirement-intelligence-testgen
+C:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/006-stability-hotfix
 
 ## Run This Prompt
-Open and execute:
-C:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/005-requirement-intelligence-testgen/prompt.md
+C:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/006-stability-hotfix/prompt.md
 
 ## Alternative Full Prompt
-C:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/005-requirement-intelligence-testgen/antigravity-master-prompt.md
+C:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/006-stability-hotfix/antigravity-master-prompt.md
 
-## Short Mission
-Derive structured requirement categories from Understanding output and generate traceable, category-driven test cases with coverage visibility.
+## Scope
+Fix active backend stability blockers and requirement intelligence hardening gaps so feature development can safely continue.
