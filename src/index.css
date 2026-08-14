@@ -285,3 +285,61 @@ code, pre {
   background-color: var(--qet-surface);
   transition: all 0.25s ease-in-out;
 }
+
+
+/* ── Spec-Kit 011 Agent Choreography Surface & Subagent Stream ──── */
+.qet-orchestration-container {
+  background: var(--qet-surface);
+  border: 1px solid var(--qet-border);
+  border-radius: 1.25rem;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.subagent-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.subagent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  transition: all 0.2s ease-in-out;
+  border: 1px solid var(--qet-border);
+  background: var(--qet-surface-elevated);
+}
+
+.subagent-item.running {
+  border-color: var(--qet-accent-border);
+  background: var(--qet-accent-subtle);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.12);
+}
+
+.subagent-item.completed {
+  border-color: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.upload-filter-btn {
+  padding: 0.25rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: 0.375rem;
+  transition: all 0.15s ease;
+  border: 1px solid var(--qet-border);
+  background: var(--qet-surface);
+  color: var(--qet-text-muted);
+  cursor: pointer;
+}
+
+.upload-filter-btn.active {
+  background: var(--qet-accent);
+  color: #ffffff;
+  border-color: var(--qet-accent);
+}

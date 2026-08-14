@@ -152,6 +152,13 @@ export interface AppState {
   understanding?: ApplicationUnderstanding;
   last_error?: ErrorPayload;
   stage_timestamps?: Record<string, string>;
+  agent_timeline?: AgentTimelineItem[];
+  subagent_timeline?: SubagentTimelineItem[];
+  active_agent?: string;
+  upcoming_agent?: string;
+  reset_generation?: number;
+  upload_summary_left?: UploadLaneSummary;
+  upload_summary_right?: UploadLaneSummary;
   launcher_state?: {
     zip_processing?: ZipProcessingSummary;
     [key: string]: any;
@@ -237,3 +244,68 @@ export interface RunListResponse {
   runs: RunSummary[];
 }
 
+
+
+// ── Spec-Kit 011 Agent Choreography Contracts ───────────────────────
+export type AgentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'invalidated';
+
+export interface AgentTimelineItem {
+  agent_id: string;
+  label: string;
+  status: AgentStatus;
+  started_at?: string;
+  completed_at?: string;
+  generation: number;
+}
+
+export interface SubagentTimelineItem {
+  parent_agent_id: string;
+  subagent_id: string;
+  label: string;
+  status: AgentStatus;
+  message?: string;
+  started_at?: string;
+  completed_at?: string;
+  generation: number;
+}
+
+export interface UploadLaneItem {
+  path: string;
+  name: string;
+  size_bytes: number;
+  decision: 'included' | 'excluded' | 'reviewed';
+  reason?: string;
+  source?: string;
+}
+
+export interface UploadLaneSummary {
+  lane_id: 'documents' | 'codebase';
+  title: string;
+  total_files: number;
+  included_count: number;
+  excluded_count: number;
+  reviewed_count: number;
+  files: UploadLaneItem[];
+}
+
+export interface LifecycleEvent {
+  event_id: string;
+  event_type: 'agent_entered' | 'agent_completed' | 'agent_failed' | 'subagent_started' | 'subagent_completed' | 'subagent_failed' | 'agent_retry_requested' | 'downstream_invalidated';
+  run_id: string;
+  agent_id: string;
+  subagent_id?: string | null;
+  generation: number;
+  message: string;
+  timestamp: string;
+  source: string;
+}
+
+export interface RetryRunRequest {
+  target_agent_id: 'requirement_understanding' | 'document_intake' | 'application_understanding';
+}
+
+export interface RetryRunResponse {
+  run_id: string;
+  reset_generation: number;
+  state: AppState;
+}

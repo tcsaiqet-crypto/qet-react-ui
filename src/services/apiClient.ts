@@ -7,7 +7,8 @@
   RunListResponse,
   StatusResponse, 
   ApplicationUnderstanding,
-  ErrorPayload
+  ErrorPayload,
+  RetryRunResponse
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '/api/v1';
@@ -154,6 +155,20 @@ export async function verifyAISettings(): Promise<VerifyAISettingsResponse> {
   });
   if (!res.ok) {
     await throwApiError(res, 'Failed to verify provider keys');
+  }
+  return res.json();
+}
+
+
+
+export async function retryRun(runId: string, targetAgentId: string): Promise<RetryRunResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/retry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ target_agent_id: targetAgentId }),
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to retry run step');
   }
   return res.json();
 }

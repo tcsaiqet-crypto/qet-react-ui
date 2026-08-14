@@ -1,4 +1,4 @@
-﻿import { describe, test, expect, vi } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
@@ -8,11 +8,13 @@ import { RunsDashboard } from '../components/RunsDashboard';
 import { AppState } from '../types';
 
 const listRuns = vi.fn();
+const retryRun = vi.fn();
 
 vi.mock('../services/apiClient', () => ({
   ApiError: class ApiError extends Error {},
   uploadDocuments: vi.fn(),
   uploadCodebase: vi.fn(),
+  retryRun: (...args: any[]) => retryRun(...args),
   listRuns: () => listRuns(),
 }));
 
@@ -57,8 +59,8 @@ describe('NavigationHeader Tab Gating', () => {
   });
 });
 
-describe('HomeUploadPage Staged Hero Agent UX & Compaction', () => {
-  test('renders Hero Agent 1 and empty dropzones initially', () => {
+describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
+  test('renders orchestration container, upcoming agent preview, and subagents', () => {
     render(
       <HomeUploadPage
         appState={null}
@@ -68,21 +70,29 @@ describe('HomeUploadPage Staged Hero Agent UX & Compaction', () => {
       />
     );
 
-    expect(screen.getAllByText(/Requirement Understanding Agent/i).length).toBeGreaterThan(0);
-    expect(screen.getByText('1. Requirement Understanding Agent')).toBeInTheDocument();
-    expect(screen.getByText('2. Document Intake Agent · Codebase Intake')).toBeInTheDocument();
-    expect(screen.getByText('3. Application Understanding Agent')).toBeInTheDocument();
+    expect(screen.getByText(/Execution Workspace & Agent Orchestration/i)).toBeInTheDocument();
+    expect(screen.getByText(/Upcoming Agent:/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/1. Requirement Understanding Agent/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/2. Document Intake Agent/i)).toBeInTheDocument();
+    expect(screen.getByText(/3. Application Understanding Agent/i)).toBeInTheDocument();
     expect(screen.getByText('Active Hero')).toBeInTheDocument();
-    expect(screen.getByText('Click to Browse or Drag & Drop Documents')).toBeInTheDocument();
-    expect(screen.getByText('Click to Browse or Drag & Drop Source ZIP')).toBeInTheDocument();
+    expect(screen.getByText(/Subagent Stream & Live Status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Requirement Parser & 15-Point Checklist Evaluator/i)).toBeInTheDocument();
   });
 
-  test('compacts completed upload states and promotes Agent 3 to Hero', () => {
+  test('supports dual upload lane expansion, filtering, and retry invalidation', async () => {
+    retryRun.mockResolvedValue({
+      run_id: 'RUN-20260814-001',
+      reset_generation: 2,
+      state: { run_id: 'RUN-20260814-001', status: 'idle', progress: 0 },
+    });
+
     const mockState: AppState = {
       run_id: 'RUN-20260814-001',
       project_name: 'CFA Digital Journey',
       status: 'indexing',
       progress: 66.6,
+      reset_generation: 1,
       intake_manifest: {
         upload_id: 'up_01',
         zip_filename: 'cfa_app.zip',
@@ -90,16 +100,22 @@ describe('HomeUploadPage Staged Hero Agent UX & Compaction', () => {
         total_files: 42,
         total_size_bytes: 1048576,
         doc_files: ['cfa_spec.md'],
-        files: [],
+        files: [
+          { rel_path: 'src/App.tsx', size_bytes: 1200, extension: '.tsx', is_binary: false },
+          { rel_path: 'assets/logo.png', size_bytes: 4500, extension: '.png', is_binary: true },
+        ],
+        excluded_file_count: 1,
         created_at: '2026-08-14T00:00:00Z',
       },
       stage_timestamps: {},
     };
 
+    const handleRefresh = vi.fn();
+
     render(
       <HomeUploadPage
         appState={mockState}
-        onRefreshStatus={vi.fn()}
+        onRefreshStatus={handleRefresh}
         onProceedToUnderstanding={vi.fn()}
         onCreateNewRun={vi.fn()}
       />
@@ -107,12 +123,25 @@ describe('HomeUploadPage Staged Hero Agent UX & Compaction', () => {
 
     expect(screen.getByText('1 Docs Indexed')).toBeInTheDocument();
     expect(screen.getByText('42 Files Extracted')).toBeInTheDocument();
-    expect(screen.getByText('Replace / Add Docs')).toBeInTheDocument();
-    expect(screen.getByText('Replace Codebase ZIP')).toBeInTheDocument();
-    expect(screen.getByText('Start AI Understanding')).toBeInTheDocument();
+    expect(screen.getByText('Requirement Documents Lane')).toBeInTheDocument();
+    expect(screen.getByText('Target Codebase ZIP Lane')).toBeInTheDocument();
+
+    // Expand ZIP details and filter
+    const expandBtn = screen.getByText('Expand File List');
+    fireEvent.click(expandBtn);
+    expect(screen.getByText('src/App.tsx')).toBeInTheDocument();
+
+    // Click retry step on Requirement Understanding Agent
+    const retryButtons = screen.getAllByText('Retry Step');
+    expect(retryButtons.length).toBeGreaterThan(0);
+    fireEvent.click(retryButtons[0]);
+
+    await waitFor(() => {
+      expect(retryRun).toHaveBeenCalledWith('RUN-20260814-001', 'requirement_understanding');
+    });
   });
 
-  test('displays live processing activity text during AI understanding stage', () => {
+  test('displays live processing activity text and active subagents during AI stage', () => {
     const mockRunningState: AppState = {
       run_id: 'RUN-20260814-RUNNING',
       project_name: 'CFA Digital Journey',
