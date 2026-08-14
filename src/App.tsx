@@ -195,7 +195,7 @@ export const App: React.FC = () => {
               </div>
               <div className="min-w-0">
                 <h1 className="truncate text-lg font-bold tracking-tight" style={{ color: 'var(--qet-text-primary)' }}>
-                  QET Agent
+                  QET Automated Agents
                 </h1>
                 <p className="truncate text-xs font-medium" style={{ color: 'var(--qet-text-muted)' }}>
                   Autonomous Quality Execution Platform
@@ -438,4 +438,5 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
 
