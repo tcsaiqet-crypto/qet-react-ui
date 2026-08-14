@@ -25,6 +25,7 @@ export const App: React.FC = () => {
       }, 2500);
       return () => clearInterval(timer);
     }
+    return undefined;
   }, [appState?.run_id, appState?.status]);
 
   const initRun = async () => {
