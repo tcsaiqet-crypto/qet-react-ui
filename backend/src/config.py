@@ -1,4 +1,4 @@
-"""Central Configuration for QET Agent Accelerator (V1)."""
+﻿"""Central Configuration for QET Agent Accelerator (V1)."""
 
 import os
 import re
@@ -188,7 +188,9 @@ class AppConfig(BaseModel):
 
     def get_api_key(self) -> str:
         """Backward-compatible accessor for active provider key."""
-        return self.get_provider_api_key(self.get_active_provider())
+        active = self.get_active_provider()
+        return self.get_provider_api_key(active) or self.get_provider_api_key("gemini") or self.get_provider_api_key("gpt")
 
 
 config = AppConfig()
+
