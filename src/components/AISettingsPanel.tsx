@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Cpu, KeyRound, Save, Sparkles } from 'lucide-react';
+﻿import React, { useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Cpu, KeyRound, Save, Sparkles, RefreshCw } from 'lucide-react';
 import { AISettingsResponse, VerifyAISettingsResponse } from '../types';
 import { ApiError, getAISettings, updateAISettings, verifyAISettings } from '../services/apiClient';
 
@@ -61,11 +61,10 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
       setGptKey('');
       setClearGemini(false);
       setClearGpt(false);
-      setMessage('AI settings saved. Invalid placeholder keys are blocked; you can also clear stored keys explicitly.');
+      setMessage('AI settings saved successfully.');
       onSaved?.(data);
     } catch (err: any) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || 'Failed to save AI settings.');
+      setError(err?.message || 'Failed to save settings.');
     } finally {
       setSaving(false);
     }
@@ -78,174 +77,242 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
     try {
       const result = await verifyAISettings();
       setVerifyResult(result);
-      setMessage('Verification finished. Review provider readiness and model visibility below.');
+      setMessage('Verification finished successfully.');
     } catch (err: any) {
-      const apiErr = err as ApiError;
-      setError(apiErr.message || 'Failed to verify provider keys.');
+      setError(err?.message || 'Failed to verify AI provider keys.');
     } finally {
       setVerifying(false);
     }
   };
 
   return (
-    <section className="qet-panel p-6 space-y-5 animate-fade-in">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-950/50 border border-cyan-800/60 text-cyan-300 text-xs font-semibold">
-            <Cpu className="w-3.5 h-3.5" />
-            <span>Runtime AI Provider Control</span>
+    <section className="space-y-6 pb-12">
+      <div className="qet-panel p-6">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold qet-badge-accent">
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>AI Provider Runtime Configuration</span>
           </div>
-          <h3 className="text-lg font-bold text-slate-100">Switch AI and add provider keys without editing files</h3>
-          <p className="text-sm text-slate-400 max-w-3xl">
-            The backend already supports both Google Gemini and OpenAI GPT. Save a key here, pick the active provider, and future AI-required stages will use it.
+          <h2 className="text-2xl font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+            AI Engine Settings
+          </h2>
+          <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+            Configure API keys for Google Gemini and OpenAI GPT. Antigravity discovers and ranks working model candidates automatically.
           </p>
         </div>
-        {settings && (
-          <div className="qet-card px-4 py-3 text-xs space-y-1 min-w-[180px]">
-            <div className="text-slate-500 uppercase tracking-wider font-semibold">Current Runtime</div>
-            <div className="font-mono text-cyan-300">{settings.runtime_state.provider}</div>
-            <div className="text-slate-400">
-              Model: <span className="font-mono text-slate-200">{settings.runtime_state.model || 'Unavailable'}</span>
-            </div>
-            <div className={`font-semibold ${settings.runtime_state.state === 'Ready' ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {settings.runtime_state.state}
-            </div>
-          </div>
-        )}
       </div>
 
       {loading ? (
-        <div className="text-sm text-slate-400">Loading AI settings...</div>
+        <div className="qet-panel p-8 text-center text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+          Loading AI settings...
+        </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_1fr] gap-5">
-            <div className="qet-card p-5 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Form */}
+            <div className="lg:col-span-2 qet-panel p-6 space-y-6">
+              {/* Current Runtime Box */}
+              {settings?.runtime_state && (
+                <div className="qet-card-elevated p-4 space-y-2">
+                  <div className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--qet-text-muted)' }}>
+                    Current Runtime
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>Provider</span>
+                      <p className="font-mono font-bold" style={{ color: 'var(--qet-text-primary)' }}>{settings.runtime_state.provider}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>State</span>
+                      <p className="font-mono font-bold" style={{ color: 'var(--qet-accent)' }}>{settings.runtime_state.state}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>Model:</span>
+                      <p className="font-mono font-bold" style={{ color: 'var(--qet-accent)' }}>{settings.runtime_state.model || 'Unavailable'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>Key Present</span>
+                      <p className="font-mono font-bold" style={{ color: settings.runtime_state.has_key ? 'var(--qet-success)' : 'var(--qet-danger)' }}>
+                        {settings.runtime_state.has_key ? 'Yes' : 'No'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Active Provider Selector */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active provider</label>
-                <select
-                  value={activeProvider}
-                  onChange={(e) => setActiveProvider(e.target.value === 'gpt' ? 'gpt' : 'gemini')}
-                  className="w-full rounded-xl bg-slate-900 border border-slate-700 px-4 py-3 text-sm text-slate-100 outline-none focus:border-cyan-500"
-                >
-                  <option value="gemini">Google Gemini</option>
-                  <option value="gpt">OpenAI GPT</option>
-                </select>
+                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--qet-text-muted)' }}>
+                  Active Provider
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['gemini', 'gpt'] as const).map((provider) => {
+                    const isSelected = activeProvider === provider;
+                    return (
+                      <button
+                        key={provider}
+                        type="button"
+                        onClick={() => setActiveProvider(provider)}
+                        className={`p-4 rounded-xl text-left border transition-all ${
+                          isSelected ? 'qet-badge-accent shadow-sm ring-2 ring-blue-500/30' : 'qet-card-elevated'
+                        }`}
+                      >
+                        <div className="text-sm font-bold capitalize">
+                          {provider === 'gemini' ? 'Google Gemini' : 'OpenAI GPT'}
+                        </div>
+                        <div className="text-xs mt-1" style={{ color: 'var(--qet-text-muted)' }}>
+                          {provider === 'gemini' ? 'Auto-discovery & fast multimodal' : 'Industry-standard reasoning models'}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Key Input Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Gemini API key</label>
+                  <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--qet-text-muted)' }}>
+                    Gemini API Key
+                  </label>
                   <div className="relative">
-                    <KeyRound className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
+                    <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                     <input
                       type="password"
                       value={geminiKey}
                       onChange={(e) => setGeminiKey(e.target.value)}
-                      placeholder={settings?.providers.gemini.key_present ? 'Stored key present' : 'Paste Gemini key'}
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 pl-10 pr-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500"
+                      placeholder={settings?.providers.gemini.key_present ? 'Stored key present' : 'Paste Gemini API key'}
+                      className="w-full rounded-lg pl-9 pr-3 py-2 text-xs outline-none transition-colors border"
+                      style={{
+                        backgroundColor: 'var(--qet-surface)',
+                        borderColor: 'var(--qet-border)',
+                        color: 'var(--qet-text-primary)',
+                      }}
                     />
                   </div>
-                  <div className="text-xs text-slate-500">Status: {settings?.providers.gemini.key_present ? 'configured' : 'missing'}</div>
-                  <label className="inline-flex items-center gap-2 text-xs text-rose-300">
-                    <input
-                      type="checkbox"
-                      checked={clearGemini}
-                      onChange={(e) => setClearGemini(e.target.checked)}
-                      className="rounded border-slate-600 bg-slate-900"
-                    />
-                    Clear stored Gemini key on save
-                  </label>
+                  <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--qet-text-muted)' }}>
+                    <span>Status: {settings?.providers.gemini.key_present ? 'Configured' : 'Missing'}</span>
+                    <label className="inline-flex items-center gap-1 text-rose-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={clearGemini}
+                        onChange={(e) => setClearGemini(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span>Clear key</span>
+                    </label>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">OpenAI API key</label>
+                  <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--qet-text-muted)' }}>
+                    OpenAI API Key
+                  </label>
                   <div className="relative">
-                    <KeyRound className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
+                    <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                     <input
                       type="password"
                       value={gptKey}
                       onChange={(e) => setGptKey(e.target.value)}
                       placeholder={settings?.providers.gpt.key_present ? 'Stored key present' : 'Paste OpenAI key'}
-                      className="w-full rounded-xl bg-slate-900 border border-slate-700 pl-10 pr-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-500"
+                      className="w-full rounded-lg pl-9 pr-3 py-2 text-xs outline-none transition-colors border"
+                      style={{
+                        backgroundColor: 'var(--qet-surface)',
+                        borderColor: 'var(--qet-border)',
+                        color: 'var(--qet-text-primary)',
+                      }}
                     />
                   </div>
-                  <div className="text-xs text-slate-500">Status: {settings?.providers.gpt.key_present ? 'configured' : 'missing'}</div>
-                  <label className="inline-flex items-center gap-2 text-xs text-rose-300">
-                    <input
-                      type="checkbox"
-                      checked={clearGpt}
-                      onChange={(e) => setClearGpt(e.target.checked)}
-                      className="rounded border-slate-600 bg-slate-900"
-                    />
-                    Clear stored OpenAI key on save
-                  </label>
+                  <div className="flex items-center justify-between text-[11px]" style={{ color: 'var(--qet-text-muted)' }}>
+                    <span>Status: {settings?.providers.gpt.key_present ? 'Configured' : 'Missing'}</span>
+                    <label className="inline-flex items-center gap-1 text-rose-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={clearGpt}
+                        onChange={(e) => setClearGpt(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span>Clear key</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className={`inline-flex items-center space-x-2 px-5 py-3 rounded-xl text-sm font-bold transition-all ${saving ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 text-white hover:opacity-95 hover:scale-[1.01] shadow-lg shadow-cyan-500/20'}`}
-              >
-                {saving ? <Sparkles className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                <span>{saving ? 'Saving AI settings...' : 'Save AI Settings'}</span>
-              </button>
-
-              <button
-                onClick={handleVerify}
-                disabled={verifying}
-                className={`ml-3 inline-flex items-center space-x-2 px-5 py-3 rounded-xl text-sm font-bold transition-all ${verifying ? 'bg-slate-800 text-slate-400 border border-slate-700' : 'qet-btn-secondary text-slate-100'}`}
-              >
-                {verifying ? <Sparkles className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
-                <span>{verifying ? 'Verifying...' : 'Verify Keys & Model Access'}</span>
-              </button>
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="qet-btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold shadow-sm cursor-pointer"
+                >
+                  {saving ? <Sparkles className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>{saving ? 'Saving...' : 'Save Settings'}</span>
+                </button>
+                <button
+                  onClick={handleVerify}
+                  disabled={verifying}
+                  className="qet-btn-secondary inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold cursor-pointer"
+                >
+                  {verifying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Cpu className="w-4 h-4" />}
+                  <span>{verifying ? 'Verifying...' : 'Verify Keys & Model Access'}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="qet-card p-5 space-y-4">
+            {/* Side Card: Supported Models */}
+            <div className="qet-panel p-6 space-y-4">
               <div>
-                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Supported right now</div>
-                <div className="space-y-2 text-sm text-slate-300">
-                  <div className="flex items-center justify-between rounded-lg bg-slate-900/80 px-3 py-2 border border-slate-800">
-                    <span>Google Gemini</span>
-                    <span className="text-cyan-300">ready for model discovery</span>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--qet-text-muted)' }}>
+                  Supported Providers
+                </h3>
+                <div className="space-y-2 text-xs">
+                  <div className="flex items-center justify-between p-2.5 rounded-lg qet-card-elevated">
+                    <span className="font-semibold" style={{ color: 'var(--qet-text-primary)' }}>Google Gemini</span>
+                    <span className="qet-badge-accent px-2 py-0.5 text-[10px]">Model discovery ready</span>
                   </div>
-                  <div className="flex items-center justify-between rounded-lg bg-slate-900/80 px-3 py-2 border border-slate-800">
-                    <span>OpenAI GPT</span>
-                    <span className="text-indigo-300">switchable fallback/primary</span>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg qet-card-elevated">
+                    <span className="font-semibold" style={{ color: 'var(--qet-text-primary)' }}>OpenAI GPT</span>
+                    <span className="qet-badge-neutral px-2 py-0.5 text-[10px]">Fallback / Primary</span>
                   </div>
                 </div>
               </div>
 
               {settings?.gemini_candidate_models && settings.gemini_candidate_models.length > 0 && (
                 <div>
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Gemini models visible to your key</div>
-                  <div className="flex flex-wrap gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--qet-text-muted)' }}>
+                    Gemini models visible to your key
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5">
                     {settings.gemini_candidate_models.map((model) => (
-                      <span key={model} className="text-xs font-mono px-2 py-1 rounded border border-slate-700 bg-slate-900 text-cyan-300">
+                      <span key={model} className="qet-badge-accent text-[11px] font-mono px-2 py-0.5">
                         {model}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
-
-              <div className="text-xs text-slate-500 leading-relaxed">
-                Adding providers beyond Gemini/OpenAI still needs backend code for that provider's API. This panel gives you runtime switching and key management for the providers already implemented today.
-              </div>
             </div>
           </div>
 
-          {message && <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-300">{message}</div>}
-          {error && <div className="rounded-lg border border-rose-800/50 bg-rose-950/40 px-4 py-3 text-sm text-rose-300">{error}</div>}
+          {/* Feedback Messages */}
+          {message && <div className="qet-badge-success p-4 text-xs font-semibold">{message}</div>}
+          {error && <div className="qet-badge-danger p-4 text-xs font-semibold">{error}</div>}
 
+          {/* Verification Results */}
           {verifyResult && (
-            <div className="qet-card p-5 space-y-4">
-              <div className="flex items-center justify-between gap-3">
+            <div className="qet-panel p-6 space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Verification Result</p>
-                  <p className="text-sm text-slate-300">Checked at {new Date(verifyResult.verified_at).toLocaleString()}</p>
+                  <p className="text-xs uppercase tracking-wider font-bold" style={{ color: 'var(--qet-text-muted)' }}>
+                    Verification Result
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--qet-text-secondary)' }}>
+                    Checked at {new Date(verifyResult.verified_at).toLocaleTimeString()}
+                  </p>
                 </div>
-                <p className="text-xs text-slate-400">Active provider: <span className="font-mono text-cyan-300">{verifyResult.active_provider}</span></p>
+                <span className="qet-badge-accent px-2.5 py-1 text-xs font-mono font-bold">
+                  Active: {verifyResult.active_provider}
+                </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -253,30 +320,24 @@ export const AISettingsPanel: React.FC<AISettingsPanelProps> = ({ onSaved }) => 
                   const result = verifyResult.results[provider];
                   const ok = result?.success;
                   return (
-                    <div key={provider} className={`rounded-lg border p-4 space-y-2 ${ok ? 'border-emerald-700/60 bg-emerald-950/20' : 'border-rose-700/60 bg-rose-950/20'}`}>
+                    <div
+                      key={provider}
+                      className={`p-4 rounded-xl border space-y-2 ${ok ? 'qet-badge-success' : 'qet-badge-danger'}`}
+                    >
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-slate-100">{provider === 'gemini' ? 'Google Gemini' : 'OpenAI GPT'}</p>
-                        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${ok ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        <p className="text-sm font-bold">{provider === 'gemini' ? 'Google Gemini' : 'OpenAI GPT'}</p>
+                        <span className="inline-flex items-center gap-1 text-xs font-bold">
                           {ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-                          {ok ? 'Ready' : 'Action needed'}
+                          <span>{ok ? 'Ready' : 'Action needed'}</span>
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400">
-                        Configured: <span className="font-mono text-slate-200">{result?.configured ? 'yes' : 'no'}</span>
+                      <p className="text-xs">
+                        Configured: <span className="font-mono font-bold">{result?.configured ? 'yes' : 'no'}</span>
                       </p>
-                      <p className="text-xs text-slate-400">
-                        Model: <span className="font-mono text-cyan-300">{result?.model || 'Unavailable'}</span>
+                      <p className="text-xs">
+                        Model: <span className="font-mono font-bold">{result?.model || 'Unavailable'}</span>
                       </p>
-                      {!!result?.error_message && <p className="text-xs text-rose-300">{result.error_message}</p>}
-                      {result?.candidates?.length ? (
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {result.candidates.slice(0, 6).map((model) => (
-                            <span key={model} className="text-[11px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-900 text-cyan-300">
-                              {model}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
+                      {!!result?.error_message && <p className="text-xs font-semibold">{result.error_message}</p>}
                     </div>
                   );
                 })}

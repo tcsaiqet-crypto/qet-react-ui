@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   BrainCircuit, 
   Sparkles, 
@@ -81,7 +81,6 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
     setErrorDetails(null);
     try {
       await startUnderstanding(runId);
-      // Poll until finished
       const interval = setInterval(async () => {
         const res = await getUnderstanding(runId);
         if (res.status === 'ready' || res.status === 'failed') {
@@ -102,12 +101,13 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
   };
 
   const provenance = understanding?.provenance;
-  const providerFailures = Array.isArray(errorDetails?.diagnostics?.attempts)
+  const attempts = Array.isArray(errorDetails?.diagnostics?.attempts)
     ? errorDetails?.diagnostics?.attempts
     : [];
-  const keyRemediationHints = providerFailures
+
+  const keyRemediationHints = attempts
     .map((attempt: any) => {
-      const provider = attempt?.provider === 'gpt' ? 'OpenAI' : attempt?.provider === 'gemini' ? 'Gemini' : String(attempt?.provider || 'provider');
+      const provider = String(attempt?.provider || 'provider').toUpperCase();
       const code = String(attempt?.error_code || '');
       const status = attempt?.diagnostics?.status_code;
       if (code === 'provider_key_missing' || status === 401 || status === 403) {
@@ -121,20 +121,19 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
     .filter(Boolean);
 
   return (
-    <div className="space-y-8 pb-12">
-      
+    <div className="space-y-6 pb-12">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-purple-950/40 p-8 border border-slate-800 shadow-2xl">
+      <div className="qet-panel p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-purple-950/60 border border-purple-800/60 text-purple-300 text-xs font-semibold">
+            <div className="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold qet-badge-accent">
               <BrainCircuit className="w-3.5 h-3.5" />
               <span>F02 Understanding AI Engine (AI-Required)</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-100 tracking-tight sm:text-3xl">
+            <h2 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--qet-text-primary)' }}>
               Application Structure & Requirements Understanding
-            </h1>
-            <p className="text-xs text-slate-400 leading-relaxed">
+            </h2>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--qet-text-muted)' }}>
               Analyzes requirement specifications and extracted codebase components using AI. Fails fast with structured diagnostics if AI provider is disabled, key is missing, or schema validation fails.
             </p>
           </div>
@@ -143,16 +142,11 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
             <button
               onClick={handleStartAnalysis}
               disabled={isRunning}
-              className={`
-                inline-flex items-center space-x-2 px-5 py-3 rounded-xl font-bold text-xs transition-all shadow-lg
-                ${isRunning 
-                  ? 'bg-slate-800 text-slate-400 border border-slate-700 cursor-wait' 
-                  : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 text-white hover:opacity-95 shadow-purple-500/20 cursor-pointer hover:scale-[1.02]'}
-              `}
+              className="qet-btn-primary inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold shadow-sm"
             >
               {isRunning ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-300" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   <span>AI Engine Analyzing...</span>
                 </>
               ) : (
@@ -168,13 +162,13 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
 
       {/* Error Diagnostics Surface (AI Fail-Fast Observability) */}
       {(errorDetails || currentStatus === 'error') && (
-        <div className="rounded-xl bg-rose-950/40 border border-rose-800/80 p-6 space-y-4 shadow-xl animate-fade-in">
+        <div className="qet-badge-danger p-6 space-y-4 animate-file-item">
           <div className="flex items-start justify-between">
-            <div className="flex items-center space-x-3 text-rose-300">
-              <ShieldAlert className="w-6 h-6 text-rose-400 shrink-0" />
+            <div className="flex items-center space-x-3">
+              <ShieldAlert className="w-6 h-6 shrink-0" />
               <div>
                 <h3 className="text-sm font-bold">AI Stage Execution Failure (Fail-Fast Diagnostics)</h3>
-                <p className="text-xs text-rose-200/80 mt-0.5">
+                <p className="text-xs mt-0.5 opacity-90">
                   AI-Required mode active. No fabricated or fake deterministic fallback content returned.
                 </p>
               </div>
@@ -182,7 +176,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
             {errorDetails?.retryable !== false && (
               <button
                 onClick={handleStartAnalysis}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-rose-900/80 hover:bg-rose-800 border border-rose-700 text-rose-100 text-xs font-semibold transition-colors"
+                className="qet-btn-secondary inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold"
               >
                 <RotateCw className="w-3.5 h-3.5" />
                 <span>Retry Analysis</span>
@@ -191,31 +185,31 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="bg-slate-950/80 p-3 rounded-lg border border-rose-900/50 space-y-1">
-              <span className="font-semibold text-rose-400 uppercase text-[10px]">Error Code:</span>
-              <p className="font-mono text-slate-200 font-bold">{errorDetails?.error_code || 'execution_error'}</p>
+            <div className="qet-card p-3 space-y-1">
+              <span className="font-semibold uppercase text-[10px]" style={{ color: 'var(--qet-danger)' }}>Error Code:</span>
+              <p className="font-mono font-bold" style={{ color: 'var(--qet-text-primary)' }}>{errorDetails?.error_code || 'execution_error'}</p>
             </div>
-            <div className="bg-slate-950/80 p-3 rounded-lg border border-rose-900/50 space-y-1">
-              <span className="font-semibold text-rose-400 uppercase text-[10px]">Actionable Message:</span>
-              <p className="text-slate-200">{errorDetails?.error_message || appState?.last_error?.error_message || 'Stage execution failed'}</p>
+            <div className="qet-card p-3 space-y-1">
+              <span className="font-semibold uppercase text-[10px]" style={{ color: 'var(--qet-danger)' }}>Actionable Message:</span>
+              <p style={{ color: 'var(--qet-text-primary)' }}>{errorDetails?.error_message || appState?.last_error?.error_message || 'Stage execution failed'}</p>
             </div>
           </div>
 
           {errorDetails?.diagnostics && (
             <div className="space-y-1.5">
               {keyRemediationHints.length > 0 && (
-                <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
-                  <p className="font-semibold text-amber-300">Immediate fix</p>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                <div className="qet-badge-warning p-3 text-xs space-y-1">
+                  <p className="font-semibold">Immediate fix</p>
+                  <ul className="list-disc space-y-0.5 pl-4">
                     {keyRemediationHints.map((hint, idx) => (
                       <li key={idx}>{hint}</li>
                     ))}
                   </ul>
-                  <p className="mt-2 text-amber-200/90">Go to Tools tab, clear invalid stored keys, paste valid keys, then retry analysis.</p>
+                  <p className="mt-1 opacity-90">Go to Tools tab, clear invalid stored keys, paste valid keys, then retry analysis.</p>
                 </div>
               )}
-              <span className="text-[11px] font-semibold text-rose-400 uppercase">Diagnostics Payload:</span>
-              <pre className="bg-slate-950 p-3 rounded-lg border border-rose-950 text-[11px] font-mono text-rose-200 overflow-x-auto">
+              <span className="text-[11px] font-semibold uppercase" style={{ color: 'var(--qet-danger)' }}>Diagnostics Payload:</span>
+              <pre className="qet-card p-3 text-[11px] font-mono overflow-x-auto" style={{ color: 'var(--qet-text-primary)' }}>
                 {JSON.stringify(errorDetails.diagnostics, null, 2)}
               </pre>
             </div>
@@ -226,35 +220,34 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
       {/* Main Understanding Content */}
       {understanding && (
         <div className="space-y-6">
-          
-          {/* AI Provenance Metadata Badge Box (F05 Observability) */}
+          {/* AI Provenance Metadata Badge Box */}
           <div className="qet-panel p-5 space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center space-x-2 text-slate-200 text-xs font-bold">
-                <Cpu className="w-4 h-4 text-cyan-400" />
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--qet-border)' }}>
+              <div className="flex items-center space-x-2 text-xs font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                <Cpu className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
                 <span>AI Output Provenance & Audit Metadata</span>
               </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
+              <span className="qet-badge-success text-[11px] font-mono px-2 py-0.5 font-semibold">
                 Validation: {understanding.validation_status || 'VALIDATED'}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs qet-text-secondary">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
               <div>
-                <span className="text-slate-500 text-[10px] uppercase font-semibold">Provider</span>
-                <p className="font-mono text-slate-200 font-bold">{provenance?.provider || 'gemini'}</p>
+                <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>Provider</span>
+                <p className="font-mono font-bold" style={{ color: 'var(--qet-text-primary)' }}>{provenance?.provider || 'gemini'}</p>
               </div>
               <div>
-                <span className="text-slate-500 text-[10px] uppercase font-semibold">Model</span>
-                <p className="font-mono text-cyan-300 font-bold">{provenance?.model || 'gemini-1.5-flash'}</p>
+                <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>Model</span>
+                <p className="font-mono font-bold" style={{ color: 'var(--qet-accent)' }}>{provenance?.model || 'gemini-1.5-flash'}</p>
               </div>
               <div>
-                <span className="text-slate-500 text-[10px] uppercase font-semibold">Prompt Version</span>
-                <p className="font-mono text-slate-300">{provenance?.prompt_version || 'understanding-v2-ai-required'}</p>
+                <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>Prompt Version</span>
+                <p className="font-mono" style={{ color: 'var(--qet-text-secondary)' }}>{provenance?.prompt_version || 'understanding-v2-ai-required'}</p>
               </div>
               <div>
-                <span className="text-slate-500 text-[10px] uppercase font-semibold">Fallback Used</span>
-                <p className="font-mono font-bold text-indigo-400">
+                <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--qet-text-muted)' }}>Fallback Used</span>
+                <p className="font-mono font-bold" style={{ color: provenance?.fallback_used ? 'var(--qet-warning)' : 'var(--qet-success)' }}>
                   {provenance?.fallback_used === false ? 'False (AI-Required)' : 'True'}
                 </p>
               </div>
@@ -264,12 +257,12 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
           {/* Executive Summary & Architecture Notes */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="qet-panel p-6 space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Executive Application Summary</h3>
-              <p className="text-sm text-slate-200 leading-relaxed">{understanding.summary}</p>
+              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--qet-text-muted)' }}>Executive Application Summary</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--qet-text-primary)' }}>{understanding.summary}</p>
             </div>
             <div className="qet-panel p-6 space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Architecture & Tech Stack Notes</h3>
-              <p className="text-sm text-slate-200 leading-relaxed">{understanding.architecture_notes}</p>
+              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--qet-text-muted)' }}>Architecture & Tech Stack Notes</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--qet-text-primary)' }}>{understanding.architecture_notes}</p>
             </div>
           </div>
 
@@ -277,23 +270,23 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
           <div className="qet-panel p-6 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <FileCode className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-sm font-bold text-slate-200">Discovered Application Components ({understanding.components.length})</h3>
+                <FileCode className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
+                <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>Discovered Application Components ({understanding.components.length})</h3>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {understanding.components.map((comp) => (
-                <div key={comp.component_id} className="qet-card p-4 hover:border-indigo-500/50 transition-all space-y-2">
+                <div key={comp.component_id} className="qet-card-elevated p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-300">{comp.name}</span>
-                    <span className="text-[10px] font-mono bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded border border-indigo-800">
+                    <span className="text-xs font-bold" style={{ color: 'var(--qet-accent)' }}>{comp.name}</span>
+                    <span className="qet-badge-neutral text-[10px] font-mono px-2 py-0.5">
                       {comp.type}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">{comp.description}</p>
-                  <div className="text-[11px] font-mono text-slate-500 truncate">
-                    File: <span className="text-slate-300">{comp.file_path}</span>
+                  <p className="text-xs" style={{ color: 'var(--qet-text-secondary)' }}>{comp.description}</p>
+                  <div className="text-[11px] font-mono truncate" style={{ color: 'var(--qet-text-muted)' }}>
+                    File: <span style={{ color: 'var(--qet-text-primary)' }}>{comp.file_path}</span>
                   </div>
                 </div>
               ))}
@@ -303,25 +296,25 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
           {/* Business Process Flows */}
           <div className="qet-panel p-6 space-y-4">
             <div className="flex items-center space-x-2">
-              <Workflow className="w-4 h-4 text-cyan-400" />
-              <h3 className="text-sm font-bold text-slate-200">Discovered User Flows ({understanding.flows.length})</h3>
+              <Workflow className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
+              <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>Discovered User Flows ({understanding.flows.length})</h3>
             </div>
 
             <div className="space-y-3">
               {understanding.flows.map((fl) => (
-                <div key={fl.flow_id} className="qet-card p-4 space-y-2">
+                <div key={fl.flow_id} className="qet-card-elevated p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200">{fl.name}</span>
-                    <div className="flex items-center space-x-2 text-[11px] font-mono text-slate-400">
-                      <span className="text-cyan-400">{fl.start_point}</span>
-                      <ChevronRight className="w-3 h-3 text-slate-600" />
-                      <span className="text-purple-400">{fl.end_point}</span>
+                    <span className="text-xs font-bold" style={{ color: 'var(--qet-text-primary)' }}>{fl.name}</span>
+                    <div className="flex items-center space-x-2 text-[11px] font-mono" style={{ color: 'var(--qet-text-muted)' }}>
+                      <span style={{ color: 'var(--qet-accent)' }}>{fl.start_point}</span>
+                      <ChevronRight className="w-3 h-3" />
+                      <span style={{ color: 'var(--qet-accent)' }}>{fl.end_point}</span>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-400">{fl.description}</p>
-                  <div className="flex flex-wrap gap-2 pt-1">
+                  <p className="text-xs" style={{ color: 'var(--qet-text-secondary)' }}>{fl.description}</p>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
                     {fl.steps.map((st, idx) => (
-                      <span key={idx} className="qet-pill text-[11px] text-slate-300 px-2 py-1">
+                      <span key={idx} className="qet-badge-neutral text-[11px] px-2 py-0.5">
                         {idx + 1}. {st}
                       </span>
                     ))}
@@ -331,62 +324,56 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
             </div>
           </div>
 
-          {/* Inferred Requirement Gaps & Entry Points */}
+          {/* Gaps & Observations */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Gaps */}
             <div className="qet-panel p-6 space-y-4">
               <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-4 h-4 text-amber-400" />
-                <h3 className="text-sm font-bold text-slate-200">Inferred Requirement Gaps ({understanding.gaps.length})</h3>
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>Inferred Requirement Gaps ({understanding.gaps.length})</h3>
               </div>
               <div className="space-y-3">
                 {understanding.gaps.map((gp) => (
-                  <div key={gp.gap_id} className="qet-card p-3 space-y-1.5">
+                  <div key={gp.gap_id} className="qet-card-elevated p-3 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-300">{gp.title}</span>
-                      <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800">
+                      <span className="text-xs font-bold" style={{ color: 'var(--qet-warning-text)' }}>{gp.title}</span>
+                      <span className="qet-badge-warning text-[10px] uppercase px-2 py-0.5">
                         {gp.severity}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400">{gp.description}</p>
+                    <p className="text-xs" style={{ color: 'var(--qet-text-secondary)' }}>{gp.description}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Entry Points & Testability Observations */}
             <div className="qet-panel p-6 space-y-4">
               <div className="flex items-center space-x-2">
-                <Info className="w-4 h-4 text-purple-400" />
-                <h3 className="text-sm font-bold text-slate-200">Testability Observations</h3>
+                <Info className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
+                <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>Testability Observations</h3>
               </div>
               <div className="space-y-2">
                 {understanding.testability_observations.map((obs, idx) => (
-                  <div key={idx} className="qet-card p-3 text-xs text-slate-300 flex items-start space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                  <div key={idx} className="qet-card-elevated p-3 text-xs flex items-start space-x-2" style={{ color: 'var(--qet-text-secondary)' }}>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                     <span>{obs}</span>
                   </div>
                 ))}
               </div>
             </div>
-
           </div>
-
         </div>
       )}
 
-      {/* Empty State when no understanding run yet */}
+      {/* Empty State */}
       {!understanding && !errorDetails && !isRunning && (
-        <div className="rounded-xl bg-slate-900/40 border border-slate-800 p-12 text-center space-y-4">
-          <BrainCircuit className="w-12 h-12 text-purple-400/50 mx-auto" />
-          <h3 className="text-base font-bold text-slate-300">Ready for AI Understanding Analysis</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
+        <div className="qet-panel p-12 text-center space-y-4">
+          <BrainCircuit className="w-12 h-12 mx-auto" style={{ color: 'var(--qet-accent)' }} />
+          <h3 className="text-base font-bold" style={{ color: 'var(--qet-text-primary)' }}>Ready for AI Understanding Analysis</h3>
+          <p className="text-xs max-w-md mx-auto" style={{ color: 'var(--qet-text-muted)' }}>
             Click "Start AI Understanding" above to send uploaded requirement documents and codebase snapshot to the AI understanding engine.
           </p>
         </div>
       )}
-
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { 
   UploadCloud, 
   FileText, 
@@ -10,9 +10,10 @@ import {
   Sparkles,
   Layers,
   ShieldAlert,
-  ChevronDown,
-  ChevronUp,
-  Bot
+  Bot,
+  FileCode,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { AppState } from '../types';
 import { uploadDocuments, uploadCodebase, ApiError } from '../services/apiClient';
@@ -44,16 +45,11 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
 
   const [isDraggingDocs, setIsDraggingDocs] = useState(false);
   const [isDraggingZip, setIsDraggingZip] = useState(false);
-  const [docsCollapsed, setDocsCollapsed] = useState(false);
-  const [zipCollapsed, setZipCollapsed] = useState(false);
-  const [showDocFiles, setShowDocFiles] = useState(false);
-  const [showZipSteps, setShowZipSteps] = useState(false);
 
   const runId = appState?.run_id || '';
   const currentStatus = appState?.status || 'idle';
   const progress = appState?.progress || 0;
   const manifest = appState?.intake_manifest;
-  const zipProcessing = appState?.launcher_state?.zip_processing;
 
   const statusToAgent: Record<string, string> = {
     idle: 'Intake Coordinator',
@@ -65,12 +61,6 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     error: 'Recovery / Diagnostics Agent',
   };
   const activeAgent = statusToAgent[currentStatus] || 'Intake Coordinator';
-
-  const scrollToTarget = (targetId: string) => {
-    setTimeout(() => {
-      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 220);
-  };
 
   // Handle doc drop or select
   const handleDocSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,10 +77,8 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     setDocSuccess(null);
     try {
       const res = await uploadDocuments(runId, files);
-      setDocSuccess(`Successfully uploaded ${res.uploaded_count} requirement document(s).`);
-      setDocsCollapsed(true);
+      setDocSuccess(`Successfully indexed ${res.uploaded_count} requirement document(s).`);
       onRefreshStatus();
-      scrollToTarget('zip-upload-card');
     } catch (err: any) {
       setDocError(err instanceof Error ? err : new Error(String(err)));
     } finally {
@@ -126,10 +114,8 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     setZipSuccess(null);
     try {
       const res = await uploadCodebase(runId, file);
-      setZipSuccess(`Codebase ZIP uploaded and indexed (${res.intake_manifest.total_files} files extracted).`);
-      setZipCollapsed(true);
+      setZipSuccess(`Archive unpacked: ${res.intake_manifest.total_files} files indexed.`);
       onRefreshStatus();
-      scrollToTarget('zip-processing-summary');
     } catch (err: any) {
       setZipError(err instanceof Error ? err : new Error(String(err)));
     } finally {
@@ -157,27 +143,27 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   const stages = [
     { key: 'idle', label: 'Idle / Run Created' },
     { key: 'uploading', label: 'Intake Uploading' },
-    { key: 'processing_zip', label: 'Extracting ZIP Archive' },
-    { key: 'indexing', label: 'Codebase Indexing Complete' },
-    { key: 'ai_understanding_running', label: 'AI Understanding Running' },
-    { key: 'understanding_ready', label: 'Understanding Ready' },
+    { key: 'processing_zip', label: 'Extracting ZIP' },
+    { key: 'indexing', label: 'Codebase Indexed' },
+    { key: 'ai_understanding_running', label: 'AI Understanding' },
+    { key: 'understanding_ready', label: 'Analysis Ready' },
   ];
 
   const renderUploadError = (err: Error) => {
     const apiErr = err instanceof ApiError ? err : null;
     return (
-      <div className="rounded-lg bg-rose-950/40 border border-rose-800/50 text-rose-300 text-xs animate-fade-in overflow-hidden">
-        <div className="p-3 flex items-start space-x-2">
-          <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-          <div className="space-y-1 flex-1">
-            <span>{err.message}</span>
+      <div className="qet-badge-danger p-3 text-xs space-y-1.5">
+        <div className="flex items-start gap-2">
+          <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-semibold">{err.message}</span>
             {apiErr?.error_code && (
-              <div className="font-mono text-[10px] text-rose-400/80">error_code: {apiErr.error_code}</div>
+              <div className="font-mono text-[10px] mt-0.5 opacity-85">error_code: {apiErr.error_code}</div>
             )}
           </div>
         </div>
         {apiErr?.diagnostics && (
-          <pre className="bg-slate-950/80 border-t border-rose-900/50 p-2.5 text-[10px] font-mono text-rose-200/90 overflow-x-auto">
+          <pre className="p-2 rounded font-mono text-[10px] overflow-x-auto" style={{ backgroundColor: 'var(--qet-surface)' }}>
             {JSON.stringify(apiErr.diagnostics, null, 2)}
           </pre>
         )}
@@ -186,65 +172,77 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   };
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* Agent header */}
-      <div className="relative overflow-hidden rounded-lg border border-slate-700 bg-gradient-to-br from-slate-900 to-indigo-950/40 p-6 shadow-xl">
+    <div className="space-y-6">
+      {/* ── 1. Execution Workspace Header ────────────────────────────── */}
+      <div className="qet-panel p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-700/50 bg-cyan-950/40 px-3 py-1 text-xs font-semibold text-cyan-300">
+            <div className="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold qet-badge-accent">
               <Sparkles className="h-3.5 w-3.5" />
               <span>F01 Home Upload Experience</span>
             </div>
-            <h2 className="text-2xl font-bold text-slate-100">Execution Workspace</h2>
-            <div className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs">
-              <Bot className="h-3.5 w-3.5 text-teal-300" />
-              <span className="text-slate-400">Active Agent:</span>
-              <span className="font-semibold text-teal-300">{activeAgent}</span>
+            <h2 className="text-2xl font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+              Execution Workspace
+            </h2>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg qet-card-elevated">
+              <Bot className="h-4 w-4" style={{ color: 'var(--qet-accent)' }} />
+              <span style={{ color: 'var(--qet-text-muted)' }}>Active Agent:</span>
+              <span className="font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                {activeAgent}
+              </span>
             </div>
           </div>
 
-          <div className="space-y-2 text-right text-xs">
-            <div className="text-slate-400">Current Run</div>
-            <code className="rounded-md border border-slate-700 bg-slate-900 px-3 py-1 font-mono text-cyan-300">{runId || 'Initializing...'}</code>
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                onClick={onCreateNewRun}
-                className="inline-flex items-center space-x-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-800"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span>New Run</span>
-              </button>
-              <button
-                onClick={onRefreshStatus}
-                className="inline-flex items-center space-x-2 rounded-md border border-teal-700/50 bg-teal-950/30 px-3 py-1.5 text-xs font-semibold text-teal-300 transition-colors hover:bg-teal-900/40"
-              >
-                <Loader2 className={`h-3.5 w-3.5 ${currentStatus.includes('running') ? 'animate-spin' : ''}`} />
-                <span>Poll Status</span>
-              </button>
-            </div>
+          {/* Actions & Status */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2.5">
+            <button
+              onClick={onCreateNewRun}
+              className="qet-btn-secondary inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>New Run</span>
+            </button>
+            <button
+              onClick={onRefreshStatus}
+              className="qet-btn-primary inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold shadow-sm"
+            >
+              <Loader2 className={`h-3.5 w-3.5 ${currentStatus.includes('running') ? 'animate-spin' : ''}`} />
+              <span>Poll Status</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Run lifecycle timeline near top */}
-      <div id="run-timeline" className="rounded-lg border border-slate-700 bg-slate-900/70 p-5 shadow-lg space-y-4">
+      {/* ── 2. Run Cycle Status Timeline ───────────────────────────── */}
+      <div className="qet-panel p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Layers className="w-4 h-4 text-teal-300" />
-            <h3 className="text-sm font-bold text-slate-100">Run Cycle Status Timeline</h3>
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4" style={{ color: 'var(--qet-accent)' }} />
+            <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+              Run Cycle Status Timeline
+            </h3>
           </div>
-          <span className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs font-mono font-bold text-teal-300">{progress}%</span>
+          <span className="qet-badge-accent px-2.5 py-1 text-xs font-mono font-bold">
+            {progress}% Complete
+          </span>
         </div>
 
-        <div className="w-full overflow-hidden rounded-full border border-slate-700 bg-slate-950 h-2">
-          <div className="relative h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-indigo-500 transition-all duration-500" style={{ width: `${progress}%` }}>
-            {currentStatus.includes('running') && (
-              <div className="absolute inset-0 animate-shimmer" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent)', backgroundSize: '400px 100%' }} />
-            )}
-          </div>
+        {/* Progress Track */}
+        <div
+          className="w-full overflow-hidden rounded-full h-2"
+          style={{ backgroundColor: 'var(--qet-surface-elevated)' }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${Math.max(4, progress)}%`,
+              backgroundColor: 'var(--qet-accent)',
+            }}
+          />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        {/* 6 Stage Stepper Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
           {stages.map((st, idx) => {
             const isCompleted = progress >= (idx + 1) * 16.6;
             const isCurrent = currentStatus === st.key;
@@ -252,15 +250,18 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
             return (
               <div
                 key={st.key}
-                className={`rounded-md border p-3 text-center text-xs transition-all ${
+                className={`rounded-lg p-3 text-center text-xs transition-all ${
                   isCurrent
-                    ? 'border-teal-500/70 bg-teal-950/40 text-teal-300 ring-1 ring-teal-500/30'
+                    ? 'qet-badge-accent ring-2 ring-blue-500/40 shadow-sm'
                     : isCompleted
-                      ? 'border-slate-700 bg-slate-900 text-slate-300'
-                      : 'border-slate-800 bg-slate-950/70 text-slate-500'
+                    ? 'qet-badge-success'
+                    : 'qet-card-elevated opacity-75'
                 }`}
               >
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-wider opacity-70">Stage 0{idx + 1}</div>
+                <div className="flex items-center justify-center gap-1 mb-1 text-[10px] font-bold uppercase tracking-wider opacity-80">
+                  {isCompleted ? <Check className="w-3 h-3 text-emerald-500" /> : null}
+                  <span>Stage 0{idx + 1}</span>
+                </div>
                 <div className="font-semibold leading-tight">{st.label}</div>
               </div>
             );
@@ -268,264 +269,234 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
         </div>
       </div>
 
-      {/* Upload cards */}
+      {/* ── 3. Source Upload Cards ──────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div id="doc-upload-card" className={`rounded-lg bg-slate-900/80 border border-slate-700 ${docsCollapsed ? 'p-4' : 'p-6'} transition-all shadow-lg`}>
+        {/* Card A: Requirement Specifications */}
+        <div className="qet-panel p-6 space-y-4 flex flex-col justify-between">
           <div className="space-y-4">
+            {/* Header */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-md bg-indigo-950/60 border border-indigo-700/50 flex items-center justify-center text-indigo-300">
-                  <FileText className="w-5 h-5" />
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center shadow-xs"
+                  style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
+                >
+                  <FileText className="w-5 h-5" style={{ color: 'var(--qet-accent)' }} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-100">1. Requirement Specifications</h3>
-                  <p className="text-xs text-slate-400">Count-first view. Expand only if you want file names.</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                    1. Requirement Specifications
+                  </h3>
+                  <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+                    Upload Markdown, PDF, Word, or text specs
+                  </p>
                 </div>
               </div>
-              {docSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+              {docSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
             </div>
 
-            {!docsCollapsed && (
-              <label
-                onDragOver={(e) => { e.preventDefault(); if (!uploadingDocs) setIsDraggingDocs(true); }}
-                onDragLeave={() => setIsDraggingDocs(false)}
-                onDrop={handleDocDrop}
-                className={`relative flex flex-col items-center justify-center w-full h-44 border-2 border-dashed rounded-md cursor-pointer transition-all p-4 text-center group ${
-                  isDraggingDocs
-                    ? 'border-indigo-400 bg-indigo-950/30'
-                    : 'border-slate-700 hover:border-indigo-500 bg-slate-950/40 hover:bg-slate-950/70'
-                }`}
+            {/* Normal Clean Dropzone */}
+            <label
+              onDragOver={(e) => { e.preventDefault(); if (!uploadingDocs) setIsDraggingDocs(true); }}
+              onDragLeave={() => setIsDraggingDocs(false)}
+              onDrop={handleDocDrop}
+              className={`qet-dropzone relative flex flex-col items-center justify-center w-full min-h-[170px] p-6 text-center cursor-pointer group ${
+                isDraggingDocs ? 'ring-2 ring-blue-500 bg-blue-50/20' : ''
+              }`}
+            >
+              <input
+                type="file"
+                multiple
+                accept=".md,.pdf,.txt,.docx,.doc"
+                onChange={handleDocSelect}
+                className="hidden"
+                disabled={uploadingDocs}
+              />
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-transform group-hover:scale-105"
+                style={{ backgroundColor: 'var(--qet-surface-elevated)' }}
               >
-                <input
-                  type="file"
-                  multiple
-                  accept=".md,.pdf,.txt,.docx"
-                  onChange={handleDocSelect}
-                  className="hidden"
-                  disabled={uploadingDocs}
-                />
-                <UploadCloud className={`w-8 h-8 text-indigo-300 mb-2 transition-transform ${isDraggingDocs ? 'scale-110' : 'group-hover:scale-110'}`} />
-                <p className="text-xs font-semibold text-slate-200">
-                  {uploadingDocs ? 'Uploading documents...' : isDraggingDocs ? 'Release to upload' : 'Click or Drag & Drop Requirement Docs'}
-                </p>
-                <p className="text-[11px] text-slate-500 mt-1">Supports Markdown, PDF, Text, and Word</p>
-              </label>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs">
-              <div className="text-slate-400">Uploaded documents: <span className="font-mono font-bold text-teal-300">{manifest?.doc_files?.length || 0}</span></div>
-              <div className="flex items-center gap-2">
-                {docsCollapsed ? (
-                  <button onClick={() => setDocsCollapsed(false)} className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:text-slate-100">
-                    <ChevronDown className="h-3.5 w-3.5" />
-                    <span>Expand</span>
-                  </button>
+                {uploadingDocs ? (
+                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--qet-accent)' }} />
                 ) : (
-                  <button onClick={() => setDocsCollapsed(true)} className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:text-slate-100">
-                    <ChevronUp className="h-3.5 w-3.5" />
-                    <span>Compact</span>
-                  </button>
+                  <UploadCloud className="w-6 h-6" style={{ color: 'var(--qet-accent)' }} />
                 )}
-                <button onClick={() => setShowDocFiles((prev) => !prev)} className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:text-slate-100">
-                  {showDocFiles ? 'Hide Files' : 'Show Files'}
-                </button>
               </div>
-            </div>
+              <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
+                {uploadingDocs ? 'Uploading & Indexing Documents...' : isDraggingDocs ? 'Drop files now' : 'Click to Browse or Drag & Drop Documents'}
+              </p>
+              <p className="text-[11px] mt-1" style={{ color: 'var(--qet-text-muted)' }}>
+                Supports Markdown, PDF, Text, and Word (.md, .pdf, .txt, .docx)
+              </p>
+            </label>
 
-            {docSuccess && (
-              <div className="p-3 rounded-md bg-emerald-950/30 border border-emerald-800/40 text-emerald-300 text-xs flex items-center space-x-2 animate-fade-in">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{docSuccess}</span>
-              </div>
-            )}
-
+            {/* Error Message */}
             {docError && renderUploadError(docError)}
 
-            {showDocFiles && manifest?.doc_files && manifest.doc_files.length > 0 && (
-              <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Uploaded Documents ({manifest.doc_files.length})</span>
-                <div className="flex flex-wrap gap-1.5">
+            {/* Uploaded Documents List (Smooth Animation) */}
+            {manifest?.doc_files && manifest.doc_files.length > 0 && (
+              <div className="space-y-2 pt-2 animate-file-item">
+                <div className="flex items-center justify-between text-xs font-semibold" style={{ color: 'var(--qet-text-secondary)' }}>
+                  <span>Uploaded Documents ({manifest.doc_files.length})</span>
+                  <span className="qet-badge-success px-2 py-0.5 text-[10px]">Indexed</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
                   {manifest.doc_files.map((df, i) => (
-                    <span key={i} className="text-xs bg-slate-950 text-slate-300 px-2 py-1 rounded-md border border-slate-800 font-mono">
-                      {df}
-                    </span>
+                    <div
+                      key={i}
+                      className="qet-card-elevated flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-medium"
+                      style={{ color: 'var(--qet-text-primary)' }}
+                    >
+                      <FileText className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="truncate max-w-[220px]">{df}</span>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
+
+          {/* Status footer */}
+          <div
+            className="flex items-center justify-between pt-3 mt-4 border-t text-xs"
+            style={{ borderColor: 'var(--qet-border)', color: 'var(--qet-text-muted)' }}
+          >
+            <span>Indexed requirement files</span>
+            <span className="font-bold font-mono" style={{ color: 'var(--qet-accent)' }}>
+              {manifest?.doc_files?.length || 0} files
+            </span>
+          </div>
         </div>
 
-        <div id="zip-upload-card" className={`rounded-lg bg-slate-900/80 border border-slate-700 ${zipCollapsed ? 'p-4' : 'p-6'} transition-all shadow-lg`}>
+        {/* Card B: Target Codebase ZIP */}
+        <div className="qet-panel p-6 space-y-4 flex flex-col justify-between">
           <div className="space-y-4">
+            {/* Header */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-md bg-cyan-950/60 border border-cyan-700/50 flex items-center justify-center text-cyan-300">
-                  <FileArchive className="w-5 h-5" />
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center shadow-xs"
+                  style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
+                >
+                  <FileArchive className="w-5 h-5" style={{ color: 'var(--qet-accent)' }} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-100">2. Target Application Codebase</h3>
-                  <p className="text-xs text-slate-400">Count-first view with optional details.</p>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                    2. Target Application Codebase
+                  </h3>
+                  <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+                    Upload source archive (.zip)
+                  </p>
                 </div>
               </div>
-              {zipSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+              {zipSuccess && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
             </div>
 
-            {!zipCollapsed && (
-              <label
-                onDragOver={(e) => { e.preventDefault(); if (!uploadingZip) setIsDraggingZip(true); }}
-                onDragLeave={() => setIsDraggingZip(false)}
-                onDrop={handleZipDrop}
-                className={`relative flex flex-col items-center justify-center w-full h-44 border-2 border-dashed rounded-md cursor-pointer transition-all p-4 text-center group ${
-                  isDraggingZip
-                    ? 'border-cyan-400 bg-cyan-950/30'
-                    : 'border-slate-700 hover:border-cyan-500 bg-slate-950/40 hover:bg-slate-950/70'
-                }`}
+            {/* Normal Clean Dropzone */}
+            <label
+              onDragOver={(e) => { e.preventDefault(); if (!uploadingZip) setIsDraggingZip(true); }}
+              onDragLeave={() => setIsDraggingZip(false)}
+              onDrop={handleZipDrop}
+              className={`qet-dropzone relative flex flex-col items-center justify-center w-full min-h-[170px] p-6 text-center cursor-pointer group ${
+                isDraggingZip ? 'ring-2 ring-cyan-500 bg-cyan-50/20' : ''
+              }`}
+            >
+              <input
+                type="file"
+                accept=".zip"
+                onChange={handleZipSelect}
+                className="hidden"
+                disabled={uploadingZip}
+              />
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-transform group-hover:scale-105"
+                style={{ backgroundColor: 'var(--qet-surface-elevated)' }}
               >
-                <input
-                  type="file"
-                  accept=".zip"
-                  onChange={handleZipSelect}
-                  className="hidden"
-                  disabled={uploadingZip}
-                />
-                <FileArchive className={`w-8 h-8 text-cyan-300 mb-2 transition-transform ${isDraggingZip ? 'scale-110' : 'group-hover:scale-110'}`} />
-                <p className="text-xs font-semibold text-slate-200">
-                  {uploadingZip ? 'Extracting & Indexing ZIP...' : isDraggingZip ? 'Release to upload' : 'Click or Drag & Drop Source Code ZIP'}
-                </p>
-                <p className="text-[11px] text-slate-500 mt-1">Accepts React, TypeScript, Python, HTML source archives</p>
-              </label>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs">
-              <div className="text-slate-400">Extracted files: <span className="font-mono font-bold text-teal-300">{manifest?.total_files || 0}</span></div>
-              <div className="flex items-center gap-2">
-                {zipCollapsed ? (
-                  <button onClick={() => setZipCollapsed(false)} className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:text-slate-100">
-                    <ChevronDown className="h-3.5 w-3.5" />
-                    <span>Expand</span>
-                  </button>
+                {uploadingZip ? (
+                  <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--qet-accent)' }} />
                 ) : (
-                  <button onClick={() => setZipCollapsed(true)} className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:text-slate-100">
-                    <ChevronUp className="h-3.5 w-3.5" />
-                    <span>Compact</span>
-                  </button>
+                  <FileArchive className="w-6 h-6" style={{ color: 'var(--qet-accent)' }} />
                 )}
               </div>
-            </div>
+              <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
+                {uploadingZip ? 'Extracting & Indexing Codebase...' : isDraggingZip ? 'Drop ZIP now' : 'Click to Browse or Drag & Drop Source ZIP'}
+              </p>
+              <p className="text-[11px] mt-1" style={{ color: 'var(--qet-text-muted)' }}>
+                Accepts React, TypeScript, Python, and HTML archives (.zip)
+              </p>
+            </label>
 
-            {zipSuccess && (
-              <div className="p-3 rounded-md bg-emerald-950/30 border border-emerald-800/40 text-emerald-300 text-xs flex items-center space-x-2 animate-fade-in">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{zipSuccess}</span>
-              </div>
-            )}
-
+            {/* Error Message */}
             {zipError && renderUploadError(zipError)}
 
+            {/* Codebase Extraction Summary (Smooth Animation) */}
             {manifest && manifest.total_files > 0 && (
-              <div className="space-y-2 pt-2 border-t border-slate-800 text-xs text-slate-400">
-                <div className="flex justify-between">
-                  <span>Extracted Files Count:</span>
-                  <span className="font-mono text-teal-300 font-bold">{manifest.total_files} files</span>
-                </div>
-                {typeof manifest.excluded_file_count === 'number' && manifest.excluded_file_count > 0 && (
-                  <div className="flex justify-between">
-                    <span>Excluded Noise / Unsafe Files:</span>
-                    <span className="font-mono text-amber-300 font-bold">{manifest.excluded_file_count} files</span>
+              <div className="space-y-2 pt-2 animate-file-item">
+                <div className="qet-card-elevated p-3 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span style={{ color: 'var(--qet-text-muted)' }}>Extracted Code Files:</span>
+                    <span className="font-mono font-bold" style={{ color: 'var(--qet-accent)' }}>
+                      {manifest.total_files} files
+                    </span>
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <span>Total Code Size:</span>
-                  <span className="font-mono text-slate-300">{(manifest.total_size_bytes / 1024).toFixed(1)} KB</span>
+                  <div className="flex justify-between items-center">
+                    <span style={{ color: 'var(--qet-text-muted)' }}>Total Code Size:</span>
+                    <span className="font-mono font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
+                      {(manifest.total_size_bytes / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                  {typeof manifest.excluded_file_count === 'number' && manifest.excluded_file_count > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span style={{ color: 'var(--qet-text-muted)' }}>Binary / Excluded Assets:</span>
+                      <span className="qet-badge-warning px-1.5 py-0.2 text-[10px]">
+                        {manifest.excluded_file_count} files
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
-        </div>
 
+          {/* Status footer */}
+          <div
+            className="flex items-center justify-between pt-3 mt-4 border-t text-xs"
+            style={{ borderColor: 'var(--qet-border)', color: 'var(--qet-text-muted)' }}
+          >
+            <span>Extracted codebase files</span>
+            <span className="font-bold font-mono" style={{ color: 'var(--qet-accent)' }}>
+              {manifest?.total_files || 0} files
+            </span>
+          </div>
+        </div>
       </div>
 
-      {zipProcessing && zipProcessing.decisions.length > 0 && (
-        <div id="zip-processing-summary" className="rounded-lg bg-slate-900/80 border border-slate-700 p-5 space-y-4 shadow-lg">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-100">ZIP Intake Process Sub-Steps</h3>
-              <p className="text-xs text-slate-400">Summary first. Expand details only when needed.</p>
-            </div>
-            <div className="text-right text-xs text-slate-400 space-y-1">
-              <div>Step: <span className="font-mono text-teal-300">{zipProcessing.current_step}</span></div>
-              <div>AI reviews: <span className="font-mono text-indigo-300">{zipProcessing.reviewed_by_ai_count}</span></div>
-            </div>
+      {/* ── 4. Proceed to Understanding Call-to-Action ───────────────── */}
+      {isIntakeReady && (
+        <div
+          className="qet-panel p-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-file-item"
+          style={{
+            borderLeft: '4px solid var(--qet-accent)',
+          }}
+        >
+          <div className="space-y-1 text-center sm:text-left">
+            <h3 className="text-base font-bold flex items-center justify-center sm:justify-start gap-2" style={{ color: 'var(--qet-text-primary)' }}>
+              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              <span>Intake Complete & Codebase Indexed</span>
+            </h3>
+            <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+              All sources have been validated. Proceed to generate architecture diagrams, requirements catalog, and gap analysis.
+            </p>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
-              <div className="text-slate-500">ZIP Members</div>
-              <div className="font-mono font-bold text-slate-200">{zipProcessing.total_members}</div>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
-              <div className="text-slate-500">Included</div>
-              <div className="font-mono font-bold text-emerald-300">{zipProcessing.included_count}</div>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
-              <div className="text-slate-500">Excluded</div>
-              <div className="font-mono font-bold text-amber-300">{zipProcessing.excluded_count}</div>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2">
-              <div className="text-slate-500">AI Reviewed</div>
-              <div className="font-mono font-bold text-teal-300">{zipProcessing.reviewed_by_ai_count}</div>
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              onClick={() => setShowZipSteps((prev) => !prev)}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-slate-100"
-            >
-              {showZipSteps ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              <span>{showZipSteps ? 'Collapse Details' : 'Expand Details'}</span>
-            </button>
-          </div>
-
-          {showZipSteps && (
-            <div className="max-h-72 overflow-auto rounded-lg border border-slate-800 bg-slate-950/80">
-              <div className="grid grid-cols-[minmax(0,1.5fr)_90px_110px_120px] gap-3 border-b border-slate-800 px-4 py-3 text-[11px] uppercase tracking-wider text-slate-500">
-                <span>File</span>
-                <span>Decision</span>
-                <span>Reason</span>
-                <span>Source</span>
-              </div>
-              {zipProcessing.decisions.slice(0, 120).map((decision, index) => (
-                <div key={`${decision.rel_path}-${index}`} className="grid grid-cols-[minmax(0,1.5fr)_90px_110px_120px] gap-3 border-b border-slate-900/80 px-4 py-3 text-xs text-slate-300 last:border-b-0">
-                  <span className="truncate font-mono" title={decision.rel_path}>{decision.rel_path}</span>
-                  <span className={decision.decision === 'include' ? 'text-emerald-300' : 'text-amber-300'}>{decision.decision}</span>
-                  <span className="truncate text-slate-400" title={decision.reason}>{decision.reason}</span>
-                  <span className="uppercase text-slate-500">{decision.source}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <button
+            onClick={onProceedToUnderstanding}
+            className="qet-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold shadow-md whitespace-nowrap"
+          >
+            <span>Proceed to Understanding</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
       )}
-
-      <div className="flex justify-end pt-4">
-        <button
-          id="proceed-understanding-btn"
-          onClick={onProceedToUnderstanding}
-          disabled={!isIntakeReady}
-          className={`
-            inline-flex items-center space-x-3 px-6 py-3 rounded-lg font-bold text-sm transition-all shadow-lg
-            ${isIntakeReady 
-              ? 'bg-gradient-to-r from-teal-500 via-cyan-500 to-indigo-500 text-white hover:opacity-95 shadow-cyan-500/25 cursor-pointer hover:scale-[1.01]' 
-              : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700 opacity-60'}
-          `}
-        >
-          <span>Proceed to Understanding Engine</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
-
     </div>
   );
 };

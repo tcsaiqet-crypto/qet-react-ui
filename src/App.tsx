@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, ZoomIn, ZoomOut } from 'lucide-react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { Moon, Sun, ZoomIn, ZoomOut, Sparkles, Copy, Check } from 'lucide-react';
 import { AISettingsPanel } from './components/AISettingsPanel';
 import { RunsDashboard } from './components/RunsDashboard';
 import { TabId } from './components/NavigationHeader';
@@ -14,10 +14,11 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [aiSettings, setAISettings] = useState<AISettingsResponse | null>(null);
   const [switchingProvider, setSwitchingProvider] = useState(false);
+  const [copiedRunId, setCopiedRunId] = useState(false);
   const prevStatusRef = useRef<string>('idle');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const stored = window.localStorage.getItem('qet-ui-theme');
-    return stored === 'light' ? 'light' : 'dark';
+    return stored === 'dark' ? 'dark' : 'light';
   });
   const [zoomLevel, setZoomLevel] = useState<number>(() => {
     const stored = window.localStorage.getItem('qet-ui-zoom');
@@ -44,7 +45,6 @@ export const App: React.FC = () => {
     const previousStatus = prevStatusRef.current;
     prevStatusRef.current = currentStatus;
 
-    // Guided autoscroll when AI understanding starts.
     if (currentStatus === 'ai_understanding_running' && previousStatus !== 'ai_understanding_running') {
       setTimeout(() => {
         document.getElementById('understanding-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -55,7 +55,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!appState?.run_id) return;
 
-    // Poll status periodically when active
     const activeStates = ['uploading', 'processing_zip', 'ai_understanding_running'];
     if (activeStates.includes(appState.status)) {
       const timer = setInterval(() => {
@@ -144,6 +143,13 @@ export const App: React.FC = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
+  const copyRunId = () => {
+    if (!appState?.run_id) return;
+    navigator.clipboard.writeText(appState.run_id);
+    setCopiedRunId(true);
+    setTimeout(() => setCopiedRunId(false), 2000);
+  };
+
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: 'home', label: 'Home' },
     { id: 'runs', label: 'Runs' },
@@ -152,30 +158,61 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-white"
+      className="min-h-screen font-sans antialiased"
       data-theme={theme}
-      style={{ zoom: `${zoomLevel}%` }}
+      style={{
+        backgroundColor: 'var(--qet-page-bg)',
+        color: 'var(--qet-page-fg)',
+        zoom: `${zoomLevel}%`,
+      }}
     >
-      <div className="min-h-screen">
-        <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur-md sm:px-6 lg:px-8">
+      <div className="min-h-screen flex flex-col">
+        {/* Navigation Header Bar */}
+        <header
+          className="sticky top-0 z-40 border-b px-4 py-3 backdrop-blur-md sm:px-6 lg:px-8 transition-colors"
+          style={{
+            backgroundColor: 'var(--qet-header-bg)',
+            borderColor: 'var(--qet-header-border)',
+          }}
+        >
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_1fr_1.4fr] lg:items-center">
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-bold text-slate-100">QET Agent</h1>
-              <p className="truncate text-xs text-slate-400">Autonomous Quality Execution Platform</p>
+            {/* Brand Logo & Title */}
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className="w-9 h-9 rounded-lg flex items-center justify-center shadow-sm"
+                style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
+              >
+                <Sparkles className="h-5 w-5" style={{ color: 'var(--qet-accent)' }} />
+              </div>
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-bold tracking-tight" style={{ color: 'var(--qet-text-primary)' }}>
+                  QET Agent
+                </h1>
+                <p className="truncate text-xs font-medium" style={{ color: 'var(--qet-text-muted)' }}>
+                  Autonomous Quality Execution Platform
+                </p>
+              </div>
             </div>
 
-            <nav className="flex items-center justify-start gap-2 lg:justify-center">
+            {/* Navigation Tabs */}
+            <nav className="flex items-center justify-start gap-1.5 lg:justify-center">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      isActive
-                        ? 'border-cyan-600/50 bg-cyan-950/40 text-cyan-300'
-                        : 'border-slate-700 bg-slate-900/70 text-slate-300 hover:text-slate-100'
+                    className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition-all ${
+                      isActive ? 'qet-badge-accent shadow-sm' : ''
                     }`}
+                    style={
+                      !isActive
+                        ? {
+                            color: 'var(--qet-text-secondary)',
+                            backgroundColor: 'transparent',
+                          }
+                        : undefined
+                    }
                   >
                     {tab.label}
                   </button>
@@ -183,113 +220,212 @@ export const App: React.FC = () => {
               })}
             </nav>
 
+            {/* Right Controls: AI Provider, Runtime, Theme, Zoom */}
             <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
-              <div className="qet-card flex items-center gap-1 p-1">
+              {/* AI Provider Switcher */}
+              <div
+                className="flex items-center rounded-lg p-0.5"
+                style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
+              >
                 <button
                   onClick={() => switchProvider('gemini')}
                   disabled={switchingProvider}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${aiSettings?.active_provider === 'gemini' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-600/40' : 'text-slate-400 hover:text-slate-100'}`}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                    aiSettings?.active_provider === 'gemini'
+                      ? 'qet-btn-primary shadow-xs'
+                      : 'text-xs hover:opacity-100'
+                  }`}
+                  style={aiSettings?.active_provider !== 'gemini' ? { color: 'var(--qet-text-muted)' } : undefined}
                 >
                   Gemini
                 </button>
                 <button
                   onClick={() => switchProvider('gpt')}
                   disabled={switchingProvider}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${aiSettings?.active_provider === 'gpt' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-600/40' : 'text-slate-400 hover:text-slate-100'}`}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                    aiSettings?.active_provider === 'gpt'
+                      ? 'qet-btn-primary shadow-xs'
+                      : 'text-xs hover:opacity-100'
+                  }`}
+                  style={aiSettings?.active_provider !== 'gpt' ? { color: 'var(--qet-text-muted)' } : undefined}
                 >
                   OpenAI
                 </button>
               </div>
 
+              {/* Runtime Badge */}
               {aiSettings && (
-                <div className="qet-card flex flex-col items-start px-3 py-2 text-[11px] leading-tight text-slate-400 lg:items-end">
-                  <span className="uppercase tracking-wider text-slate-500">Runtime</span>
-                  <span className="font-mono text-cyan-300">
-                    {aiSettings.runtime_state.provider} · {aiSettings.runtime_state.state}
+                <div
+                  className="flex flex-col items-start px-2.5 py-1 text-[11px] leading-tight rounded-lg lg:items-end"
+                  style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
+                >
+                  <span className="uppercase tracking-wider font-semibold text-[9px]" style={{ color: 'var(--qet-text-muted)' }}>
+                    Runtime
                   </span>
-                  <span className="font-mono text-slate-200">
-                    Model: {aiSettings.runtime_state.model || 'Unavailable'}
+                  <span className="font-mono font-bold text-[11px]" style={{ color: 'var(--qet-accent)' }}>
+                    {aiSettings.runtime_state.provider} &middot; {aiSettings.runtime_state.state}
+                  </span>
+                  <span className="font-mono text-[10px]" style={{ color: 'var(--qet-text-secondary)' }}>
+                    Model: {aiSettings.runtime_state.model || 'Auto'}
                   </span>
                 </div>
               )}
 
+              {/* Theme Toggle (Light / Dark) */}
               <button
                 onClick={toggleTheme}
-                className="qet-btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold"
-                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="qet-btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold cursor-pointer"
+                title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
               >
-                {theme === 'dark' ? <Sun className="h-3.5 w-3.5 text-amber-300" /> : <Moon className="h-3.5 w-3.5 text-indigo-300" />}
-                <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+                {theme === 'dark' ? (
+                  <>
+                    <Sun className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Light</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>Dark</span>
+                  </>
+                )}
               </button>
 
-              <div className="qet-card flex items-center gap-1 p-1">
-                <button onClick={() => adjustZoom(-10)} title="Zoom out" className="rounded-md px-1.5 py-1.5 text-slate-300 transition-colors hover:bg-slate-800 hover:text-cyan-300"><ZoomOut className="h-3.5 w-3.5" /></button>
-                <button onClick={() => setZoomLevel(100)} title="Reset zoom" className="rounded-md px-2 py-1.5 text-[11px] font-semibold text-cyan-300 transition-colors hover:bg-slate-800">{zoomLevel}%</button>
-                <button onClick={() => adjustZoom(10)} title="Zoom in" className="rounded-md px-1.5 py-1.5 text-slate-300 transition-colors hover:bg-slate-800 hover:text-cyan-300"><ZoomIn className="h-3.5 w-3.5" /></button>
+              {/* Zoom Controls */}
+              <div
+                className="flex items-center rounded-lg p-0.5"
+                style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
+              >
+                <button
+                  onClick={() => adjustZoom(-10)}
+                  title="Zoom Out"
+                  className="rounded-md px-1.5 py-1 text-xs transition-colors hover:opacity-75"
+                  style={{ color: 'var(--qet-text-secondary)' }}
+                >
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setZoomLevel(100)}
+                  title="Reset Zoom (100%)"
+                  className="rounded-md px-2 py-1 text-[11px] font-bold font-mono"
+                  style={{ color: 'var(--qet-accent)' }}
+                >
+                  {zoomLevel}%
+                </button>
+                <button
+                  onClick={() => adjustZoom(10)}
+                  title="Zoom In"
+                  className="rounded-md px-1.5 py-1 text-xs transition-colors hover:opacity-75"
+                  style={{ color: 'var(--qet-text-secondary)' }}
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           </div>
 
+          {/* Active Run Sub-bar */}
           {appState?.run_id && (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
-              <div className="qet-card flex items-center gap-2 px-3 py-2">
-                <span className="text-xs text-slate-400 font-medium">Active Run:</span>
-                <code className="text-xs font-mono font-semibold text-cyan-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+            <div
+              className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5"
+              style={{ borderColor: 'var(--qet-border)' }}
+            >
+              <div
+                className="flex items-center gap-2 px-3 py-1 rounded-lg"
+                style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
+              >
+                <span className="text-xs font-semibold" style={{ color: 'var(--qet-text-muted)' }}>
+                  Active Run:
+                </span>
+                <code
+                  className="text-xs font-mono font-bold px-2 py-0.5 rounded"
+                  style={{
+                    color: 'var(--qet-accent)',
+                    backgroundColor: 'var(--qet-surface)',
+                    border: '1px solid var(--qet-border)',
+                  }}
+                >
                   {appState.run_id}
                 </code>
+                <button
+                  onClick={copyRunId}
+                  title="Copy Run ID"
+                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+                  style={{ color: 'var(--qet-text-muted)' }}
+                >
+                  {copiedRunId ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                </button>
               </div>
-              <button onClick={initRun} className="text-xs font-medium text-slate-400 underline transition-colors hover:text-cyan-400">New Run</button>
+              <button
+                onClick={initRun}
+                className="text-xs font-semibold transition-colors hover:underline"
+                style={{ color: 'var(--qet-accent)' }}
+              >
+                + New Run
+              </button>
             </div>
           )}
         </header>
 
-        <main className="mx-auto max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-4">
-            <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin" />
-            <p className="text-xs font-semibold text-slate-400">Initializing QET Agent Workspace...</p>
-          </div>
-        ) : (
-          <>
-            {activeTab === 'home' && (
-              <div className="space-y-8">
-                <HomeUploadPage
-                  appState={appState}
-                  onRefreshStatus={() => refreshStatus()}
-                  onProceedToUnderstanding={scrollToUnderstanding}
-                  onCreateNewRun={initRun}
-                />
-
-                {isIntakeReady && (
-                  <section id="understanding-panel">
-                    <UnderstandingPage
-                      appState={appState}
-                      onRefreshStatus={() => refreshStatus()}
-                    />
-                  </section>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'runs' && (
-              <RunsDashboard
-                activeRunId={appState?.run_id}
-                onOpenRun={(runId) => void openExistingRun(runId)}
+        {/* Main Body */}
+        <main className="mx-auto max-w-7xl flex-1 w-full px-4 py-6 sm:px-6 lg:px-8">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-24 space-y-4">
+              <div
+                className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin"
+                style={{ borderColor: 'var(--qet-accent)', borderTopColor: 'transparent' }}
               />
-            )}
+              <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-muted)' }}>
+                Initializing QET Agent Workspace...
+              </p>
+            </div>
+          ) : (
+            <>
+              {activeTab === 'home' && (
+                <div className="space-y-6">
+                  <HomeUploadPage
+                    appState={appState}
+                    onRefreshStatus={() => refreshStatus()}
+                    onProceedToUnderstanding={scrollToUnderstanding}
+                    onCreateNewRun={initRun}
+                  />
 
-            {activeTab === 'tools' && (
-              <AISettingsPanel onSaved={setAISettings} />
-            )}
-          </>
-        )}
+                  {isIntakeReady && (
+                    <section id="understanding-panel">
+                      <UnderstandingPage
+                        appState={appState}
+                        onRefreshStatus={() => refreshStatus()}
+                      />
+                    </section>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'runs' && (
+                <RunsDashboard
+                  activeRunId={appState?.run_id}
+                  onOpenRun={(runId) => void openExistingRun(runId)}
+                />
+              )}
+
+              {activeTab === 'tools' && (
+                <AISettingsPanel onSaved={setAISettings} />
+              )}
+            </>
+          )}
         </main>
-      </div>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 text-center text-xs text-slate-600">
-        <p>QET AI Execution Engine &bull; React-First Delivery &bull; Antigravity Platform</p>
-      </footer>
+        {/* Clean Footer */}
+        <footer
+          className="border-t py-4 text-center text-xs transition-colors"
+          style={{
+            borderColor: 'var(--qet-border)',
+            backgroundColor: 'var(--qet-surface)',
+            color: 'var(--qet-text-muted)',
+          }}
+        >
+          <p>QET AI Execution Engine &bull; Enterprise Quality Platform &bull; React UI</p>
+        </footer>
+      </div>
     </div>
   );
 };

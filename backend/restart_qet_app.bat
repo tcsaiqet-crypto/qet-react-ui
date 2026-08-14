@@ -1,32 +1,27 @@
-@echo off
+﻿@echo off
 setlocal
 
 echo ==============================================
-echo QET App Restart Script
+echo QET FastAPI App Restart Script (Port 8080)
 echo ==============================================
 
-cd /d "%~dp0"
-
-echo [1/4] Stopping any process listening on port 8501...
-for /f "tokens=5" %%P in ('netstat -ano ^| findstr :8501 ^| findstr LISTENING') do (
+echo [1/3] Stopping any process on port 8000 and 8080...
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do (
   echo   - Stopping PID %%P
   taskkill /F /PID %%P >nul 2>nul
 )
 
-echo [2/4] Clearing Python cache (__pycache__ and *.pyc)...
-for /d /r %%D in (__pycache__) do rd /s /q "%%D" 2>nul
-del /s /q "*.pyc" 2>nul
-
-echo [3/4] Verifying Python environment...
-if exist ".venv\Scripts\python.exe" (
-  set "PY_EXE=.venv\Scripts\python.exe"
-  echo   - Using virtual environment: .venv\Scripts\python.exe
-) else (
-  set "PY_EXE=python"
-  echo   - .venv not found, using system python from PATH
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr :8080 ^| findstr LISTENING') do (
+  echo   - Stopping PID %%P
+  taskkill /F /PID %%P >nul 2>nul
 )
 
-echo [4/4] Starting Streamlit app on http://localhost:8501 ...
-%PY_EXE% -m streamlit run app.py
+echo [2/3] Setting environment...
+cd /d "%~dp0"
+set PYTHONPATH=.
+set QET_ENABLE_REQUIREMENT_CATEGORIZATION=true
+
+echo [3/3] Starting FastAPI app on http://127.0.0.1:8080 ...
+python -m uvicorn src.api.fastapi_app:app --host 127.0.0.1 --port 8080 --reload
 
 endlocal

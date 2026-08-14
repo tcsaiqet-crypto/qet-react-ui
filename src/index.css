@@ -1,246 +1,261 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  /* ── Light Mode (Default) ────────────────────────────── */
+  color-scheme: light;
+  --qet-page-bg: #F8FAFC;
+  --qet-page-fg: #0F172A;
+  --qet-surface: #FFFFFF;
+  --qet-surface-elevated: #F1F5F9;
+  --qet-surface-soft: #E2E8F0;
+  --qet-border: #E2E8F0;
+  --qet-border-subtle: #F1F5F9;
+  --qet-text-primary: #0F172A;
+  --qet-text-secondary: #334155;
+  --qet-text-muted: #64748B;
+  
+  --qet-accent: #2563EB;
+  --qet-accent-hover: #1D4ED8;
+  --qet-accent-subtle: #EFF6FF;
+  --qet-accent-border: #BFDBFE;
+  --qet-accent-text: #1D4ED8;
+  
+  --qet-success: #059669;
+  --qet-success-subtle: #ECFDF5;
+  --qet-success-border: #A7F3D0;
+  --qet-success-text: #065F46;
+  
+  --qet-warning: #D97706;
+  --qet-warning-subtle: #FFFBEB;
+  --qet-warning-border: #FDE68A;
+  --qet-warning-text: #92400E;
+  
+  --qet-danger: #DC2626;
+  --qet-danger-subtle: #FEF2F2;
+  --qet-danger-border: #FECACA;
+  --qet-danger-text: #991B1B;
+  
+  --qet-dropzone-bg: #F8FAFC;
+  --qet-dropzone-border: #CBD5E1;
+  --qet-dropzone-hover: #EFF6FF;
+  
+  --qet-header-bg: rgba(255, 255, 255, 0.95);
+  --qet-header-border: #E2E8F0;
+  --qet-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+/* ── Dark Mode (Greyish / Charcoal Zinc — NOT dark blue) ── */
+[data-theme='dark'] {
   color-scheme: dark;
-  --qet-page-bg: #020617;
-  --qet-page-fg: #f8fafc;
-  --qet-surface: #0f172a;
-  --qet-surface-elevated: #111827;
-  --qet-surface-soft: #1e293b;
-  --qet-border: #334155;
-  --qet-text-primary: #f8fafc;
-  --qet-text-secondary: #cbd5e1;
-  --qet-text-muted: #94a3b8;
-  --qet-accent: #22d3ee;
-  --qet-accent-strong: #818cf8;
-  --qet-danger: #fb7185;
-  --qet-warning: #fbbf24;
-  --qet-success: #34d399;
+  --qet-page-bg: #121214;
+  --qet-page-fg: #F4F4F5;
+  --qet-surface: #1E1E22;
+  --qet-surface-elevated: #27272C;
+  --qet-surface-soft: #323238;
+  --qet-border: #383840;
+  --qet-border-subtle: #28282E;
+  --qet-text-primary: #F4F4F5;
+  --qet-text-secondary: #D4D4D8;
+  --qet-text-muted: #A1A1AA;
+  
+  --qet-accent: #38BDF8;
+  --qet-accent-hover: #0EA5E9;
+  --qet-accent-subtle: rgba(56, 189, 248, 0.12);
+  --qet-accent-border: rgba(56, 189, 248, 0.35);
+  --qet-accent-text: #38BDF8;
+  
+  --qet-success: #34D399;
+  --qet-success-subtle: rgba(52, 211, 153, 0.12);
+  --qet-success-border: rgba(52, 211, 153, 0.3);
+  --qet-success-text: #34D399;
+  
+  --qet-warning: #FBBF24;
+  --qet-warning-subtle: rgba(251, 191, 36, 0.12);
+  --qet-warning-border: rgba(251, 191, 36, 0.3);
+  --qet-warning-text: #FBBF24;
+  
+  --qet-danger: #F87171;
+  --qet-danger-subtle: rgba(248, 113, 113, 0.12);
+  --qet-danger-border: rgba(248, 113, 113, 0.3);
+  --qet-danger-text: #F87171;
+  
+  --qet-dropzone-bg: #18181B;
+  --qet-dropzone-border: #3F3F46;
+  --qet-dropzone-hover: #222226;
+  
+  --qet-header-bg: rgba(24, 24, 27, 0.95);
+  --qet-header-border: #2E2E34;
+  --qet-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 2px 6px -1px rgba(0, 0, 0, 0.3);
 }
 
 body {
   margin: 0;
   background-color: var(--qet-page-bg);
   color: var(--qet-page-fg);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 code, pre {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
 }
 
-[data-theme='light'] {
-  color-scheme: light;
-  --qet-page-bg: #f1f5f9;
-  --qet-page-fg: #0f172a;
-  --qet-surface: #ffffff;
-  --qet-surface-elevated: #f8fafc;
-  --qet-surface-soft: #e2e8f0;
-  --qet-border: #cbd5e1;
-  --qet-text-primary: #0f172a;
-  --qet-text-secondary: #334155;
-  --qet-text-muted: #475569;
-  --qet-accent: #0e7490;
-  --qet-accent-strong: #4338ca;
-  --qet-danger: #be123c;
-  --qet-warning: #b45309;
-  --qet-success: #047857;
-}
+/* ── Custom Component Utilities ────────────────────────────── */
 
-[data-theme='light'].bg-slate-950 {
-  background-color: #f1f5f9 !important;
-}
-
-[data-theme='light'].text-slate-100 {
-  color: #0f172a !important;
-}
-
-[data-theme='light'] .bg-slate-950,
-[data-theme='light'] .bg-slate-950\/85,
-[data-theme='light'] .bg-slate-950\/80,
-[data-theme='light'] .bg-slate-900,
-[data-theme='light'] .bg-slate-900\/90,
-[data-theme='light'] .bg-slate-900\/80,
-[data-theme='light'] .bg-slate-900\/75,
-[data-theme='light'] .bg-slate-900\/60,
-[data-theme='light'] .bg-slate-900\/50,
-[data-theme='light'] .bg-slate-800,
-[data-theme='light'] .bg-slate-800\/60 {
-  background-color: var(--qet-surface) !important;
-}
-
-[data-theme='light'] .border-slate-900,
-[data-theme='light'] .border-slate-800,
-[data-theme='light'] .border-slate-700 {
-  border-color: var(--qet-border) !important;
-}
-
-[data-theme='light'] .text-slate-100,
-[data-theme='light'] .text-slate-200,
-[data-theme='light'] .text-slate-300 {
-  color: var(--qet-text-primary) !important;
-}
-
-[data-theme='light'] .text-slate-400,
-[data-theme='light'] .text-slate-500,
-[data-theme='light'] .text-slate-600 {
-  color: var(--qet-text-muted) !important;
-}
-
-[data-theme='light'] .hover\:bg-slate-800:hover,
-[data-theme='light'] .hover\:bg-slate-900:hover {
-  background-color: #e2e8f0 !important;
-}
-
-[data-theme='light'] .hover\:text-slate-100:hover {
-  color: #0f172a !important;
-}
-
-/* Make dark hero gradients actually light in light mode */
-[data-theme='light'] .bg-gradient-to-br {
-  background-image: linear-gradient(135deg, #f8fafc 0%, #eef2ff 52%, #e0f2fe 100%) !important;
-}
-
-/* Preserve brand gradients for CTA buttons but keep readable shadows */
-[data-theme='light'] .bg-gradient-to-r {
-  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.18) !important;
-}
-
-/* Improve readability for accent text in light mode */
-[data-theme='light'] .text-cyan-300,
-[data-theme='light'] .text-cyan-400,
-[data-theme='light'] .text-cyan-500 {
-  color: var(--qet-accent) !important;
-}
-
-[data-theme='light'] .text-indigo-300,
-[data-theme='light'] .text-indigo-400,
-[data-theme='light'] .text-indigo-500,
-[data-theme='light'] .text-purple-300,
-[data-theme='light'] .text-purple-400,
-[data-theme='light'] .text-purple-500 {
-  color: var(--qet-accent-strong) !important;
-}
-
-[data-theme='light'] .text-emerald-300,
-[data-theme='light'] .text-emerald-400 {
-  color: var(--qet-success) !important;
-}
-
-[data-theme='light'] .text-amber-300,
-[data-theme='light'] .text-amber-400 {
-  color: var(--qet-warning) !important;
-}
-
-[data-theme='light'] .text-rose-300,
-[data-theme='light'] .text-rose-400 {
-  color: var(--qet-danger) !important;
-}
-
-/* Ensure accent chips and diagnostic blocks are light-surface friendly */
-[data-theme='light'] .bg-cyan-950,
-[data-theme='light'] .bg-cyan-950\/60,
-[data-theme='light'] .bg-cyan-950\/50,
-[data-theme='light'] .bg-indigo-950,
-[data-theme='light'] .bg-indigo-950\/40,
-[data-theme='light'] .bg-indigo-950\/80,
-[data-theme='light'] .bg-purple-950,
-[data-theme='light'] .bg-purple-950\/40,
-[data-theme='light'] .bg-purple-950\/60,
-[data-theme='light'] .bg-emerald-950,
-[data-theme='light'] .bg-emerald-950\/40,
-[data-theme='light'] .bg-amber-950,
-[data-theme='light'] .bg-amber-950\/30,
-[data-theme='light'] .bg-rose-950,
-[data-theme='light'] .bg-rose-950\/30,
-[data-theme='light'] .bg-rose-950\/40 {
-  background-color: var(--qet-surface-elevated) !important;
-}
-
-[data-theme='light'] .border-cyan-800,
-[data-theme='light'] .border-cyan-700,
-[data-theme='light'] .border-cyan-600,
-[data-theme='light'] .border-indigo-800,
-[data-theme='light'] .border-purple-800,
-[data-theme='light'] .border-emerald-800,
-[data-theme='light'] .border-amber-800,
-[data-theme='light'] .border-rose-800,
-[data-theme='light'] .border-rose-900 {
-  border-color: var(--qet-border) !important;
-}
-
-/* Keep gradient text readable in light mode */
-[data-theme='light'] .bg-clip-text.text-transparent {
-  background-image: linear-gradient(90deg, var(--qet-text-primary), var(--qet-accent), var(--qet-accent-strong)) !important;
-}
-
-/* Better field focus visibility */
-[data-theme='light'] .focus\:border-cyan-500:focus,
-[data-theme='light'] .focus\:border-cyan-600:focus {
-  border-color: var(--qet-accent) !important;
-}
-
-/* Custom Utilities */
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Semantic design utilities for consistent component theming */
 .qet-panel {
-  background-color: color-mix(in oklab, var(--qet-surface) 92%, transparent);
+  background-color: var(--qet-surface);
   border: 1px solid var(--qet-border);
-  border-radius: 1rem;
-  box-shadow: 0 18px 36px -24px rgba(2, 6, 23, 0.72);
+  border-radius: 12px;
+  box-shadow: var(--qet-shadow);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .qet-card {
-  background-color: color-mix(in oklab, var(--qet-surface-elevated) 94%, transparent);
+  background-color: var(--qet-surface);
   border: 1px solid var(--qet-border);
-  border-radius: 0.85rem;
+  border-radius: 10px;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
-.qet-pill {
+.qet-card-elevated {
+  background-color: var(--qet-surface-elevated);
   border: 1px solid var(--qet-border);
-  background-color: color-mix(in oklab, var(--qet-surface-elevated) 94%, transparent);
-  border-radius: 9999px;
+  border-radius: 10px;
 }
 
-.qet-text-primary {
-  color: var(--qet-text-primary) !important;
+.qet-dropzone {
+  background-color: var(--qet-dropzone-bg);
+  border: 2px dashed var(--qet-dropzone-border);
+  border-radius: 10px;
+  transition: all 0.2s ease;
 }
 
-.qet-text-secondary {
-  color: var(--qet-text-secondary) !important;
+.qet-dropzone:hover {
+  background-color: var(--qet-dropzone-hover);
+  border-color: var(--qet-accent);
 }
 
-.qet-text-muted {
-  color: var(--qet-text-muted) !important;
+.qet-btn-primary {
+  background-color: var(--qet-accent);
+  color: #FFFFFF !important;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.qet-btn-primary:hover:not(:disabled) {
+  background-color: var(--qet-accent-hover);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.qet-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .qet-btn-secondary {
+  background-color: var(--qet-surface-elevated);
   border: 1px solid var(--qet-border);
-  background-color: color-mix(in oklab, var(--qet-surface-elevated) 92%, transparent);
-  color: var(--qet-text-secondary);
-  border-radius: 0.75rem;
-  transition: border-color 140ms ease, color 140ms ease;
+  color: var(--qet-text-primary);
+  font-weight: 600;
+  border-radius: 8px;
+  transition: all 0.15s ease;
 }
 
-.qet-btn-secondary:hover {
+.qet-btn-secondary:hover:not(:disabled) {
+  background-color: var(--qet-surface-soft);
   border-color: var(--qet-accent);
   color: var(--qet-accent);
 }
 
-[data-theme='light'] .qet-panel,
-[data-theme='light'] .qet-card,
-[data-theme='light'] .qet-pill,
-[data-theme='light'] .qet-btn-secondary {
-  box-shadow: 0 10px 24px -20px rgba(15, 23, 42, 0.35);
+.qet-badge-accent {
+  background-color: var(--qet-accent-subtle);
+  border: 1px solid var(--qet-accent-border);
+  color: var(--qet-accent-text);
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.qet-badge-success {
+  background-color: var(--qet-success-subtle);
+  border: 1px solid var(--qet-success-border);
+  color: var(--qet-success-text);
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.qet-badge-warning {
+  background-color: var(--qet-warning-subtle);
+  border: 1px solid var(--qet-warning-border);
+  color: var(--qet-warning-text);
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.qet-badge-danger {
+  background-color: var(--qet-danger-subtle);
+  border: 1px solid var(--qet-danger-border);
+  color: var(--qet-danger-text);
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.qet-badge-neutral {
+  background-color: var(--qet-surface-elevated);
+  border: 1px solid var(--qet-border);
+  color: var(--qet-text-secondary);
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+/* Animations */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-file-item {
+  animation: fadeInScale 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--qet-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--qet-text-muted);
 }
