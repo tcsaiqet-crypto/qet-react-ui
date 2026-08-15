@@ -1,13 +1,15 @@
 import React from 'react';
-import { CheckCircle2, ChevronRight, Clock, Cpu, Loader2, ShieldAlert } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Clock, Cpu, Loader2, ShieldAlert, Square } from 'lucide-react';
 import { AppState } from '../types';
 import { resolveAgentFlow } from '../services/agentFlow';
 
 interface ActiveProcessBarProps {
   appState: AppState | null;
+  onCancelRun?: () => void;
 }
 
-export const ActiveProcessBar: React.FC<ActiveProcessBarProps> = ({ appState }) => {
+export const ActiveProcessBar: React.FC<ActiveProcessBarProps> = ({ appState, onCancelRun }) => {
+
   const flow = resolveAgentFlow(appState);
   const isRunning = flow.activeStatus === 'running';
   const isFailed = flow.activeStatus === 'failed' || flow.activeStatus === 'blocked';
@@ -73,6 +75,16 @@ export const ActiveProcessBar: React.FC<ActiveProcessBarProps> = ({ appState }) 
           >
             {(appState?.progress ?? 0).toFixed(0)}%
           </span>
+          {isRunning && onCancelRun && (
+            <button
+              onClick={onCancelRun}
+              className="ml-auto flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition-all border cursor-pointer text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
+              style={{ borderColor: 'var(--qet-danger-border)' }}
+            >
+              <Square className="h-3 w-3 fill-current" />
+              <span>Stop Run</span>
+            </button>
+          )}
         </div>
       </div>
 
