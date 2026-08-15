@@ -97,16 +97,24 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
   ];
 
   return (
-    <aside
-      aria-label="Agent Detail Inspector"
-      className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l shadow-2xl transition-all duration-300 xl:sticky xl:top-24 xl:z-30 xl:h-[calc(100vh-7rem)] xl:rounded-2xl xl:border xl:shadow-lg"
-      style={{
-        backgroundColor: 'var(--qet-surface)',
-        borderColor: 'var(--qet-border)',
-      }}
-    >
-      {/* ── 1. Drawer Header ─────────────────────────────────────────────── */}
-      <div className="border-b p-4" style={{ borderColor: 'var(--qet-border)' }}>
+    <>
+      {/* Semi-transparent backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-fade-in"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+
+      <aside
+        aria-label="Agent Detail Inspector"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l shadow-2xl transition-all duration-300"
+        style={{
+          backgroundColor: 'var(--qet-surface)',
+          borderColor: 'var(--qet-border)',
+        }}
+      >
+        {/* ── 1. Drawer Header ─────────────────────────────────────────────── */}
+        <div className="border-b p-4" style={{ borderColor: 'var(--qet-border)' }}>
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -479,5 +487,6 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
         </button>
       </div>
     </aside>
+  </>
   );
 };
