@@ -1,33 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  UploadCloud, 
+  Upload, 
   FileText, 
   FileArchive, 
   CheckCircle2, 
-  ArrowRight, 
-  Loader2, 
+  AlertCircle, 
+  RefreshCw, 
   RotateCcw, 
   Sparkles, 
-  Layers, 
-  ShieldAlert, 
-  Bot, 
-  FileCode, 
-  Check, 
-  RefreshCw, 
-  Cpu, 
-  Terminal, 
-  Activity, 
-  ChevronDown, 
-  ChevronUp, 
-  Filter, 
-  Clock, 
-  Eye,
-  FileCheck2,
+  Eye, 
+  ArrowRight,
+  ShieldAlert,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  FileCode,
   FolderArchive,
-  BarChart3
+  Bot,
+  Layers,
+  FileCheck2
 } from 'lucide-react';
 import { AppState, AgentStatus } from '../types';
-import { uploadDocuments, uploadCodebase, retryRun, createRun, ApiError } from '../services/apiClient';
+import { uploadDocuments, uploadCodebase, retryRun, ApiError } from '../services/apiClient';
 
 interface HomeUploadPageProps {
   appState: AppState | null;
@@ -35,7 +29,7 @@ interface HomeUploadPageProps {
   onProceedToUnderstanding: () => void;
   onCreateNewRun: () => void;
   onInspectAgent?: (agentId: string) => void;
-  onLogEvent?: (message: string, type?: 'info' | 'warn' | 'error') => void;
+  onLogEvent?: (msg: string, level?: 'info' | 'warn' | 'error') => void;
   onFetchLogsNow?: () => void;
 }
 
@@ -46,7 +40,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   onCreateNewRun,
   onInspectAgent,
   onLogEvent,
-  onFetchLogsNow
+  onFetchLogsNow,
 }) => {
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const [zipFile, setZipFile] = useState<File | null>(null);
@@ -103,86 +97,23 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     return undefined;
   }, [isUnderstandingRunning]);
 
-  // Subagents stream with dynamic status
-  const getSubagents = () => {
-    let sub1Status: AgentStatus = hasDocsUploaded ? 'completed' : uploadingDocs ? 'running' : 'pending';
-    let sub2Status: AgentStatus = hasZipUploaded ? 'completed' : uploadingZip ? 'running' : hasDocsUploaded ? 'pending' : 'pending';
-    let sub3Status: AgentStatus = isUnderstandingReady ? 'completed' : isUnderstandingRunning ? 'running' : 'pending';
-    let sub4Status: AgentStatus = isUnderstandingReady ? 'completed' : isUnderstandingRunning ? 'running' : 'pending';
-
-    return [
-      {
-        id: 'sub_doc_parser',
-        name: 'Requirement Parser',
-        desc: '15-Point Checklist Evaluator',
-        status: sub1Status,
-        message: hasDocsUploaded ? `${manifest?.doc_files?.length || 1} spec document(s) indexed` : 'Awaiting document upload',
-      },
-      {
-        id: 'sub_ast_extractor',
-        name: 'Codebase AST Extractor',
-        desc: 'Component & Selector Discovery',
-        status: sub2Status,
-        message: hasZipUploaded ? `${manifest?.total_files || 0} source files parsed` : 'Awaiting codebase ZIP archive',
-      },
-      {
-        id: 'sub_flow_synthesizer',
-        name: 'UI Journey Synthesizer',
-        desc: 'State Flow & Routing Mapping',
-        status: sub3Status,
-        message: isUnderstandingReady ? 'UI tree & flows synthesized' : isUnderstandingRunning ? 'Scanning components & DOM...' : 'Awaiting AI kickoff',
-      },
-      {
-        id: 'sub_gap_analyzer',
-        name: 'Requirement Gap Analyzer',
-        desc: 'Quality & Coverage Scorer',
-        status: sub4Status,
-        message: isUnderstandingReady ? 'Gap matrix & testability generated' : isUnderstandingRunning ? 'Evaluating checklist gaps...' : 'Awaiting AI kickoff',
-      },
-    ];
-  };
-
-  const subagents = getSubagents();
-  const completedSubagentsCount = subagents.filter(s => s.status === 'completed').length;
-
-  // Retry step and invalidate downstream state
-  const handleRetryStep = async (targetAgentId: 'requirement_understanding' | 'document_intake' | 'application_understanding') => {
-    if (!runId) return;
-    setRetryingStep(targetAgentId);
-    try {
-      await retryRun(runId, targetAgentId);
-      if (targetAgentId === 'requirement_understanding') {
-        setDocFiles([]);
-        setZipFile(null);
-        setForceExpandDocs(true);
-      } else if (targetAgentId === 'document_intake') {
-        setZipFile(null);
-        setForceExpandZip(true);
-      }
-      onRefreshStatus();
-    } catch (err) {
-      console.error('Failed to retry step:', err);
-    } finally {
-      setRetryingStep(null);
+  // Handle Document Upload
+  const handleDocSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = Array.from(e.target.files);
+      setDocFiles(selected);
+      performDocUpload(selected);
     }
-  };
-
-  // Upload Handlers
-  const handleDocSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const selected = Array.from(e.target.files);
-    setDocFiles(selected);
-    await performDocUpload(selected);
   };
 
   const performDocUpload = async (files: File[]) => {
     let targetRunId = runId;
     if (!targetRunId) {
       try {
-        onLogEvent?.('Initializing new execution session for document intake...', 'info');
-        const newRun = await createRun('CFA Digital Journey');
-        targetRunId = newRun.run_id;
-        onRefreshStatus();
+        const { createRun } = await import('../services/apiClient');
+        const res = await createRun('CFA Digital Journey');
+        targetRunId = res.run_id;
+        onCreateNewRun();
       } catch {
         onLogEvent?.('Failed to create run session. Please ensure backend is running.', 'error');
         setDocError(new Error('Failed to create run session. Please ensure backend is running.'));
@@ -192,17 +123,17 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     setUploadingDocs(true);
     setDocError(null);
     setDocSuccess(null);
-    onLogEvent?.(`Ingesting ${files.length} requirement specification document(s)...`, 'info');
+    onLogEvent?.(`Uploading ${files.length} requirement document(s)...`, 'info');
     try {
       const res = await uploadDocuments(targetRunId, files);
-      setDocSuccess(`Successfully indexed ${res.uploaded_count} requirement document(s).`);
-      onLogEvent?.(`[STATUS] Successfully indexed ${res.uploaded_count} requirement document(s).`, 'info');
+      setDocSuccess(`Uploaded ${res.uploaded_count || files.length} document(s) successfully.`);
+      onLogEvent?.(`[STATUS] Intake ready: ${res.uploaded_count || files.length} spec document(s) indexed.`, 'info');
       setForceExpandDocs(false);
       onRefreshStatus();
       onFetchLogsNow?.();
     } catch (err: any) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      onLogEvent?.(`Document ingestion failed: ${errorMsg}`, 'error');
+      onLogEvent?.(`Document upload failed: ${errorMsg}`, 'error');
       setDocError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setUploadingDocs(false);
@@ -213,30 +144,28 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     e.preventDefault();
     setIsDraggingDocs(false);
     if (uploadingDocs || !e.dataTransfer.files.length) return;
-    const selected = Array.from(e.dataTransfer.files);
-    setDocFiles(selected);
-    await performDocUpload(selected);
+    const dropped = Array.from(e.dataTransfer.files);
+    setDocFiles(dropped);
+    await performDocUpload(dropped);
   };
 
-  const handleZipSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const selected = e.target.files[0];
-    if (!selected.name.endsWith('.zip')) {
-      setZipError(new Error('Invalid file format. Please upload a .zip archive.'));
-      return;
+  // Handle Codebase ZIP Upload
+  const handleZipSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = e.target.files[0];
+      setZipFile(selected);
+      performZipUpload(selected);
     }
-    setZipFile(selected);
-    await performZipUpload(selected);
   };
 
   const performZipUpload = async (file: File) => {
     let targetRunId = runId;
     if (!targetRunId) {
       try {
-        onLogEvent?.('Initializing new execution session for codebase upload...', 'info');
-        const newRun = await createRun('CFA Digital Journey');
-        targetRunId = newRun.run_id;
-        onRefreshStatus();
+        const { createRun } = await import('../services/apiClient');
+        const res = await createRun('CFA Digital Journey');
+        targetRunId = res.run_id;
+        onCreateNewRun();
       } catch {
         onLogEvent?.('Failed to create run session. Please ensure backend is running.', 'error');
         setZipError(new Error('Failed to create run session. Please ensure backend is running.'));
@@ -277,6 +206,29 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     await performZipUpload(selected);
   };
 
+  // Step Retry Logic
+  const handleRetryStep = async (stepKey: string) => {
+    if (!runId || retryingStep) return;
+    setRetryingStep(stepKey);
+    onLogEvent?.(`[RETRY] Requesting reset & retry of step '${stepKey}'...`, 'info');
+    try {
+      await retryRun(runId, stepKey);
+      onLogEvent?.(`[RETRY] Step '${stepKey}' cleared and ready for re-execution.`, 'info');
+      if (stepKey === 'requirement_understanding') {
+        setForceExpandDocs(true);
+      } else if (stepKey === 'document_intake') {
+        setForceExpandZip(true);
+      }
+      onRefreshStatus();
+      onFetchLogsNow?.();
+    } catch (err: any) {
+      const msg = err instanceof Error ? err.message : String(err);
+      onLogEvent?.(`Retry failed: ${msg}`, 'error');
+    } finally {
+      setRetryingStep(null);
+    }
+  };
+
   const renderUploadError = (err: Error) => {
     const apiErr = err instanceof ApiError ? err : null;
     const isFetchFailure = err.message === 'Failed to fetch' || err.message.includes('fetch');
@@ -309,10 +261,23 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     );
   };
 
-    return (
-      <div className="space-y-6">
-        {/* ── Dual Upload Lanes: Left (Documents) & Right (Codebase ZIP) ──── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+  return (
+    <div className="space-y-6">
+      {/* Live Processing Activity Banner */}
+      {isUnderstandingRunning && (
+        <div className="p-4 rounded-xl qet-card-elevated border border-blue-500/30 flex items-center gap-3 bg-blue-950/20 animate-fade-in">
+          <Loader2 className="w-5 h-5 text-blue-400 animate-spin shrink-0" />
+          <div>
+            <div className="text-xs font-bold text-blue-300">AI Understanding in Progress</div>
+            <div className="text-xs text-slate-300 font-mono mt-0.5">
+              {liveActivities[activityIndex]}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dual Upload Lanes: Left (Documents) & Right (Codebase ZIP) ──── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         {/* Left Lane: 1. Requirement Understanding Agent (Documents) */}
         <div 
           className={`p-5 rounded-2xl transition-all duration-300 ${
@@ -396,10 +361,11 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                   </span>
                   <button
                     onClick={() => setShowDocDetails(!showDocDetails)}
-                    className="p-1 rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200"
+                    className="p-1 px-2 text-[11px] font-medium rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
                     title={showDocDetails ? 'Collapse Details' : 'Expand Details'}
                   >
-                    {showDocDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <span>{showDocDetails ? 'Collapse File Details' : 'Expand File Details'}</span>
+                    {showDocDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>
@@ -448,7 +414,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                           <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                           <span className="font-mono truncate">{df}</span>
                         </div>
-                        <span className="qet-badge-success px-2 py-0.5 text-[10px] font-semibold shrink-0">
+                        <span className="qet-badge-success text-[10px] font-semibold px-2 py-0.5 rounded">
                           Indexed
                         </span>
                       </div>
@@ -482,7 +448,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 {uploadingDocs ? (
                   <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
                 ) : (
-                  <FileText className="w-5 h-5 text-blue-500" />
+                  <Upload className="w-5 h-5 text-blue-500" />
                 )}
               </div>
               <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
@@ -513,7 +479,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
-                    2. Codebase Archive Intake
+                    2. Document Intake Agent &middot; Codebase Intake
                   </h3>
                   {hasDocsUploaded && !hasZipUploaded && (
                     <span className="qet-badge-accent px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
@@ -580,10 +546,11 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                   </span>
                   <button
                     onClick={() => setShowZipDetails(!showZipDetails)}
-                    className="p-1 rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200"
+                    className="p-1 px-2 text-[11px] font-medium rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200 flex items-center gap-1 cursor-pointer"
                     title={showZipDetails ? 'Collapse Details' : 'Expand Details'}
                   >
-                    {showZipDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <span>{showZipDetails ? 'Collapse File Details' : 'Expand File Details'}</span>
+                    {showZipDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>
@@ -729,7 +696,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
             onClick={onProceedToUnderstanding}
             className="qet-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold shadow-md whitespace-nowrap cursor-pointer rounded-xl self-stretch sm:self-auto justify-center"
           >
-            <span>{isUnderstandingReady ? 'View AI Understanding Results' : 'Proceed to AI Understanding'}</span>
+            <span>Proceed to AI Understanding</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

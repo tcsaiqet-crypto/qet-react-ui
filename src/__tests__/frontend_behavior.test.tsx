@@ -62,7 +62,7 @@ describe('NavigationHeader Tab Gating', () => {
 });
 
 describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
-  test('renders top subagent stream tracker and side-by-side upload lanes', () => {
+  test('renders side-by-side upload lanes with active hero indicators', () => {
     render(
       <HomeUploadPage
         appState={null}
@@ -72,10 +72,6 @@ describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
       />
     );
 
-    expect(screen.getByText(/Execution Workspace & Agent Orchestration/i)).toBeInTheDocument();
-    expect(screen.getByText(/Subagent Stream & Live Status/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Requirement Parser/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Codebase AST Extractor/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1. Requirement Understanding Agent/i)).toBeInTheDocument();
     expect(screen.getByText(/2. Document Intake Agent/i)).toBeInTheDocument();
     expect(screen.getByText('Active Hero')).toBeInTheDocument();
@@ -130,8 +126,8 @@ describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
     expect(screen.getAllByText('Re-upload').length).toBeGreaterThan(0);
 
     // Expand ZIP file details
-    const expandBtn = screen.getByText(/Expand File Details/i);
-    fireEvent.click(expandBtn);
+    const expandBtns = screen.getAllByText(/Expand File Details/i);
+    fireEvent.click(expandBtns[expandBtns.length - 1]);
     expect(screen.getByText('src/App.tsx')).toBeInTheDocument();
 
     // Verify retry button calls retryRun
@@ -214,11 +210,10 @@ describe('Full QET left agent rail', () => {
     render(<AgentPipelineRail appState={mockState} />);
 
     expect(screen.getByTestId('agent-pipeline-active')).toHaveTextContent('Application Understanding Agent');
-    expect(screen.getByTestId('agent-pipeline-active')).toHaveTextContent('UI Journey Synthesizer');
-    expect(screen.getByText('Requirement Understanding Agent')).toBeInTheDocument();
-    expect(screen.getByText('Accessibility Agent')).toBeInTheDocument();
-    expect(screen.getByText('Script Writer Agent')).toBeInTheDocument();
-    expect(screen.getByText('Final Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Intake Agent')).toBeInTheDocument();
+    expect(screen.getByText('Test Generation Agent')).toBeInTheDocument();
+    expect(screen.getByText('Execution Agent')).toBeInTheDocument();
+    expect(screen.getByText('Quality Intelligence Agent')).toBeInTheDocument();
   });
 });
 

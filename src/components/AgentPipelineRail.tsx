@@ -58,15 +58,64 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
   selectedAgentId,
   onSelectAgent,
   onRunStage,
+  viewMode,
+  onToggleViewMode,
 }) => {
   const flow = resolveAgentFlow(appState);
   const { stages, statuses, activeIndex } = flow;
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  const understandingStages: RailStage[] = [
+    {
+      id: 'requirement_understanding',
+      label: 'Requirement Understanding Agent',
+      phase: 'Intake',
+      description: 'Document parsing and requirement extraction',
+      aliases: ['requirement_understanding'],
+      subagents: ['Doc Parser', 'Spec Synthesizer'],
+    },
+    {
+      id: 'document_intake',
+      label: 'Document Intake Agent',
+      phase: 'Intake',
+      description: 'Codebase ZIP extraction & AST indexing',
+      aliases: ['document_intake'],
+      subagents: ['ZIP Unpacker', 'AST Parser'],
+    },
+    {
+      id: 'application_understanding',
+      label: 'Application Understanding Agent',
+      phase: 'Understand',
+      description: 'DOM locators, 15-point checklist & gap analysis',
+      aliases: ['application_understanding'],
+      subagents: ['DOM Mapper', '15-Point Evaluator', 'Gap Matrix'],
+    },
+  ];
+
+  const fullPipelineStages: RailStage[] = [
+    { id: 'intake', label: 'Intake Agent', phase: 'Intake', description: 'Intake & indexing', aliases: ['intake'], subagents: ['Manifest Parser'] },
+    { id: 'requirement_understanding', label: 'Requirement Understanding Agent', phase: 'Intake', description: 'Document parsing and requirement extraction', aliases: ['requirement_understanding'], subagents: ['Doc Parser', 'Spec Synthesizer'] },
+    { id: 'document_intake', label: 'Document Intake Agent', phase: 'Intake', description: 'Codebase ZIP extraction & AST indexing', aliases: ['document_intake'], subagents: ['ZIP Unpacker', 'AST Parser'] },
+    { id: 'application_understanding', label: 'Application Understanding Agent', phase: 'Understand', description: 'DOM locators, 15-point checklist & gap analysis', aliases: ['application_understanding'], subagents: ['DOM Mapper', '15-Point Evaluator', 'Gap Matrix'] },
+    { id: 'requirement_categorization', label: 'Requirement Categorization Agent', phase: 'Understand', description: 'Classification', aliases: ['requirement_categorization'], subagents: ['Classifier'] },
+    { id: 'test_cases', label: 'Test Case Generator Agent', phase: 'Generate', description: '5 scenario types generator', aliases: ['test_cases'], subagents: ['Scenario Generator'] },
+    { id: 'synthetic_data', label: 'Synthetic Data Generator Agent', phase: 'Generate', description: 'Non-PII synthetic data generator', aliases: ['synthetic_data'], subagents: ['Data Synthesizer'] },
+    { id: 'playwright_generation', label: 'Playwright Generation Agent', phase: 'Generate', description: 'POM and script writer', aliases: ['playwright_generation'], subagents: ['Script Writer'] },
+    { id: 'execution', label: 'Execution Engine', phase: 'Execute', description: 'Live desktop browser runner', aliases: ['execution'], subagents: ['Playwright Runner'] },
+    { id: 'ai_healing', label: 'AI Healing & Intelligence Agent', phase: 'Execute', description: 'Self-correction', aliases: ['ai_healing'], subagents: ['Healing Engine'] },
+    { id: 'reporting', label: 'Reporting Agent', phase: 'Report', description: 'Quality report generator', aliases: ['reporting', 'quality'], subagents: ['Report Generator'] },
+  ];
+
+  const displayedStages = viewMode === 'understanding_focus'
+    ? understandingStages
+    : viewMode === 'full_pipeline'
+    ? fullPipelineStages
+    : stages;
+
   // Auto-scroll into view when active index changes
   useEffect(() => {
     if (activeIndex >= 0 && cardRefs.current[activeIndex]) {
-      cardRefs.current[activeIndex]?.scrollIntoView({
+      cardRefs.current[activeIndex]?.scrollIntoView?.({
         behavior: 'smooth',
         block: 'nearest',
       });
@@ -97,11 +146,20 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
               </p>
             </div>
           </div>
+
+          {onToggleViewMode && (
+            <button
+              onClick={() => onToggleViewMode(viewMode === 'understanding_focus' ? 'full_pipeline' : 'understanding_focus')}
+              className="text-[10px] font-semibold text-blue-500 hover:underline cursor-pointer px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800"
+            >
+              {viewMode === 'understanding_focus' ? 'All 11 Stages' : 'Focus View'}
+            </button>
+          )}
         </div>
 
-        {/* 5 Canonical Stages */}
+        {/* Canonical / Focus Stages */}
         <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-0.5">
-          {stages.map((stage, order) => {
+          {displayedStages.map((stage, order) => {
             const status = statuses[order] || 'pending';
             const isActive = order === activeIndex;
             const selected = isSelected(stage.id);
@@ -114,6 +172,7 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
                 ref={(el) => (cardRefs.current[order] = el)}
                 role="button"
                 tabIndex={0}
+                data-testid={isActive ? 'agent-pipeline-active' : undefined}
                 onClick={() => handleStageClick(stage)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -160,6 +219,13 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* Active Subagent Callout if present */}
+                {isActive && flow.activeSubagentLabel && (
+                  <div className="mt-1 text-[11px] text-blue-600 dark:text-blue-300 italic truncate font-medium">
+                    {flow.activeSubagentLabel}
+                  </div>
+                )}
 
                 {/* Subagents & Single Action Button */}
                 {isExpanded && (

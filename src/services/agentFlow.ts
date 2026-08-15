@@ -20,7 +20,7 @@ export const canonicalAgentStages: RailStage[] = [
   },
   {
     id: 'understanding',
-    label: 'Requirement Understanding Agent',
+    label: 'Application Understanding Agent',
     phase: 'Understand',
     description: 'Document parsing, AST analysis & categorization',
     aliases: ['understanding', 'ai_understanding_running', 'understanding_ready', 'Understanding', 'Requirement Understanding', 'Requirement Categorization', 'requirement_understanding', 'document_intake', 'application_understanding'],
@@ -146,15 +146,20 @@ export function resolveAgentFlow(appState: AppState | null, viewMode?: RailViewM
   const activeStatus = statuses[activeIndex] || 'pending';
   const completedCount = statuses.filter((s) => s === 'completed').length;
 
+  const runningSubagent = appState?.subagent_timeline?.find((s) => s.status === 'running') || appState?.subagent_timeline?.[(appState?.subagent_timeline?.length || 1) - 1];
+  const activeSubagentLabel = runningSubagent?.label || activeStage.subagents[0];
+  const activeProcessMessage = runningSubagent?.message || activeStage.description;
+
   return {
     stages,
     statuses,
     activeIndex,
     activeStage,
     activeStatus,
-    activeSubagentTimeline: [],
-    activeSubagentLabel: activeStage.subagents[0],
-    activeProcessMessage: activeStage.description,
+    activeSubagentTimeline: appState?.subagent_timeline || [],
+    activeSubagent: runningSubagent,
+    activeSubagentLabel,
+    activeProcessMessage,
     completedCount,
     totalCount: stages.length,
     understandingCompletedCount: statuses[1] === 'completed' ? 1 : 0,
@@ -171,9 +176,18 @@ export function resolveSelectedAgentContext(
   const stage = canonicalAgentStages.find((s) => s.id === selectedAgentId || s.aliases.includes(selectedAgentId || '')) || canonicalAgentStages[0];
   if (!stage) return null;
 
+  let displayLabel = stage.label;
+  if (selectedAgentId === 'requirement_understanding') {
+    displayLabel = 'Requirement Understanding Agent';
+  } else if (selectedAgentId === 'document_intake') {
+    displayLabel = 'Document Intake Agent';
+  } else if (selectedAgentId === 'application_understanding') {
+    displayLabel = 'Application Understanding Agent';
+  }
+
   return {
-    agent_id: stage.id,
-    label: stage.label,
+    agent_id: selectedAgentId || stage.id,
+    label: displayLabel,
     phase: stage.phase,
     step_number: canonicalAgentStages.indexOf(stage) + 1,
     status: 'pending',
@@ -189,6 +203,13 @@ export function resolveSelectedAgentContext(
     artifacts_summary: {
       total_artifacts: 0,
       manifest_available: Boolean(appState?.intake_manifest),
+      checklist_evaluation: appState?.understanding?.gaps?.map((g: any, i: number) => ({
+        check_id: g.gap_id || `CHK-${i + 1}`,
+        title: g.title || `15-Point Checklist Item ${i + 1}`,
+        status: g.severity === 'high' ? 'fail' : 'pass',
+        score: g.confidence === 'high' ? 95 : 80,
+        findings: g.description,
+      })) || [],
     },
     execution_logs: [],
     retryable: true,
