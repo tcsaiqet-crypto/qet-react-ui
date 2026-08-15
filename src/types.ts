@@ -157,12 +157,53 @@ export interface TestCase {
   priority: string;
   description: string;
   review_status: string;
+  steps?: string[];
+  expected_result?: string;
+  preconditions?: string[];
+  synthetic_data_keys?: string[];
+  requirement_id?: string;
+  confidence?: string;
+}
+
+export interface SyntheticRecord {
+  record_id: string;
+  target_test_case: string;
+  category: string;
+  username?: string;
+  password?: string;
+  full_name?: string;
+  ssn?: string;
+  monthly_income?: number;
+  employment_status?: string;
+  document_file?: string;
+  terms_accepted?: boolean;
+  is_synthetic?: boolean;
+  [key: string]: any;
+}
+
+export interface SyntheticDataset {
+  dataset_id: string;
+  dataset_name: string;
+  data_schema: Record<string, string>;
+  records: SyntheticRecord[];
+  test_case_id_mapping: Record<string, SyntheticRecord[]>;
+  is_synthetic: boolean;
+  non_pii_disclaimer: string;
+  provenance: Record<string, any>;
+  upstream_case_ids?: string[];
+  validation_status: string;
+  synthetic_only_validated: boolean;
+  fallback_used: boolean;
 }
 
 export interface TestSuite {
   suite_id: string;
   name: string;
+  description?: string;
   test_cases: TestCase[];
+  provenance?: Record<string, any>;
+  validation_status?: string;
+  fallback_used?: boolean;
 }
 
 export interface PlaywrightScript {
@@ -235,6 +276,7 @@ export interface AppState {
   intake_manifest?: IntakeManifest;
   understanding?: ApplicationUnderstanding;
   test_suite?: TestSuite;
+  synthetic_dataset?: SyntheticDataset;
   playwright_scripts?: PlaywrightScript[];
   last_execution_result?: ExecutionResult;
   latest_multi_level_results?: Record<string, any>;

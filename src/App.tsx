@@ -176,6 +176,17 @@ export const App: React.FC = () => {
     if (!targetId) return;
     try {
       const res = await getRunStatus(targetId);
+      if (res.state === 'understanding_ready' || res.state === 'pipeline_complete') {
+        try {
+          const full = await getRunFullState(targetId);
+          if (full?.state) {
+            setAppState(full.state);
+            return;
+          }
+        } catch {
+          // fallback
+        }
+      }
       setAppState((prev) => {
         if (!prev) return null;
         return {

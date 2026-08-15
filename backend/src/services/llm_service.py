@@ -536,16 +536,6 @@ class LLMService:
                 except json.JSONDecodeError:
                     pass
 
-            # Advanced repair: Attempt to balance truncated JSON payload
-            repaired_dict = LLMService._repair_truncated_json(cleaned)
-            if repaired_dict and isinstance(repaired_dict, dict):
-                return repaired_dict, {
-                    "parser_stage": "repaired_truncated_json",
-                    "issue": "Recovered valid payload by closing truncated JSON brackets.",
-                    "recovery_attempted": True,
-                    "truncated": True,
-                }
-
             likely_truncated = LLMService._looks_truncated_json(cleaned)
             return None, {
                 "parser_stage": "json_decode",
@@ -569,6 +559,36 @@ class LLMService:
                 "recovery_attempted": recovery_attempted,
                 "raw_preview": cleaned[:300],
             }
+
+    @staticmethod
+    def _repair_truncated_json(text: str) -> Optional[Dict[str, Any]]:
+        """Attempt safe closure of truncated JSON objects without fabricating structure."""
+        if not LLMService._looks_truncated_json(text):
+            return None
+        
+        s = text.strip()
+        open_braces = s.count('{') - s.count('}')
+        open_brackets = s.count('[') - s.count(']')
+        
+        if open_braces < 0 or open_brackets < 0 or open_braces > 6 or open_brackets > 6:
+            return None
+            
+        repaired = s.rstrip()
+        if repaired and repaired[-1] not in ('}', ']', '"', ','):
+            last_valid = max(repaired.rfind(','), repaired.rfind('{'), repaired.rfind('['))
+            if last_valid > 0:
+                repaired = repaired[:last_valid].rstrip().rstrip(',')
+                
+        repaired += ']' * open_brackets
+        repaired += '}' * open_braces
+        
+        try:
+            parsed = json.loads(repaired)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+        return None
 
     @staticmethod
     def _looks_truncated_json(text: str) -> bool:

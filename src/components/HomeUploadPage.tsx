@@ -378,7 +378,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
           {hasDocsUploaded && !forceExpandDocs ? (
             <div className="space-y-3 animate-file-item">
               {/* Metrics Header Summary */}
-              <div className="p-3.5 rounded-xl qet-card-elevated border border-emerald-500/20 flex items-center justify-between">
+              <div className="p-3 rounded-xl qet-card-elevated border border-emerald-500/20 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <FileCheck2 className="w-5 h-5 text-emerald-500" />
                   <div>
@@ -390,76 +390,72 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                     </div>
                   </div>
                 </div>
-                <span className="qet-badge-success px-2.5 py-1 text-xs font-bold">
-                  Indexed
-                </span>
-              </div>
-
-              {/* Collapsed Metrics Grid */}
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="p-2 rounded-lg qet-card-elevated">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
-                  <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
-                    {manifest?.doc_files?.length || 0}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg qet-card-elevated">
-                  <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
-                  <div className="font-bold text-sm text-emerald-500">
-                    {manifest?.doc_files?.length || 0}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg qet-card-elevated">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Excluded</div>
-                  <div className="font-bold text-sm text-slate-400">0</div>
-                </div>
-              </div>
-
-              {/* Expandable File List Accordion */}
-              <div className="pt-1">
-                <button
-                  onClick={() => setShowDocDetails(!showDocDetails)}
-                  className="w-full flex items-center justify-between text-xs font-semibold px-3 py-2 rounded-lg qet-btn-secondary cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Eye className="w-3.5 h-3.5 text-blue-500" />
-                    <span>{showDocDetails ? 'Hide Document Details' : 'Expand Document Details'}</span>
+                <div className="flex items-center gap-2">
+                  <span className="qet-badge-success px-2.5 py-0.5 text-xs font-bold">
+                    Indexed
                   </span>
-                  {showDocDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
+                  <button
+                    onClick={() => setShowDocDetails(!showDocDetails)}
+                    className="p-1 rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200"
+                    title={showDocDetails ? 'Collapse Details' : 'Expand Details'}
+                  >
+                    {showDocDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
 
-                {showDocDetails && (
-                  <div className="space-y-2 pt-2 animate-file-item">
-                    {/* Filters */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
-                        <button
-                          key={f}
-                          onClick={() => setDocFilter(f)}
-                          className={`upload-filter-btn ${docFilter === f ? 'active' : ''}`}
-                        >
-                          {f.charAt(0).toUpperCase() + f.slice(1)}
-                        </button>
-                      ))}
+              {/* Expandable File List Details */}
+              {showDocDetails && (
+                <div className="space-y-2 pt-1 animate-file-item">
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2 rounded-lg qet-card-elevated">
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
+                      <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
+                        {manifest?.doc_files?.length || 0}
+                      </div>
                     </div>
-
-                    {/* Files List */}
-                    <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                      {manifest?.doc_files?.map((df, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated text-xs">
-                          <div className="flex items-center gap-2 truncate">
-                            <FileCode className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                            <span className="font-mono truncate">{df}</span>
-                          </div>
-                          <span className="qet-badge-success px-2 py-0.5 text-[10px] font-semibold shrink-0">
-                            Included
-                          </span>
-                        </div>
-                      ))}
+                    <div className="p-2 rounded-lg qet-card-elevated">
+                      <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
+                      <div className="font-bold text-sm text-emerald-500">
+                        {manifest?.doc_files?.length || 0}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg qet-card-elevated">
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Excluded</div>
+                      <div className="font-bold text-sm text-slate-400">0</div>
                     </div>
                   </div>
-                )}
-              </div>
+
+                  {/* Filters */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setDocFilter(f)}
+                        className={`upload-filter-btn ${docFilter === f ? 'active' : ''}`}
+                      >
+                        {f.charAt(0).toUpperCase() + f.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Files List */}
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                    {manifest?.doc_files?.map((df, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated text-xs">
+                        <div className="flex items-center gap-2 truncate">
+                          <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          <span className="font-mono truncate">{df}</span>
+                        </div>
+                        <span className="qet-badge-success px-2 py-0.5 text-[10px] font-semibold shrink-0">
+                          Indexed
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             /* Upload Dropzone */
@@ -474,7 +470,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
               <input
                 type="file"
                 multiple
-                accept=".md,.pdf,.txt,.docx,.doc"
+                accept=".md,.pdf,.docx,.txt"
                 onChange={handleDocSelect}
                 className="hidden"
                 disabled={uploadingDocs}
@@ -486,14 +482,14 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                 {uploadingDocs ? (
                   <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
                 ) : (
-                  <UploadCloud className="w-5 h-5 text-blue-500" />
+                  <FileText className="w-5 h-5 text-blue-500" />
                 )}
               </div>
               <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
-                {uploadingDocs ? 'Indexing Requirement Documents...' : isDraggingDocs ? 'Drop files now' : 'Click to Browse or Drag & Drop Documents'}
+                {uploadingDocs ? 'Ingesting Requirements...' : isDraggingDocs ? 'Drop files now' : 'Click to Browse or Drag & Drop Documents'}
               </p>
               <p className="text-[11px] mt-0.5" style={{ color: 'var(--qet-text-muted)' }}>
-                Supports Markdown, PDF, Text, and Word (.md, .pdf, .txt, .docx)
+                Accepts Markdown (.md), PDF (.pdf), Word (.docx), and Text (.txt)
               </p>
             </label>
           )}
@@ -517,7 +513,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
-                    2. Document Intake Agent &middot; Codebase Intake
+                    2. Codebase Archive Intake
                   </h3>
                   {hasDocsUploaded && !hasZipUploaded && (
                     <span className="qet-badge-accent px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
@@ -566,7 +562,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
           {hasZipUploaded && !forceExpandZip ? (
             <div className="space-y-3 animate-file-item">
               {/* Metrics Header Summary */}
-              <div className="p-3.5 rounded-xl qet-card-elevated border border-cyan-500/20 flex items-center justify-between">
+              <div className="p-3 rounded-xl qet-card-elevated border border-cyan-500/20 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <FolderArchive className="w-5 h-5 text-cyan-500" />
                   <div>
@@ -578,98 +574,94 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
                     </div>
                   </div>
                 </div>
-                <span className="qet-badge-success px-2.5 py-1 text-xs font-bold">
-                  Indexed
-                </span>
-              </div>
-
-              {/* Collapsed Metrics Grid */}
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                <div className="p-2 rounded-lg qet-card-elevated">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
-                  <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
-                    {manifest?.total_files || 0}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg qet-card-elevated">
-                  <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
-                  <div className="font-bold text-sm text-emerald-500">
-                    {manifest?.total_files || 0}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg qet-card-elevated">
-                  <div className="text-[10px] uppercase font-bold text-amber-500">Excluded</div>
-                  <div className="font-bold text-sm text-amber-500">
-                    {manifest?.excluded_file_count || 0}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg qet-card-elevated">
-                  <div className="text-[10px] uppercase font-bold text-cyan-500">Reviewed</div>
-                  <div className="font-bold text-sm text-cyan-500">
-                    {manifest?.total_files || 0}
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="qet-badge-success px-2.5 py-0.5 text-xs font-bold">
+                    Indexed
+                  </span>
+                  <button
+                    onClick={() => setShowZipDetails(!showZipDetails)}
+                    className="p-1 rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200"
+                    title={showZipDetails ? 'Collapse Details' : 'Expand Details'}
+                  >
+                    {showZipDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
               {/* Expandable File List Accordion */}
-              <div className="pt-1">
-                <button
-                  onClick={() => setShowZipDetails(!showZipDetails)}
-                  className="w-full flex items-center justify-between text-xs font-semibold px-3 py-2 rounded-lg qet-btn-secondary cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Eye className="w-3.5 h-3.5 text-cyan-500" />
-                    <span>{showZipDetails ? 'Hide File Details' : 'Expand File Details'}</span>
-                  </span>
-                  {showZipDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
-
-                {showZipDetails && (
-                  <div className="space-y-2 pt-2 animate-file-item">
-                    {/* Filters */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
-                        <button
-                          key={f}
-                          onClick={() => setZipFilter(f)}
-                          className={`upload-filter-btn ${zipFilter === f ? 'active' : ''}`}
-                        >
-                          {f.charAt(0).toUpperCase() + f.slice(1)}
-                        </button>
-                      ))}
+              {showZipDetails && (
+                <div className="space-y-2 pt-1 animate-file-item">
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                    <div className="p-2 rounded-lg qet-card-elevated">
+                      <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
+                      <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
+                        {manifest?.total_files || 0}
+                      </div>
                     </div>
-
-                    {/* File rows */}
-                    <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 text-xs">
-                      {manifest?.files && manifest.files.length > 0 ? (
-                        manifest.files
-                          .filter(file => {
-                            if (zipFilter === 'excluded') return file.is_binary;
-                            if (zipFilter === 'included') return !file.is_binary;
-                            return true;
-                          })
-                          .map((file, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated">
-                              <div className="flex items-center gap-2 truncate">
-                                <FileCode className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                                <span className="font-mono truncate">{file.rel_path}</span>
-                              </div>
-                              <span className={`px-2 py-0.5 text-[10px] font-semibold shrink-0 rounded ${
-                                file.is_binary ? 'qet-badge-warning' : 'qet-badge-success'
-                              }`}>
-                                {file.is_binary ? 'Excluded' : 'Included'}
-                              </span>
-                            </div>
-                          ))
-                      ) : (
-                        <div className="p-3 text-center text-xs text-slate-400">
-                          {manifest?.total_files} source files in {manifest?.zip_filename}
-                        </div>
-                      )}
+                    <div className="p-2 rounded-lg qet-card-elevated">
+                      <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
+                      <div className="font-bold text-sm text-emerald-500">
+                        {manifest?.total_files || 0}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg qet-card-elevated">
+                      <div className="text-[10px] uppercase font-bold text-amber-500">Excluded</div>
+                      <div className="font-bold text-sm text-amber-500">
+                        {manifest?.excluded_file_count || 0}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg qet-card-elevated">
+                      <div className="text-[10px] uppercase font-bold text-cyan-500">Reviewed</div>
+                      <div className="font-bold text-sm text-cyan-500">
+                        {manifest?.total_files || 0}
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
+
+                  {/* Filters */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setZipFilter(f)}
+                        className={`upload-filter-btn ${zipFilter === f ? 'active' : ''}`}
+                      >
+                        {f.charAt(0).toUpperCase() + f.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* File rows */}
+                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 text-xs">
+                    {manifest?.files && manifest.files.length > 0 ? (
+                      manifest.files
+                        .filter(file => {
+                          if (zipFilter === 'excluded') return file.is_binary;
+                          if (zipFilter === 'included') return !file.is_binary;
+                          return true;
+                        })
+                        .map((file, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated">
+                            <div className="flex items-center gap-2 truncate">
+                              <FileCode className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                              <span className="font-mono truncate">{file.rel_path}</span>
+                            </div>
+                            <span className={`px-2 py-0.5 text-[10px] font-semibold shrink-0 rounded ${
+                              file.is_binary ? 'qet-badge-warning' : 'qet-badge-success'
+                            }`}>
+                              {file.is_binary ? 'Excluded' : 'Included'}
+                            </span>
+                          </div>
+                        ))
+                    ) : (
+                      <div className="p-3 text-center text-xs text-slate-400">
+                        {manifest?.total_files} source files in {manifest?.zip_filename}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             /* Upload Dropzone */
@@ -711,60 +703,37 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
         </div>
       </div>
 
-      {/* ── 4. Stage 3 Hero Action: Application Understanding Agent ──── */}
-      <div 
-        className={`p-6 rounded-2xl transition-all duration-300 ${
-          hasDocsUploaded && hasZipUploaded
-            ? 'agent-hero-card animate-hero-enter qet-card'
-            : 'qet-panel border'
-        }`}
-      >
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-2 flex-1">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 border border-blue-500/20 shrink-0">
-                <Bot className="w-5 h-5 text-blue-500" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold" style={{ color: 'var(--qet-text-primary)' }}>
-                    3. Application Understanding Agent
-                  </h3>
-                  {hasDocsUploaded && hasZipUploaded && (
-                    <span className="qet-badge-accent px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
-                      Active Hero
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs" style={{ color: 'var(--qet-text-secondary)' }}>
-                  Deep AI synthesis discovering component DOM selectors, user flows, APIs, and 15-point requirement gaps.
-                </p>
-              </div>
+      {/* ── Single Unified AI Understanding Action Banner ──── */}
+      {isIntakeReady && (
+        <div className="p-5 rounded-2xl qet-card-elevated border border-blue-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 animate-file-item shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 border border-blue-500/20 shrink-0">
+              <Bot className="w-5 h-5 text-blue-500" />
             </div>
-
-            {/* Live Processing Activity Text */}
-            {isUnderstandingRunning && (
-              <div className="mt-2 p-3 rounded-xl flex items-center gap-3 qet-badge-accent animate-pulse-glow text-xs">
-                <Activity className="w-4 h-4 text-blue-500 animate-spin shrink-0" />
-                <span className="font-mono font-semibold">
-                  {liveActivities[activityIndex]}
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+                  Intake Ready &middot; Application Understanding
+                </h3>
+                <span className="qet-badge-success px-2 py-0.5 text-[10px] font-bold uppercase">
+                  Ready
                 </span>
               </div>
-            )}
+              <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+                Synthesize component DOM locators, API routes, user flows, and 15-point requirement validation.
+              </p>
+            </div>
           </div>
 
-          {/* Action CTA Button */}
-          {isIntakeReady && (
-            <button
-              onClick={onProceedToUnderstanding}
-              className="qet-btn-primary inline-flex items-center gap-2 px-6 py-3 text-xs font-bold shadow-lg whitespace-nowrap cursor-pointer self-stretch sm:self-auto justify-center rounded-xl"
-            >
-              <span>{isUnderstandingReady ? 'View AI Understanding Results' : 'Start AI Understanding'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          )}
+          <button
+            onClick={onProceedToUnderstanding}
+            className="qet-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold shadow-md whitespace-nowrap cursor-pointer rounded-xl self-stretch sm:self-auto justify-center"
+          >
+            <span>{isUnderstandingReady ? 'View AI Understanding Results' : 'Proceed to AI Understanding'}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };

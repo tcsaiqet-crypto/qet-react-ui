@@ -1,0 +1,891 @@
+# QET Platform — Complete Redesign Specification & Implementation Plan
+
+## What We Are Locking In (Decision Summary)
+
+```
+Navigation:     Single top bar only. No left sidebar. Ever.
+Layout flow:    Agent status → Timeline → Upload → Results (top to bottom)
+Provider:       Compact OpenAI / Gemini switch, top right
+Heading:        QET Agent
+Subheading:     Autonomous Quality Execution Platform
+Color system:   Slate + Teal + Indigo (defined below)
+Upload:         Large → auto-shrinks to compact summary after success
+File list:      Count only by default. Expand to see files.
+ZIP sub-steps:  Summary row by default. Expand for decision table.
+Autoscroll:     Triggers after each completed step. No loop jitter.
+JSON fix:       Accept fenced JSON + safe repair. Fail-fast on truly bad output.
+```
+
+---
+
+## Part 1: Color System (Slate + Teal + Indigo)
+
+### Option A — Deep Slate + Teal (Professional, High Trust)
+
+```
+Background:       #F8FAFC   (slate-50, barely off-white)
+Surface:          #FFFFFF   (pure white cards)
+Surface Alt:      #F1F5F9   (slate-100, secondary areas)
+Border:           #E2E8F0   (slate-200)
+Border Strong:    #CBD5E1   (slate-300)
+
+Text Primary:     #0F172A   (slate-900)
+Text Secondary:   #475569   (slate-600)
+Text Muted:       #94A3B8   (slate-400)
+
+Accent Primary:   #0D9488   (teal-600) ← main brand color
+Accent Hover:     #0F766E   (teal-700)
+Accent Light:     #CCFBF1   (teal-100) ← subtle backgrounds
+
+Accent Secondary: #4F46E5   (indigo-600) ← secondary actions
+Accent Alt:       #EEF2FF   (indigo-50) ← tag backgrounds
+
+Success:          #059669   (emerald-600)
+Success Light:    #D1FAE5   (emerald-100)
+Warning:          #D97706   (amber-600)
+Warning Light:    #FEF3C7   (amber-100)
+Error:            #DC2626   (red-600)
+Error Light:      #FEE2E2   (red-100)
+
+Agent UI:         #4F46E5   (indigo-600)
+Agent API:        #0D9488   (teal-600)
+Agent A11y:       #7C3AED   (violet-600)
+Agent Perf:       #94A3B8   (slate-400, disabled)
+```
+
+### Option B — Warm Slate + Ocean Teal (Warmer, More Human)
+
+```
+Background:       #F9FAFB   (gray-50)
+Surface:          #FFFFFF
+Border:           #E5E7EB   (gray-200)
+
+Text Primary:     #111827   (gray-900)
+Text Secondary:   #6B7280   (gray-500)
+
+Accent Primary:   #0891B2   (cyan-600) ← ocean feel
+Accent Hover:     #0E7490   (cyan-700)
+
+Accent Secondary: #6366F1   (indigo-500)
+
+Success:          #10B981   (emerald-500)
+Error:            #EF4444   (red-500)
+```
+
+### Option C — Cool Slate + Electric Indigo (Modern SaaS)
+
+```
+Background:       #F3F4F6   (gray-100)
+Surface:          #FFFFFF
+Border:           #D1D5DB   (gray-300)
+
+Text Primary:     #1F2937   (gray-800)
+Text Secondary:   #6B7280
+
+Accent Primary:   #4338CA   (indigo-700) ← electric
+Accent Hover:     #3730A3   (indigo-800)
+Accent Glow:      #E0E7FF   (indigo-100)
+
+Success:          #16A34A   (green-600)
+Error:            #DC2626
+```
+
+**My recommendation: Option A (Deep Slate + Teal)**
+
+It reads most "enterprise trust" without being cold. Teal as primary feels modern without being neon. Indigo as secondary gives enough color variety for agent cards without clashing.
+
+---
+
+## Part 2: Typography & Shape System
+
+```css
+/* Design Token Reference */
+
+/* ── Fonts ────────────────────────────────── */
+--font-sans:     'Inter', 'system-ui', sans-serif;
+--font-mono:     'JetBrains Mono', 'Fira Code', monospace;
+
+/* ── Font Scale ───────────────────────────── */
+--text-xs:       0.75rem;     /* 12px - labels, meta */
+--text-sm:       0.875rem;    /* 14px - body small */
+--text-base:     1rem;        /* 16px - body */
+--text-lg:       1.125rem;    /* 18px - card titles */
+--text-xl:       1.25rem;     /* 20px - section heads */
+--text-2xl:      1.5rem;      /* 24px - page title */
+--text-3xl:      1.875rem;    /* 30px - hero heading */
+
+/* ── Weight ───────────────────────────────── */
+--weight-normal: 400;
+--weight-medium: 500;
+--weight-semi:   600;
+--weight-bold:   700;
+
+/* ── Radius ───────────────────────────────── */
+--radius-sm:     6px;         /* chips, tags */
+--radius-md:     10px;        /* cards, inputs */
+--radius-lg:     14px;        /* panels */
+--radius-xl:     18px;        /* modals */
+--radius-full:   9999px;      /* pills, toggles */
+
+/* ── Shadows ──────────────────────────────── */
+--shadow-xs:     0 1px 2px rgba(0,0,0,0.04);
+--shadow-sm:     0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+--shadow-md:     0 4px 8px rgba(0,0,0,0.06), 0 2px 4px rgba(0,0,0,0.04);
+--shadow-lg:     0 8px 24px rgba(0,0,0,0.08);
+
+/* ── Spacing ──────────────────────────────── */
+--sp-1:  4px;
+--sp-2:  8px;
+--sp-3:  12px;
+--sp-4:  16px;
+--sp-5:  20px;
+--sp-6:  24px;
+--sp-8:  32px;
+--sp-10: 40px;
+--sp-12: 48px;
+--sp-16: 64px;
+```
+
+**Shape rule:**
+- Upload zones: `--radius-md` (10px). Never fully round. Clean rectangle with moderate rounding.
+- Cards: `--radius-md` to `--radius-lg`
+- Buttons: `--radius-md`
+- Chips/tags: `--radius-sm` or `--radius-full` for status pills only
+
+---
+
+## Part 3: Page Layout Architecture
+
+### 3.1 Top Navigation Bar
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  QET Agent                    Agents  Tools  Runs    [Gemini▼] 🌙  │
+│  Autonomous Quality                                                  │
+│  Execution Platform                                                  │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+Left:    QET Agent (text-2xl, weight-bold, teal-600)
+         Autonomous Quality Execution Platform (text-sm, slate-500)
+
+Center:  Agents | Tools | Runs
+         (text-sm, weight-medium, pill underline on active)
+
+Right:   [Provider Switch: OpenAI | Gemini] ← compact toggle
+         [🌙 theme toggle]
+```
+
+**Provider switch design:**
+
+```
+┌──────────────────────┐
+│ ⬤ OpenAI  ○ Gemini  │   ← small pill toggle, not a full button row
+└──────────────────────┘
+
+Width: ~140px
+Height: ~28px
+Padding: 3px inner
+Selected side: white pill with shadow
+Unselected: transparent text
+```
+
+---
+
+### 3.2 Agents Page — Full Vertical Flow
+
+```
+TOP NAV
+│
+├── ACTIVE AGENT INDICATOR (when a run is in progress)
+│   Shows which agent is currently working
+│
+├── RUN CYCLE STATUS TIMELINE
+│   Horizontal step strip always visible
+│
+├── UPLOAD SECTION
+│   Before upload:   Large drop zones side by side
+│   After docs:      Docs card shrinks to compact summary row
+│   After zip:       ZIP card shrinks to compact summary row
+│
+├── FILE COUNT SUMMARY (after upload)
+│   Compact row: 3 docs · 2.4 MB total · ZIP: my-app.zip 18 MB
+│   [▶ Show files] ← expand to see list
+│
+├── ZIP INTAKE SUB-STEPS (after zip processed)
+│   Summary row: 847 files · 203 included · 644 excluded · 0 unknown
+│   [▶ Show details] ← expand for full breakdown
+│
+├── UNDERSTANDING OUTPUT (after understanding complete)
+│   Summary card with key sections
+│   [▶ Show full understanding] ← expand
+│
+└── PROCEED CTA
+    [Start Understanding →] or [Run Agents →]
+```
+
+---
+
+### 3.3 The Run Cycle Status Timeline
+
+```
+Design: Horizontal strip, always pinned below nav on the agents page
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  ● Intake  ──  ● Processing  ──  ● Understanding  ──  ○ Generation  ──  ○ Done │
+└─────────────────────────────────────────────────────────────────────┘
+
+States per step:
+  ● filled teal       = complete
+  ⟳ spinning teal     = active/current
+  ○ hollow slate      = pending
+  ✗ red               = failed
+
+Each step node shows:
+  - Icon above
+  - Label below
+  - Timestamp on completion (small, muted)
+```
+
+```
+Steps:
+1. Intake         (docs + zip uploaded)
+2. Processing     (zip extraction + classification)
+3. Understanding  (AI analysis)
+4. Generation     (test scripts, future)
+5. Execution      (test runs, future)
+6. Report         (final output, future)
+```
+
+---
+
+### 3.4 Upload Zone — Before and After
+
+**Before upload (large):**
+
+```
+┌──────────────────────────┐  ┌──────────────────────────┐
+│                          │  │                          │
+│     📄                   │  │     📦                   │
+│                          │  │                          │
+│  Drop requirements here  │  │   Drop codebase ZIP      │
+│                          │  │                          │
+│  PDF · DOCX · MD · TXT   │  │   .zip files only        │
+│                          │  │                          │
+│  [Browse files]          │  │   [Browse files]         │
+│                          │  │                          │
+└──────────────────────────┘  └──────────────────────────┘
+
+Height: ~160px
+Border: 1.5px dashed --border-color
+Radius: --radius-md (NOT overly round)
+Background: --surface-alt on hover
+```
+
+**After docs uploaded (compact summary row):**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ✓ Requirements  │  3 files · 1.8 MB  │  [▶ Show]  [× Clear]  │
+└────────────────────────────────────────────────────────────────┘
+
+Height: ~44px
+Background: success-light (#D1FAE5)
+Left border: 3px solid success (#059669)
+```
+
+**Expanded file list (when Show is clicked):**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ✓ Requirements  │  3 files · 1.8 MB  │  [▼ Hide]  [× Clear]  │
+├────────────────────────────────────────────────────────────────┤
+│  📄 business-requirements.pdf          · 890 KB               │
+│  📄 functional-spec.docx               · 654 KB               │
+│  📄 user-stories.md                    · 256 KB               │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**After ZIP uploaded (compact summary row):**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ✓ Codebase ZIP  │  my-app.zip · 18.3 MB  │  [▶ Show]  [× Clear] │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 3.5 ZIP Intake Sub-Steps
+
+**After ZIP processing completes, show this section:**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ZIP Intake                                          [▶ Details]│
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ✓ Extraction       ✓ Classification     ✓ Indexing            │
+│                                                                │
+│  847 total  ·  203 included  ·  644 excluded  ·  0 unknown     │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+When expanded:
+┌────────────────────────────────────────────────────────────────┐
+│  ZIP Intake                                          [▼ Details]│
+├────────────────────────────────────────────────────────────────┤
+│  Sub-steps:                                                    │
+│  ✓ Extract archive          2.1s                              │
+│  ✓ Classify files           3.4s                              │
+│  ✓ Security scan            0.8s                              │
+│  ✓ Index for analysis       1.2s                              │
+├────────────────────────────────────────────────────────────────┤
+│  Included (203)                                                │
+│  src/components/  ·  src/services/  ·  package.json  ·  ...   │
+│  [Show all 203 →]                                              │
+├────────────────────────────────────────────────────────────────┤
+│  Excluded (644)                                                │
+│  node_modules/  ·  .git/  ·  dist/  ·  build/  ·  ...         │
+│  [Show all 644 →]                                              │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 3.6 Active Agent Indicator
+
+**Shown at top of agents page when a run is live:**
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ⟳  Understanding Agent is analyzing your application...       │
+│     Reading requirements → Scanning codebase → Synthesizing    │
+└────────────────────────────────────────────────────────────────┘
+
+Background: teal-50 (#F0FDFA)
+Border-left: 3px solid teal-600
+Animation: subtle pulse on the ⟳ icon
+```
+
+---
+
+## Part 4: Autoscroll Behavior Specification
+
+```
+TRIGGER MAP:
+
+Event                          →  Scroll Target
+─────────────────────────────────────────────────
+Docs upload success            →  ZIP upload zone
+ZIP upload success             →  ZIP intake progress section
+ZIP intake complete            →  Understanding CTA / start button
+Understanding start clicked    →  Understanding output section
+Understanding complete         →  Understanding result card
+
+GUARD RULES:
+1. Each trigger fires exactly ONCE per lifecycle event
+2. Track triggered state in a ref: const scrolledFor = useRef<Set<string>>(new Set())
+3. Check: if (scrolledFor.current.has(eventKey)) return;
+4. Then: scrolledFor.current.add(eventKey); scrollTo(target);
+5. Use smooth scroll: element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+6. Offset: add ~80px top margin to account for fixed nav bar
+
+IMPLEMENTATION (React):
+const scrollTo = (refEl: React.RefObject<HTMLElement>) => {
+  if (!refEl.current) return;
+  const top = refEl.current.getBoundingClientRect().top
+    + window.scrollY
+    - 90; // nav height offset
+  window.scrollTo({ top, behavior: 'smooth' });
+};
+```
+
+---
+
+## Part 5: Understanding Agent JSON Fix
+
+### Root Cause
+
+```
+PROBLEM:
+Gemini (and sometimes GPT-4o) wraps JSON in markdown fences:
+
+```json
+{
+  "summary": "...",
+  ...
+}
+```
+
+The current parser calls json.loads() directly on the raw string.
+This fails immediately because the string starts with ` ```json `
+not with `{`.
+
+SECONDARY PROBLEM:
+Some responses are truncated mid-JSON when the model hits
+its output token limit. This causes a partial valid structure
+that json.loads() also rejects.
+```
+
+### The Fix (Three-Layer Parser)
+
+```python
+# backend/src/services/llm_service.py
+# Add this function — use it everywhere json.loads is called on model output
+
+import json
+import re
+
+def parse_model_json(raw: str, context_label: str = "model") -> dict:
+    """
+    Three-layer JSON parser for LLM output.
+    
+    Layer 1: Direct parse (clean JSON)
+    Layer 2: Strip markdown fences, then parse
+    Layer 3: Minimal safe repair, then parse
+    Layer 4: Fail-fast with rich diagnostics
+    
+    NEVER returns fake/deterministic content on failure.
+    ALWAYS raises ParseError with structured diagnostics.
+    """
+    if not raw or not raw.strip():
+        raise ModelJSONParseError(
+            stage="empty_response",
+            raw_preview="",
+            message="Model returned empty response.",
+            repairable=False,
+        )
+
+    # ── Layer 1: Direct parse ─────────────────────────
+    stripped = raw.strip()
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass  # Continue to Layer 2
+
+    # ── Layer 2: Strip markdown fences ───────────────
+    fence_pattern = r'^```(?:json)?\s*\n?(.*?)\n?```\s*$'
+    fence_match = re.match(fence_pattern, stripped, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        inner = fence_match.group(1).strip()
+        try:
+            return json.loads(inner)
+        except json.JSONDecodeError:
+            stripped = inner  # Use the extracted content for Layer 3
+
+    # Also handle inline fences without newlines
+    if stripped.startswith('```'):
+        lines = stripped.split('\n')
+        # Remove first line (```json or ```) and last line (```)
+        if lines[-1].strip() == '```':
+            inner = '\n'.join(lines[1:-1]).strip()
+        else:
+            inner = '\n'.join(lines[1:]).strip()
+        try:
+            return json.loads(inner)
+        except json.JSONDecodeError:
+            stripped = inner
+
+    # ── Layer 3: Safe minimal repair ─────────────────
+    # Only attempt repair for clearly truncated responses
+    repaired = _attempt_safe_repair(stripped)
+    if repaired:
+        try:
+            parsed = json.loads(repaired)
+            # Log that repair was used (for provenance tracking)
+            import logging
+            logging.warning(
+                f"[{context_label}] JSON repair was applied. "
+                f"Original length: {len(raw)}, Repaired: {len(repaired)}"
+            )
+            return parsed
+        except json.JSONDecodeError:
+            pass
+
+    # ── Layer 4: Fail-fast with rich diagnostics ──────
+    preview = raw[:300].replace('\n', ' ').strip()
+    is_truncated = _looks_truncated(stripped)
+
+    raise ModelJSONParseError(
+        stage="parse_failed",
+        raw_preview=preview,
+        message=(
+            "Model returned response that could not be parsed as valid JSON. "
+            + ("Response appears truncated (token limit likely reached). "
+               if is_truncated else "")
+        ),
+        repairable=False,
+        truncated=is_truncated,
+    )
+
+
+def _attempt_safe_repair(s: str) -> str | None:
+    """
+    Only attempt repair for truncated JSON.
+    Do NOT attempt repair for structurally wrong responses.
+    """
+    if not _looks_truncated(s):
+        return None  # Only repair truncation, not garbage
+
+    # Count open/close braces and brackets
+    open_braces = s.count('{') - s.count('}')
+    open_brackets = s.count('[') - s.count(']')
+
+    # Only repair if we just need closing chars (simple truncation)
+    if open_braces < 0 or open_brackets < 0:
+        return None  # Structurally inverted — not safe to repair
+
+    if open_braces > 5 or open_brackets > 5:
+        return None  # Too deeply truncated — repair would be fabrication
+
+    # Close any open string (only if last char suggests mid-string)
+    repaired = s.rstrip()
+    if repaired and repaired[-1] not in ('}', ']', '"', ','):
+        # Remove the dangling partial value
+        last_complete = max(
+            repaired.rfind(','),
+            repaired.rfind('{'),
+            repaired.rfind('['),
+        )
+        if last_complete > 0:
+            repaired = repaired[:last_complete].rstrip().rstrip(',')
+
+    # Close brackets then braces
+    repaired += ']' * open_brackets
+    repaired += '}' * open_braces
+
+    return repaired
+
+
+def _looks_truncated(s: str) -> bool:
+    """
+    Heuristic: does this look like a truncated JSON stream?
+    """
+    s = s.strip()
+    if not s:
+        return False
+    last_char = s[-1]
+    # Truncated responses usually end mid-string or mid-value
+    return last_char not in ('}', ']')
+
+
+class ModelJSONParseError(Exception):
+    def __init__(
+        self,
+        stage: str,
+        raw_preview: str,
+        message: str,
+        repairable: bool = False,
+        truncated: bool = False,
+    ):
+        self.stage = stage
+        self.raw_preview = raw_preview
+        self.message = message
+        self.repairable = repairable
+        self.truncated = truncated
+        super().__init__(message)
+```
+
+### Integration in understanding_agent.py
+
+```python
+# In understanding_agent.py — replace current json.loads calls
+
+# BEFORE (fragile):
+result = json.loads(raw_response)
+
+# AFTER (robust):
+from ..services.llm_service import parse_model_json, ModelJSONParseError
+
+try:
+    result = parse_model_json(raw_response, context_label="understanding_agent")
+except ModelJSONParseError as e:
+    return UnderstandingResult(
+        status="failed",
+        error_code="invalid_model_json",
+        error_details={
+            "stage": e.stage,
+            "truncated": e.truncated,
+            "raw_preview": e.raw_preview,
+            "provider": provider_used,
+            "actionable_message": e.message,
+            "retry_guidance": (
+                "Try switching to a model with larger output token limit."
+                if e.truncated
+                else "Model returned non-JSON content. Check prompt instructions."
+            ),
+        }
+    )
+```
+
+### Prompt Hardening (Prevent Fence Wrapping)
+
+```python
+# Add this instruction to every LLM prompt that expects JSON
+
+JSON_INSTRUCTION = """
+CRITICAL INSTRUCTIONS FOR YOUR RESPONSE:
+- Respond with ONLY a valid JSON object.
+- Do NOT wrap your response in markdown code fences (no ```json or ```).
+- Do NOT include any text before or after the JSON object.
+- The first character of your response MUST be {
+- The last character of your response MUST be }
+- Ensure your response is complete and not truncated.
+"""
+
+# Add this at the END of every prompt before sending to model
+prompt = f"{base_prompt}\n\n{JSON_INSTRUCTION}"
+```
+
+---
+
+## Part 6: Subheading Options (Full Discussion)
+
+### Option 1: Autonomous Quality Execution Platform
+```
+Tone: Technical, confident, direct
+Works for: Engineering teams, QA leads
+Risk: Slightly abstract for non-technical stakeholders
+```
+
+### Option 2: AI-Powered Quality Engineering for Teams That Ship
+```
+Tone: Product, benefit-led, modern
+Works for: Product managers, mixed audiences
+Risk: A bit long for a subheading
+```
+
+### Option 3: From Requirements to Validated Quality — Automatically
+```
+Tone: Process-oriented, outcome-focused
+Works for: QA/program managers
+Risk: Reads like a tagline more than a descriptor
+```
+
+### Option 4: Intelligent Testing from Requirements to Report
+```
+Tone: Clear, functional, no jargon
+Works for: All audiences
+Risk: None. Clean and honest.
+```
+
+### Option 5: Requirement-Aware. Agent-Driven. Evidence-Backed.
+```
+Tone: Premium, punchy, three-pillar structure
+Works for: Presentations, landing pages
+Risk: Slightly marketing-heavy for a dashboard
+```
+
+### Option 6: Quality Intelligence for Every Release
+```
+Tone: Simple, executive, repeatable
+Works for: Stakeholders, dashboards
+Risk: Could be any product tagline
+```
+
+**My recommendation for the nav bar subheading:**
+
+Use **Option 4** for the dashboard subheading (functional, reads at a glance).
+
+Save **Option 5** for any future landing page or pitch deck.
+
+---
+
+## Part 7: Agent Progress Display (Left Area Removed)
+
+Since we removed the left sidebar, the agent progress now lives **inside the main content area** as vertical cards that expand as each agent works.
+
+```
+AGENTS PAGE (when run is active)
+
+┌─────────────────────────────────────────────────────────────┐
+│  ⟳  Understanding Agent — Analyzing your application        │
+│     Step 2 of 6  ·  Started 00:42 ago                      │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  REQUIREMENT ANALYSIS                                       │
+│  ████████████████████████░░░░░░░░  74%                     │
+│                                                             │
+│  ✓  Document Reader          0.8s                          │
+│  ✓  Code Analyzer            4.2s                          │
+│  ⟳  Understanding Synthesizer  running...                  │
+│  ○  Test Generator                                         │
+│  ○  Reporter                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+When multiple agents run in future, each gets its own card stacked vertically. The active one is highlighted with a teal left border.
+
+---
+
+## Part 8: Complete Component Map
+
+```
+src/
+├── App.tsx
+│   └── Top nav + router
+│       No left sidebar. Ever.
+│
+├── components/
+│   ├── layout/
+│   │   ├── TopNav.tsx
+│   │   │   ├── QET Agent heading + subheading (left)
+│   │   │   ├── Nav links: Agents | Tools | Runs (center)
+│   │   │   └── Provider switch + theme toggle (right)
+│   │   │
+│   │   └── ProviderSwitch.tsx
+│   │       └── Compact OpenAI / Gemini toggle
+│   │
+│   ├── agents/
+│   │   ├── AgentsPage.tsx
+│   │   │   └── Orchestrates full vertical flow
+│   │   │
+│   │   ├── ActiveAgentBanner.tsx
+│   │   │   └── Shows which agent is running, pulsing indicator
+│   │   │
+│   │   ├── RunTimeline.tsx
+│   │   │   └── Horizontal step strip with state per step
+│   │   │
+│   │   ├── UploadSection.tsx
+│   │   │   ├── DocsUploadZone.tsx (large → compact)
+│   │   │   ├── ZipUploadZone.tsx (large → compact)
+│   │   │   └── FileSummaryRow.tsx (compact state with expand)
+│   │   │
+│   │   ├── ZipIntakePanel.tsx
+│   │   │   ├── Summary row (counts)
+│   │   │   └── DetailTable.tsx (behind expand)
+│   │   │
+│   │   └── AgentProgressCard.tsx
+│   │       ├── ProgressBar.tsx
+│   │       └── SubAgentChecklist.tsx
+│   │
+│   ├── understanding/
+│   │   ├── UnderstandingPanel.tsx
+│   │   │   ├── SummaryCard.tsx
+│   │   │   ├── FailDiagnosticsCard.tsx
+│   │   │   └── ProvenanceRow.tsx
+│   │   └── UnderstandingExpandable.tsx
+│   │
+│   ├── runs/
+│   │   └── RunsDashboard.tsx
+│   │
+│   └── tools/
+│       └── ToolsPage.tsx
+│           └── AISettingsPanel.tsx
+│
+├── hooks/
+│   ├── useAutoScroll.ts    ← controlled single-trigger scroll
+│   ├── useRunStatus.ts     ← polling with guard
+│   └── useFileUpload.ts
+│
+└── styles/
+    └── tokens.css          ← all design tokens, no global overrides
+```
+
+---
+
+## Part 9: Implementation Phase Order
+
+```
+PHASE 1: Token System + Nav Shell
+─────────────────────────────────
+Files: tokens.css, App.tsx, TopNav.tsx, ProviderSwitch.tsx
+Goal:  Clean top nav. No sidebar. Heading + subheading correct.
+Gate:  npm run build passes. Nav renders correctly in both themes.
+
+PHASE 2: Upload UX Overhaul
+───────────────────────────
+Files: UploadSection.tsx, DocsUploadZone.tsx, ZipUploadZone.tsx,
+       FileSummaryRow.tsx
+Goal:  Large → compact auto-shrink. Count-only default. Expand works.
+       Radius is --radius-md (NOT over-round).
+Gate:  Upload → see compact row. Click expand → see files. Click hide → gone.
+
+PHASE 3: Timeline + Active Agent Banner
+────────────────────────────────────────
+Files: RunTimeline.tsx, ActiveAgentBanner.tsx
+Goal:  Timeline always visible. Steps update on state change.
+       Banner shows when agent running.
+Gate:  Start a run → timeline step becomes active → banner appears.
+
+PHASE 4: Autoscroll
+────────────────────
+Files: useAutoScroll.ts, AgentsPage.tsx
+Goal:  Each upload success scrolls to next section.
+       Guard prevents re-trigger on re-render or polling.
+Gate:  Upload docs → page scrolls to ZIP zone.
+       Upload ZIP → scrolls to intake.
+       Start understanding → scrolls to result area.
+
+PHASE 5: ZIP Intake Panel
+──────────────────────────
+Files: ZipIntakePanel.tsx, DetailTable.tsx
+Goal:  Summary row shows counts. Expand shows sub-steps + file lists.
+Gate:  After ZIP processing: summary visible. Click Details → table appears.
+
+PHASE 6: JSON Parser Fix
+─────────────────────────
+Files: llm_service.py, understanding_agent.py
+Goal:  Fenced JSON accepted. Truncated JSON diagnosed with
+       richer error. Prompt hardened with anti-fence instruction.
+Gate:  Test with fenced JSON → parses correctly.
+       Test with truncated JSON → fails with truncated:true diagnostic.
+       Test with garbage → fails with parse_failed diagnostic.
+
+PHASE 7: Understanding UI Polish
+─────────────────────────────────
+Files: UnderstandingPanel.tsx, FailDiagnosticsCard.tsx
+Goal:  Success shows clean summary + provenance row.
+       Failure shows structured diagnostics (no red wall of text).
+Gate:  Force a failure → see clean diagnostic card with retry action.
+
+PHASE 8: Color System Polish
+─────────────────────────────
+Files: tokens.css, index.css
+Goal:  Remove all global ad-hoc overrides.
+       All colors from tokens only.
+       Light mode: full contrast, no washed out text.
+Gate:  Both themes pass readability spot check.
+```
+
+---
+
+## Part 10: Key Rules Going Forward
+
+```
+1. NO LEFT SIDEBAR
+   Ever. Navigation is top bar only.
+   If a new section is needed, it goes in main content area vertically.
+
+2. UPLOAD ZONES ARE NOT OVALS
+   Border-radius is --radius-md (10px max on upload zones).
+   No "curvy rectangle" shapes.
+
+3. FILE LISTS ARE HIDDEN BY DEFAULT
+   Default state = count only.
+   User must click expand to see file names.
+
+4. AUTOSCROLL FIRES ONCE
+   Each lifecycle event triggers scroll exactly once.
+   useRef guard prevents re-trigger.
+
+5. JSON PARSER NEVER FABRICATES
+   If fence-stripped + repair still fails → structured error.
+   No fake content. No silent success.
+
+6. COLORS FROM TOKENS ONLY
+   No inline hex values in components.
+   No global * overrides in CSS.
+   All colors via var(--token-name).
+
+7. PROVIDER SWITCH IS COMPACT
+   ~140px width. Small pill toggle.
+   Not a full button row taking up nav space.
+
+8. TIMELINE IS ALWAYS VISIBLE
+   It does not hide after a step completes.
+   It is the user's orientation anchor throughout the flow.
+```

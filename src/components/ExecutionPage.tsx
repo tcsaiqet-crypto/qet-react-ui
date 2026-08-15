@@ -413,6 +413,8 @@ export const ExecutionPage: React.FC<ExecutionPageProps> = ({ appState }) => {
           <LivePlaywrightRunner
             testCases={testCases}
             selectedCaseIds={selectedCaseIds}
+            playwrightScripts={appState?.playwright_scripts}
+            syntheticDataset={appState?.synthetic_dataset}
             onToggleSelect={(caseId) =>
               setSelectedCaseIds((prev) =>
                 prev.includes(caseId) ? prev.filter((id) => id !== caseId) : [...prev, caseId]

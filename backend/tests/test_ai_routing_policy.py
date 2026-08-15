@@ -20,9 +20,9 @@ def test_understanding_escalation_uses_next_key_before_pro_tier(monkeypatch) -> 
 
     assert text == '{"summary": "ok"}'
     assert calls == [
-        ("gemini-flash", "bad-key", 4000),
-        ("gemini-flash", "good-key", 4000),
-        ("gemini-pro", "good-key", 4000),
+        ("gemini-flash", "bad-key", 8192),
+        ("gemini-flash", "good-key", 8192),
+        ("gemini-pro", "good-key", 8192),
     ]
     assert service.last_generation["tier"] == "pro"
     assert service.last_generation["key_index"] == 0

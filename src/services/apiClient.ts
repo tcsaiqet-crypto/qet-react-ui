@@ -162,8 +162,8 @@ export async function getStatus(runId: string): Promise<StatusResponse> {
 
 export const getRunStatus = getStatus;
 
-export async function getRunFullState(runId: string): Promise<any> {
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/status`);
+export async function getRunFullState(runId: string): Promise<CreateRunResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}`);
   if (!res.ok) {
     await throwApiError(res, 'Failed to fetch run full state');
   }
