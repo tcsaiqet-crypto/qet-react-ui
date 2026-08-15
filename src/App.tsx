@@ -20,7 +20,7 @@ export const App: React.FC = () => {
   const [switchingProvider, setSwitchingProvider] = useState(false);
   const [copiedRunId, setCopiedRunId] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>('requirement_understanding');
-  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [railViewMode, setRailViewMode] = useState<RailViewMode>('understanding_focus');
   const [drawerTab, setDrawerTab] = useState<DrawerTabId>('overview');
   const scrolledEventsRef = useRef<Set<string>>(new Set());

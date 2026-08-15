@@ -55,3 +55,11 @@
    - **Hero 3 (AI Application Synthesis)**: Takes center stage for live AST traversal, DOM mapping, and 15-point checklist gap scoring.
 5. **Bidirectional Deep-Linking**: Clicking any subagent, AST component, or 15-point checklist matrix item anywhere in the UI must deep-link directly to that item in the Right Drawer's respective tab.
 6. **Isolated Stage Retry with Cascading Safety**: Any stage-level retry triggered from the Left Rail or Drawer must clearly notify the user of downstream invalidation before clearing dependent artifacts.
+
+---
+
+## Article VII: Observability, Console Logging & File Parity (Spec-Kit 015)
+1. **Context-Scoped Execution Logging**: All sequential pipeline operations and individual agent runs must execute within an active `log_run_context(run_id)` context manager, guaranteeing that all output is persisted to `temp/run_{run_id}.log`.
+2. **Dual-Pane Observability Separation**: The UI must maintain distinct streams for Frontend UI Action Events (`uiLogs`) and Backend System/Agent Execution Logs (`backendLogs`).
+3. **Interactive Console Log Drawer**: A dedicated console log drawer must provide severity filtering (`All Levels`, `Info`, `Status`, `Error`), real-time search with `<mark>` keyword highlighting, auto-scroll to matching terms, and 1-click log file download.
+4. **Secret Sanitization**: No credentials, API keys, or raw bearer tokens may be written to disk or streamed to client consoles without prior transformation by `SanitizedFormatter`.

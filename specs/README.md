@@ -22,6 +22,7 @@ This directory houses the comprehensive Spec-Kit documentation (specifications, 
 | [`012`](file:///c:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/012-progressive-agent-pipeline/README.md) | **Progressive Agent Pipeline (5 Phases)** | End-to-end 5-phase agent architecture: Phase 1 Understanding, Phase 2 Test Cases (5 types), Phase 3 Dual Synthetic Data, Phase 4 Playwright Package, Phase 5 Execution & Reporting. |
 | [`013`](file:///c:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/013-live-playwright-execution-and-ai-intelligence/spec.md) | **Live Playwright Execution, Controls & AI Intelligence** | Pause/Resume/Stop controls, dedicated test scripts per case, headed desktop runner, positive & negative screenshot capture, 3-tier multi-level JSON diagnostics, and AI test intelligence & script auto-healing. |
 | [`014`](file:///c:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/014-left-rail-interactive-drawer-and-staged-understanding/README.md) | **Left Rail Interactive Navigation, Right Drawer & Staged Understanding UX** | Interactive Left-Rail agent selection, right-side collapsible inspector window/drawer (Inputs, Logs, Artifacts, Actions), 3-agent staged understanding progression, and deep-linked AST/checklist exploration. |
+| [`015`](file:///c:/Users/AkshatSinha/Documents/avd/qet-react-ui/specs/015-main-branch-and-log-gap-analysis/README.md) | **Main Branch & Log Gap Analysis** | Comprehensive retrospective gap analysis evaluating all 18 platform capabilities from git commit logs, PRs, and Spec-Kits. |
 
 ---
 
