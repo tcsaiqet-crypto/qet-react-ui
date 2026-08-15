@@ -1,0 +1,225 @@
+{
+  "health_check": {
+    "status": 200,
+    "data": {
+      "status": "ok",
+      "service": "QET FastAPI Runtime Layer"
+    }
+  },
+  "models_discovery": {
+    "status": 200,
+    "data": {
+      "active_provider": "gemini",
+      "active_model": "gemini-3.7-flash-medium",
+      "models": [
+        {
+          "id": "gemini-3.7-flash-medium",
+          "name": "Gemini 3.7 Flash (Medium)",
+          "provider": "gemini",
+          "thinking_tier": "medium",
+          "thinking_budget_tokens": 4096,
+          "latency_estimate": "~2.9s",
+          "recommended_for": "Balanced understanding, test cases, and synthetic data generation",
+          "is_default": true,
+          "is_available": true
+        },
+        {
+          "id": "gemini-3.7-flash-low",
+          "name": "Gemini 3.7 Flash (Low)",
+          "provider": "gemini",
+          "thinking_tier": "low",
+          "thinking_budget_tokens": 1024,
+          "latency_estimate": "~1.9s",
+          "recommended_for": "Ultra-fast AST parsing and requirement categorization",
+          "is_default": false,
+          "is_available": true
+        },
+        {
+          "id": "gemini-3.7-flash-high",
+          "name": "Gemini 3.7 Flash (High)",
+          "provider": "gemini",
+          "thinking_tier": "high",
+          "thinking_budget_tokens": 8192,
+          "latency_estimate": "~4.7s",
+          "recommended_for": "Deep reasoning, Playwright code synthesis, self-correction",
+          "is_default": false,
+          "is_available": true
+        },
+        {
+          "id": "gemini-3.1-flash-lite",
+          "name": "Gemini 3.1 Flash Lite",
+          "provider": "gemini",
+          "thinking_tier": "low",
+          "latency_estimate": "~1.9s",
+          "recommended_for": "Fast lightweight tasks",
+          "is_default": false,
+          "is_available": true
+        },
+        {
+          "id": "gpt-4o-mini",
+          "name": "OpenAI GPT-4o-mini",
+          "provider": "gpt",
+          "latency_estimate": "~2.5s",
+          "recommended_for": "Cross-provider fallback",
+          "is_default": false,
+          "is_available": true
+        }
+      ]
+    }
+  },
+  "create_run": {
+    "status": 200,
+    "run_id": "RUN-20260815-120147-527425"
+  },
+  "upload_document": {
+    "status": 200,
+    "data": {
+      "uploaded_count": 1,
+      "files": [
+        "payment_specs.md"
+      ]
+    }
+  },
+  "upload_codebase": {
+    "status": 200,
+    "data": {
+      "intake_manifest": {
+        "upload_id": "RUN-20260815-120147-527425",
+        "zip_filename": "codebase.zip",
+        "extracted_path": "uploads\\RUN-20260815-120147-527425",
+        "total_files": 2,
+        "total_size_bytes": 167,
+        "files": [
+          {
+            "rel_path": "src/App.tsx",
+            "size_bytes": 124,
+            "extension": ".tsx",
+            "is_binary": false
+          },
+          {
+            "rel_path": "package.json",
+            "size_bytes": 43,
+            "extension": ".json",
+            "is_binary": false
+          }
+        ],
+        "doc_files": [
+          "payment_specs.md"
+        ],
+        "excluded_file_count": 0,
+        "created_at": "2026-08-13T14:00:00Z"
+      },
+      "state": {
+        "run_id": "RUN-20260815-120147-527425",
+        "project_name": "CFA Digital Journey",
+        "intake_manifest": {
+          "upload_id": "RUN-20260815-120147-527425",
+          "zip_filename": "codebase.zip",
+          "extracted_path": "uploads\\RUN-20260815-120147-527425",
+          "total_files": 2,
+          "total_size_bytes": 167,
+          "files": [
+            {
+              "rel_path": "src/App.tsx",
+              "size_bytes": 124,
+              "extension": ".tsx",
+              "is_binary": false
+            },
+            {
+              "rel_path": "package.json",
+              "size_bytes": 43,
+              "extension": ".json",
+              "is_binary": false
+            }
+          ],
+          "doc_files": [
+            "payment_specs.md"
+          ],
+          "excluded_file_count": 0,
+          "created_at": "2026-08-13T14:00:00Z"
+        },
+        "understanding": null,
+        "test_suite": null,
+        "synthetic_dataset": null,
+        "playwright_scripts": [],
+        "last_execution_result": null,
+        "accessibility_report": null,
+        "latest_report": null,
+        "errors": [],
+        "stage_timestamps": {
+          "created_at": "2026-08-15T12:01:47.361622+00:00",
+          "uploading": "2026-08-15T12:01:47.405354+00:00",
+          "processing_zip": "2026-08-15T12:01:47.431542+00:00",
+          "indexing": "2026-08-15T12:01:47.468867+00:00"
+        },
+        "stage_validation": {},
+        "stage_provenance": {},
+        "launcher_state": {
+          "zip_processing": {
+            "total_members": 2,
+            "included_count": 2,
+            "excluded_count": 0,
+            "reviewed_by_ai_count": 0,
+            "current_step": "ready_for_extraction",
+            "decisions": [
+              {
+                "rel_path": "src/App.tsx",
+                "extension": ".tsx",
+                "size_bytes": 124,
+                "decision": "include",
+                "reason": "known_useful_file_type",
+                "source": "rule"
+              },
+              {
+                "rel_path": "package.json",
+                "extension": ".json",
+                "size_bytes": 43,
+                "decision": "include",
+                "reason": "known_useful_file_type",
+                "source": "rule"
+              }
+            ]
+          }
+        },
+        "execution_evidence_index": {},
+        "status": "indexing",
+        "progress": 60.0,
+        "last_error": null,
+        "agent_timeline": [],
+        "subagent_timeline": [],
+        "active_agent": null,
+        "upcoming_agent": null,
+        "reset_generation": 1,
+        "upload_summary_left": null,
+        "upload_summary_right": null,
+        "pipeline_control_state": "idle",
+        "paused_stage": null,
+        "latest_multi_level_results": null,
+        "ai_test_analysis": null
+      }
+    }
+  },
+  "trigger_understanding": {
+    "status": 200,
+    "data": {
+      "status": "started",
+      "run_id": "RUN-20260815-120147-527425"
+    }
+  },
+  "coverage": {
+    "status": 200,
+    "items_count": 0
+  },
+  "backend_logs": {
+    "status": 200,
+    "size_bytes": 135,
+    "preview": "[2026-08-15 17:31:47,528] [INFO] [qet_accelerator] Executing AI-Required Understanding analysis for run RUN-20260815-120147-527425...\r\n"
+  },
+  "cancel_run": {
+    "status": 200,
+    "data": {
+      "status": "stopped",
+      "run_id": "RUN-20260815-120147-527425"
+    }
+  }
+}

@@ -10,6 +10,7 @@ import { UnderstandingPage } from './components/UnderstandingPage';
 import { ExecutionPage } from './components/ExecutionPage';
 import { AgentDetailDrawer } from './components/AgentDetailDrawer';
 import { ConsoleLogDrawer, LogEntry } from './components/ConsoleLogDrawer';
+import { RightLogsPanel } from './components/RightLogsPanel';
 import { AISettingsResponse, AppState, RailViewMode, DrawerTabId, DiscoverableModel } from './types';
 import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings, retryRun, getRunLogs, getBackendLogsDownloadUrl, cancelRun, getDiscoverableModels } from './services/apiClient';
 
@@ -499,18 +500,6 @@ export const App: React.FC = () => {
                   <Square className="h-3 w-3 fill-current" />
                   <span>Stop Run</span>
                 </button>
-
-                {/* Right Drawer Toggle Button */}
-                <button
-                  onClick={() => setIsDrawerOpen(!isDrawerOpen)}
-                  title={isDrawerOpen ? 'Close Agent Inspector Drawer' : 'Open Agent Inspector Drawer'}
-                  className={`qet-btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg cursor-pointer ${
-                    isDrawerOpen ? 'qet-badge-accent' : ''
-                  }`}
-                >
-                  {isDrawerOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-                  <span className="hidden sm:inline">{isDrawerOpen ? 'Hide Drawer' : 'Inspect Agent'}</span>
-                </button>
               </div>
 
               <button
@@ -554,10 +543,6 @@ export const App: React.FC = () => {
               <div className="min-w-0 w-full flex-1">
                 {activeTab === 'home' && (
                   <div key={activeTab} className="animate-fade-in-up space-y-6">
-                    <div className="animate-slide-down">
-                      <ActiveProcessBar appState={appState} onCancelRun={handleCancelRun} />
-                    </div>
-
                     <HomeUploadPage
                       appState={appState}
                       onRefreshStatus={() => refreshStatus()}
@@ -593,34 +578,17 @@ export const App: React.FC = () => {
                 {activeTab === 'tools' && (
                   <AISettingsPanel onSaved={setAISettings} />
                 )}
-
-                <ConsoleLogDrawer
-                  isOpen={logDrawerOpen}
-                  onToggle={() => setLogDrawerOpen(!logDrawerOpen)}
-                  frontendLogs={uiLogs}
-                  backendLogs={backendLogs}
-                  onClearFrontend={clearFrontendLogs}
-                  onDownloadFrontend={downloadFrontendLogs}
-                  onDownloadBackend={downloadBackendLogs}
-                  activeProvider={aiSettings?.active_provider || 'Unknown'}
-                  activeModel={aiSettings?.runtime_state?.model || 'Auto'}
-                />
               </div>
 
-              {/* 3. Right-Side Collapsible Inspector Drawer */}
-              <AgentDetailDrawer
-                isOpen={isDrawerOpen}
-                onClose={() => setIsDrawerOpen(false)}
-                selectedAgentId={selectedAgentId}
-                appState={appState}
-                activeTab={drawerTab}
-                onTabChange={setDrawerTab}
-                onRetryAgent={async (agentId) => {
-                  if (appState?.run_id) {
-                    await retryRun(appState.run_id, agentId as any);
-                    await refreshStatus();
-                  }
-                }}
+              {/* 3. Right-Side Live Console Logs Inspector */}
+              <RightLogsPanel
+                frontendLogs={uiLogs}
+                backendLogs={backendLogs}
+                onClearFrontend={clearFrontendLogs}
+                onDownloadFrontend={downloadFrontendLogs}
+                onDownloadBackend={downloadBackendLogs}
+                activeProvider={aiSettings?.active_provider || 'gemini'}
+                activeModel={aiSettings?.runtime_state?.model || 'gemini-3.7-flash'}
               />
             </div>
           )}

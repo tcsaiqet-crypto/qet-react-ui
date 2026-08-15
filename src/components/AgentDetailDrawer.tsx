@@ -174,7 +174,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
               </div>
               {context.inputs_summary.files && context.inputs_summary.files.length > 0 ? (
                 <div className="space-y-1.5">
-                  {context.inputs_summary.files.map((file, idx) => (
+                  {context.inputs_summary.files.map((file: any, idx: number) => (
                     <div
                       key={idx}
                       className="flex items-center justify-between p-2.5 rounded-lg border text-xs"
@@ -235,7 +235,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
                 Subagent Tasks & Progression
               </div>
               <div className="space-y-2">
-                {context.subagents.map((sub, idx) => (
+                {context.subagents.map((sub: any, idx: number) => (
                   <div
                     key={sub.subagent_id}
                     className="p-3 rounded-xl border flex items-center justify-between gap-3"
@@ -293,7 +293,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
               </div>
               <div className="p-3 rounded-xl bg-slate-950 font-mono text-[11px] text-slate-300 space-y-1 max-h-48 overflow-y-auto border border-slate-800">
                 {context.execution_logs.length > 0 ? (
-                  context.execution_logs.map((log, idx) => (
+                  context.execution_logs.map((log: any, idx: number) => (
                     <div key={idx} className="leading-relaxed">
                       <span className="text-emerald-400">&gt;</span> {log}
                     </div>
@@ -316,7 +316,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
                   15-Point Requirement Checklist
                 </div>
                 <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                  {context.artifacts_summary.checklist_evaluation.map((chk) => (
+                  {context.artifacts_summary.checklist_evaluation.map((chk: any) => (
                     <div
                       key={chk.check_id}
                       className="p-2.5 rounded-lg border text-xs space-y-1"

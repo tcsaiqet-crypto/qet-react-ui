@@ -25,6 +25,7 @@ This directory houses the comprehensive Spec-Kit documentation (specifications, 
 | [`015`](file:///d:/TcsQET/qet-react-ui/specs/015-backend-logging-context-and-cancellation-engine/README.md) | **Backend Logging Context & Pipeline Cancellation Engine** | Context-scoped logging into `temp/run_{run_id}.log`, asynchronous pipeline cancellation checks, and full REST log streaming. |
 | [`016`](file:///d:/TcsQET/qet-react-ui/specs/016-subagent-animation-rail-and-task-drawer/README.md) | **Subagent Animation Rail & Task Inspector Drawer** | Nested subagent progression, smooth auto-scroll & auto-collapse upon stage completion, one-button design rules, and right-side subagent task breakdown. |
 | [`017`](file:///d:/TcsQET/qet-react-ui/specs/017-gemini-model-discovery-and-runtime-switcher/README.md) | **Gemini Model Discovery & Runtime Model Switcher** | Dynamic Gemini model discovery (`gemini-2.5-pro`, `gemini-2.5-flash`), header switcher, and multi-key rotation fallback. |
+| [`020`](file:///d:/TcsQET/qet-react-ui/specs/020-end-to-end-testing-and-audit/SPEC_020.md) | **End-to-End Testing, UI Alignment & Issues Audit Log** | Comprehensive verification of 3-Pane UI layout, 5-stage progressive rail, Gemini 3.7 Flash thinking switcher, real-time right logs drawer, and API endpoint alias audit. |
 
 ---
 

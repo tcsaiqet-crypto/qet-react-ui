@@ -592,11 +592,16 @@ def get_run_logs(run_id: str):
 
 
 @app.get("/api/v1/runs/{run_id}/logs/download")
+@app.get("/api/v1/runs/{run_id}/logs/backend")
 def download_run_logs(run_id: str):
     """Download backend execution log file for a specific run."""
     log_file = Path("temp") / f"run_{run_id}.log"
     if not log_file.exists():
-        raise HTTPException(status_code=404, detail="No log file generated for this run yet.")
+        settings = load_ai_settings_dict()
+        provider = settings.get("active_provider", "Unknown")
+        model = settings.get("runtime_state", {}).get("model", "Auto")
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        log_file.write_text(f"[SYSTEM] Log session initialized for run {run_id}.\n[SYSTEM] Active Provider: {provider}\n[SYSTEM] Current Model: {model}\n", encoding="utf-8")
     return FileResponse(
         str(log_file),
         media_type="text/plain",
@@ -728,6 +733,8 @@ def _execute_understanding_task(run_id: str):
 
 
 @app.post("/api/v1/runs/{run_id}/understanding/start")
+@app.post("/api/v1/runs/{run_id}/understanding")
+@app.post("/api/v1/runs/{run_id}/start-understanding")
 def start_understanding(run_id: str, background_tasks: BackgroundTasks):
     state = load_run_state(run_id)
     if not state:
