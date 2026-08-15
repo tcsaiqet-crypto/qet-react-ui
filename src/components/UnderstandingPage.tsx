@@ -97,9 +97,12 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
       }, 1500);
     } catch (err: any) {
       setIsRunning(false);
+      const isFetchErr = err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError');
       setErrorDetails({
-        error_code: 'start_failed',
-        error_message: err.message || 'Could not start AI analysis.',
+        error_code: isFetchErr ? 'backend_offline' : 'start_failed',
+        error_message: isFetchErr
+          ? 'FastAPI backend server is unreachable on http://127.0.0.1:8080. Please ensure the backend is running (run restart_fastapi_app.bat).'
+          : (err.message || 'Could not start AI analysis.'),
         retryable: true
       });
     }
@@ -213,16 +216,18 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
         </div>
       </div>
 
-      {/* Error Diagnostics Surface (AI Fail-Fast Observability) */}
+      {/* Error Diagnostics Surface */}
       {(errorDetails || currentStatus === 'error') && (
         <div className="qet-badge-danger p-6 space-y-4 animate-file-item">
           <div className="flex items-start justify-between">
             <div className="flex items-center space-x-3">
               <ShieldAlert className="w-6 h-6 shrink-0" />
               <div>
-                <h3 className="text-sm font-bold">AI Stage Execution Failure (Fail-Fast Diagnostics)</h3>
+                <h3 className="text-sm font-bold">Stage Execution Error</h3>
                 <p className="text-xs mt-0.5 opacity-90">
-                  AI-Required mode active. No fabricated or fake deterministic fallback content returned.
+                  {errorDetails?.error_code === 'backend_offline'
+                    ? 'FastAPI backend server is offline or unreachable on port 8080.'
+                    : 'An error occurred during stage execution. Review the details below.'}
                 </p>
               </div>
             </div>

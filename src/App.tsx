@@ -495,10 +495,25 @@ export const App: React.FC = () => {
                 <button
                   onClick={handleCancelRun}
                   title="Stop active pipeline execution"
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-xs"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-xs cursor-pointer"
                 >
                   <Square className="h-3 w-3 fill-current" />
                   <span>Stop Run</span>
+                </button>
+
+                {/* Header Console Logs Toggle */}
+                <button
+                  onClick={() => setLogDrawerOpen(!logDrawerOpen)}
+                  title={logDrawerOpen ? "Collapse Console Logs" : "Expand Console Logs"}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  style={{
+                    backgroundColor: logDrawerOpen ? 'var(--qet-accent-subtle)' : 'var(--qet-surface-elevated)',
+                    color: logDrawerOpen ? 'var(--qet-accent)' : 'var(--qet-text-secondary)',
+                    border: '1px solid var(--qet-border)'
+                  }}
+                >
+                  <PanelRightOpen className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Logs</span>
                 </button>
               </div>
 
@@ -589,6 +604,8 @@ export const App: React.FC = () => {
                 onDownloadBackend={downloadBackendLogs}
                 activeProvider={aiSettings?.active_provider || 'gemini'}
                 activeModel={aiSettings?.runtime_state?.model || 'gemini-3.7-flash'}
+                isOpen={logDrawerOpen}
+                onToggle={() => setLogDrawerOpen(!logDrawerOpen)}
               />
             </div>
           )}
