@@ -229,11 +229,8 @@ class TestCaseAgent(BaseAgent):
                 )
             return features
 
-        return [
-            {"name": "Authentication", "area": "Authentication", "selectors": ["[data-testid='username-input']", "[data-testid='login-button']"], "description": "User authentication flow.", "component_id": "comp_auth"},
-            {"name": "Applicant Information", "area": "Applicant Info", "selectors": ["[data-testid='fullname-input']", "[data-testid='ssn-input']", "[data-testid='submit-app-button']"], "description": "Applicant information capture flow.", "component_id": "comp_info"},
-            {"name": "Document Upload", "area": "Document Upload", "selectors": ["[data-testid='document-upload-input']", "[data-testid='documents-table']"], "description": "Document attachment flow.", "component_id": "comp_docs"},
-        ]
+        # No upstream components means no evidence; sample features must never be invented.
+        return []
 
     def _build_case(
         self,
