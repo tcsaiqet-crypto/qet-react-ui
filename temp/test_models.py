@@ -123,11 +123,10 @@ test_configs = [
     ("gemini-3.7-flash", 1024, "Gemini 3.7 Flash (Low Thinking)"),
     ("gemini-3.7-flash", 4096, "Gemini 3.7 Flash (Medium Thinking)"),
     ("gemini-3.7-flash", 8192, "Gemini 3.7 Flash (High Thinking)"),
-    ("gemini-2.5-pro", None, "Gemini 2.5 Pro"),
+    ("gemini-3.6-flash", None, "Gemini 3.6 Flash"),
+    ("gemini-3.5-flash", None, "Gemini 3.5 Flash"),
+    ("gemini-3.1-flash-lite", None, "Gemini 3.1 Flash Lite"),
     ("gemini-2.5-flash", None, "Gemini 2.5 Flash"),
-    ("gemini-2.0-flash", None, "Gemini 2.0 Flash"),
-    ("gemini-1.5-pro", None, "Gemini 1.5 Pro"),
-    ("gemini-1.5-flash", None, "Gemini 1.5 Flash"),
 ]
 
 results_table = []
