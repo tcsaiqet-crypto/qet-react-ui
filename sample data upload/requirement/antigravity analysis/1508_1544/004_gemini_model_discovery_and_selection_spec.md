@@ -1,36 +1,46 @@
-# 004 Gemini Model Discovery and Selection Specification
+# 004 Gemini 3.7 Flash Discovery & Reasoning Tier Specification
 
 **Date**: 2026-08-15  
-**Timestamp**: 15:44  
-**Target Scope**: Model Selection Controls, Dynamic Gemini Model Discovery, API Key Rotation, Provider Fallbacks  
+**Timestamp**: 15:44 / 16:13 Update  
+**Target Scope**: Model Selection, Gemini 3.7 Flash (Low / Medium / High) Thinking Tiers, Runtime Key Rotation  
 
 ---
 
-## 1. Overview
+## 1. Overview & Flagship Model Strategy
 
-To provide maximum flexibility and reliable model execution across different workloads (requirement parsing vs code generation vs self-correction), the application requires dynamic **Gemini Model Discovery** and a **Runtime Model Selector**.
+The platform standardizes on **Gemini 3.7 Flash** as the default flagship foundation model, leveraging its hybrid thinking budget architecture to tailor reasoning depth to each pipeline phase:
+
+1. **Gemini 3.7 Flash (Low)**:
+   - **Thinking Budget**: ~1,024 tokens.
+   - **Characteristics**: Low latency (~1.5s), immediate response.
+   - **Agents**: Fast AST parsing, intake manifest extraction, UI label verification.
+
+2. **Gemini 3.7 Flash (Medium)** [Default]:
+   - **Thinking Budget**: ~4,096 tokens.
+   - **Characteristics**: Balanced deliberate reasoning (~3-5s).
+   - **Agents**: Requirement understanding, 5-category test case synthesis, synthetic test dataset generation.
+
+3. **Gemini 3.7 Flash (High)**:
+   - **Thinking Budget**: ~16,384 tokens.
+   - **Characteristics**: Deep step-by-step reasoning (~8-12s).
+   - **Agents**: Playwright script code generation, complex assertions, execution failure root cause diagnostics, and auto-healing repair.
 
 ---
 
 ## 2. Dynamic Model Discovery Engine
 
 ### A. API Endpoints & Discovery Heuristics
-* Backend endpoint `GET /api/v1/ai/models` returns all available providers and discoverable models.
-* Supported Gemini Models:
-  - `gemini-2.5-pro` (Recommended for complex reasoning & code generation)
-  - `gemini-2.5-flash` (Recommended for fast doc parsing & requirement categorization)
-  - `gemini-1.5-pro` (High context window fallback)
-  - `gemini-1.5-flash` (Ultra-low latency fallback)
+* Backend endpoint `GET /api/v1/ai/models` queries available API keys and provides candidate tiers:
+  - `gemini-3.7-flash-high` (`Gemini 3.7 Flash (High)`)
+  - `gemini-3.7-flash-medium` (`Gemini 3.7 Flash (Medium)`)
+  - `gemini-3.7-flash-low` (`Gemini 3.7 Flash (Low)`)
+  - `gpt-4o-mini` (`OpenAI GPT-4o-mini`)
 
-### B. UI Integration (Header & Settings Panel)
-1. **Header Toolbar Switcher**: A sleek dropdown in the application header or toolbar allowing users to switch models at runtime (`gemini-2.5-pro`, `gemini-2.5-flash`, `gpt-4o`, etc.).
-2. **AI Settings Panel (`AISettingsPanel.tsx`)**:
-   - Model Discovery button ("Discover Models") that tests API key connectivity and populates active available models.
-   - Provider priority selector (Gemini Primary -> OpenAI Secondary -> Mock Fallback).
-   - Multi-key rotation matrix visualization.
+### B. Header Model Selector
+- A top navigation bar dropdown enables instantaneous runtime switching across the 3 Gemini 3.7 Flash thinking tiers without requiring full settings page navigation.
 
 ---
 
 ## 3. Fallback & Resilience Strategy
-- **Round-Robin Multi-Key Rotation**: Automatically rotates API keys when rate-limiting (`429 Too Many Requests`) is encountered.
-- **Provider Fallback**: If Gemini rate limit persists, automatically fall back to configured secondary models or local deterministic rule engines.
+- **Round-Robin Multi-Key Rotation**: Automatically rotates configured Gemini API keys on 429 quota exhaustion.
+- **Thinking Tier Fallback**: If `High` tier experiences latency spikes or rate limits, auto-fall back to `Medium` or `Low`, followed by local AST rule generation.
