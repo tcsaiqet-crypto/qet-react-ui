@@ -1,75 +1,25 @@
-# ISS-001 · Spec — Sample Data Upload Structure
+# Specification: ISS-001 — Sample Data Upload Structure & Endpoint Robustness
 
-## User Story
-> As a QA engineer, I want to quickly load the pre-built QET CFA Digital Journey sample requirements and codebase so I can demo the system without manually uploading files every session.
+## 1. Problem Statement
+Users encountered `405 Method Not Allowed` when calling `POST /api/v1/runs/{run_id}/understanding` due to subtle route registration mismatches between the frontend client and backend FastAPI routers. Furthermore, unstructured sample data uploads suffered from inconsistent file grouping, causing downstream agents to fail during intake parsing.
 
----
+## 2. User Stories
+- **US-1**: As a QA Engineer, I want to upload PRD documents and web app ZIP archives through dual intake lanes so that they are automatically parsed and structured on disk.
+- **US-2**: As an API client or Frontend component, I want all endpoint aliases for pipeline stages (e.g. `/understanding`, `/start-understanding`) to function identically without 404/405 errors.
+- **US-3**: As a system administrator, I want ZIP extractions protected against path-traversal attacks so that malicious archives cannot escape the sandbox.
 
-## Sample Data Inventory
+## 3. Functional Requirements
+1. **Multi-Part Upload Endpoint**:
+   - `POST /api/v1/runs/upload`: Accepts `documents` (List[UploadFile]), `codebase` (UploadFile/List[UploadFile]), and optional `run_id`.
+   - Returns `{ "run_id": str, "documents": List[str], "codebase_files": List[str], "status": "READY" }`.
+2. **Endpoint Alias Decorators**:
+   - FastApi route handlers must register both standard and legacy path routes.
+3. **Directory Quarantine & Validation**:
+   - Files are stored in isolated workspace: `workspace/{run_id}/documents/` and `workspace/{run_id}/codebase/`.
+   - Sanitized filenames prevent overwriting system files.
 
-### Requirement Documents (8 Files)
-Located at: `d:\TcsQET\qet-react-ui\sample data upload\requirement\`
-
-| File | Purpose | Maps To Test Context |
-| --- | --- | --- |
-| `agentspec.txt` | QET agent behavior specification | AI Agent test generation context |
-| `analysis chatting with ai.txt` | Full AI conversation analysis | Requirement coverage baseline |
-| `datamodel.txt` | Data model / entity relationship spec | Data integrity test cases |
-| `designdoc.txt` | UI/UX design specification doc | UI component test coverage |
-| `knowledgebase.txt` | Domain knowledge reference | Boundary & edge case definitions |
-| `requirement1.txt` | Core CFA functional requirements | Positive & negative test case source |
-| `sessionlog.txt` | Implementation session decisions | Architecture context |
-| `uilabelling.txt` | UI element naming & labelling guide | DOM selector strategy for Playwright |
-
-### Codebase Archive
-- **File**: `D:\TcsQET\QET CFA.zip`
-- **Size**: 252 KB (163 files after extraction)
-- **Key Components**:
-  - `QET CFA/cfa-digital-journey/app.py` — Main Streamlit app
-  - `QET CFA/cfa-digital-journey/agents/` — AI agent crew
-  - `QET CFA/cfa-digital-journey/components/` — UI components
-  - `QET CFA/cfa-digital-journey/services/` — Profile, KYC, eligibility, payment services
-  - `QET CFA/cfa-digital-journey/data/` — SQLite DB schema
-  - React login/form/document components in `src/pages/`
-
----
-
-## API Endpoint Spec
-
-### `POST /api/v1/runs/{run_id}/load-sample-data`
-
-**Request Body:**
-```json
-{
-  "sample_id": "qet-cfa-v1",
-  "include_documents": true,
-  "include_codebase": true
-}
-```
-
-**Response:**
-```json
-{
-  "run_id": "RUN-...",
-  "loaded_documents": ["agentspec.txt", "designdoc.txt", "..."],
-  "loaded_codebase": "QET CFA.zip",
-  "intake_manifest": { ... }
-}
-```
-
----
-
-## UI Component Spec
-
-### Sample Data Selector Modal
-```
-┌─ Load Sample Data ─────────────────────────────────────┐
-│  ● QET CFA Digital Journey (Recommended)               │
-│    8 requirement docs · QET CFA.zip (163 files)        │
-│    [Load Both] [Load Docs Only] [Load ZIP Only]        │
-│                                                        │
-│  ○ Simple CFA Sample (4 files stub)                    │
-│    3 React components · cfa_digital_journey_sample.zip │
-│    [Load Both]                                         │
-└────────────────────────────────────────────────────────┘
-```
+## 4. Acceptance Criteria
+- [x] Uploading a `.zip` archive extracts all files strictly under `workspace/{run_id}/codebase/`.
+- [x] Calling `POST /api/v1/runs/{run_id}/understanding` returns HTTP 200 with understanding task initiation.
+- [x] Calling `POST /api/v1/runs/{run_id}/start-understanding` returns identical HTTP 200 payload.
+- [x] Real-time file upload events are logged in frontend state and backend run log.
