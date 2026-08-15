@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CFA AI-Powered Quality Engineering Platform — Master PPT Slide</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+    }
+    .slide-wrapper {
+      width: 1333px; /* 16:9 Aspect Ratio Presentation Slide width */
+      height: 750px;
+      background: #FFFFFF;
+      border: 2px solid #E2E8F0;
+      border-radius: 12px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    /* HEADER */
+    .slide-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #F1F5F9;
+      padding-bottom: 10px;
+    }
+    .brand-box {
+      background: #0F172A;
+      color: #FFFFFF;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+    .title-center {
+      text-align: center;
+    }
+    .main-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #1E3A8A;
+      letter-spacing: 0.5px;
+    }
+    .sub-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #D97706;
+      margin-top: 2px;
+    }
+    .tag-line {
+      font-size: 0.65rem;
+      color: #64748B;
+    }
+
+    /* STEPPER RAIL */
+    .stepper-row {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+    }
+    .step-badge {
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      border-radius: 6px;
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .step-num {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #2563EB; color: #FFFFFF;
+      font-size: 0.65rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .step-text strong { display: block; font-size: 0.65rem; color: #1E40AF; }
+    .step-text span { font-size: 0.55rem; color: #475569; }
+
+    /* CONTENT GRID */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 12px;
+      flex-grow: 1;
+    }
+    .inputs-box {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .box-head {
+      font-size: 0.7rem; font-weight: 800; color: #475569;
+      text-transform: uppercase; margin-bottom: 8px;
+      border-bottom: 1px solid #CBD5E1; padding-bottom: 4px;
+    }
+    .input-item {
+      font-size: 0.62rem; font-weight: 600; color: #334155;
+      padding: 4px 6px; background: #FFFFFF; border: 1px solid #E2E8F0;
+      border-radius: 4px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;
+    }
+
+    .pillars-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      flex-grow: 1;
+    }
+    .pillar-col {
+      background: #FFFFFF;
+      border-radius: 8px;
+      border: 1px solid #E2E8F0;
+      padding: 8px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .pillar-col.qet { border-top: 3px solid #2563EB; }
+    .pillar-col.agentic { border-top: 3px solid #059669; }
+    .pillar-col.ai { border-top: 3px solid #7C3AED; }
+
+    .pillar-head {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.75rem; font-weight: 800; padding: 4px 6px; border-radius: 4px;
+    }
+    .qet .pillar-head { background: #EFF6FF; color: #1E40AF; }
+    .agentic .pillar-head { background: #ECFDF5; color: #065F46; }
+    .ai .pillar-head { background: #F5F3FF; color: #5B21B6; }
+
+    .agent-card {
+      background: #F8FAFC; border: 1px solid #F1F5F9;
+      border-radius: 4px; padding: 5px 6px;
+    }
+    .agent-name { font-size: 0.63rem; font-weight: 700; color: #0F172A; }
+    .agent-bullets { font-size: 0.55rem; color: #475569; padding-left: 12px; margin-top: 2px; }
+
+    /* KNOWLEDGE GRAPH BAR */
+    .kg-bar {
+      background: #F1F5F9; border: 1px solid #CBD5E1; border-radius: 6px;
+      padding: 6px 12px; display: flex; align-items: center; justify-content: space-around;
+      font-size: 0.6rem; font-weight: 700; color: #334155;
+    }
+
+    /* FOOTERS */
+    .outcomes-row {
+      background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 6px;
+      padding: 6px 12px; display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.6rem; font-weight: 700; color: #92400E;
+    }
+    .gov-bar {
+      background: #0F172A; border-radius: 6px; padding: 6px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.6rem; font-weight: 600; color: #94A3B8;
+    }
+    .gov-bar span { color: #38BDF8; }
+  </style>
+</head>
+<body>
+
+<div class="slide-wrapper">
+
+  <!-- HEADER -->
+  <div class="slide-header">
+    <div class="brand-box" style="background: #1E3A8A;">CFA Institute</div>
+    <div class="title-center">
+      <div class="main-title">CFA AI-POWERED QUALITY ENGINEERING PLATFORM</div>
+      <div class="sub-title">QET Platform &nbsp;|&nbsp; Agentic Testing Platform &nbsp;|&nbsp; AI Test Automation Framework</div>
+      <div class="tag-line">Continuous Quality Assurance Across the Enterprise Application Lifecycle</div>
+    </div>
+    <div class="brand-box" style="background: #5B21B6;">TCS AI</div>
+  </div>
+
+  <!-- STEPPER -->
+  <div class="stepper-row">
+    <div class="step-badge">
+      <div class="step-num">1</div>
+      <div class="step-text"><strong>DISCOVER</strong><span>Business Needs</span></div>
+    </div>
+    <div class="step-badge">
+      <div class="step-num">2</div>
+      <div class="step-text"><strong>ANALYZE</strong><span>Identify Gaps</span></div>
+    </div>
+    <div class="step-badge">
+      <div class="step-num">3</div>
+      <div class="step-text"><strong>DESIGN</strong><span>Test Strategy</span></div>
+    </div>
+    <div class="step-badge">
+      <div class="step-num">4</div>
+      <div class="step-text"><strong>AUTOMATE</strong><span>Prepare Data</span></div>
+    </div>
+    <div class="step-badge">
+      <div class="step-num">5</div>
+      <div class="step-text"><strong>EXECUTE</strong><span>Collect Results</span></div>
+    </div>
+    <div class="step-badge">
+      <div class="step-num">6</div>
+      <div class="step-text"><strong>OPTIMIZE</strong><span>Improve Quality</span></div>
+    </div>
+  </div>
+
+  <!-- CONTENT GRID -->
+  <div class="content-grid">
+    
+    <!-- LEFT INPUTS -->
+    <div class="inputs-box">
+      <div class="box-head">📥 INPUTS</div>
+      <div class="input-item">📄 Business Requirements</div>
+      <div class="input-item">💻 Source Code & PRs</div>
+      <div class="input-item">⚡ APIs & OpenAPI Specs</div>
+      <div class="input-item">☁️ Salesforce Metadata</div>
+      <div class="input-item">🧪 Existing Test Assets</div>
+      <div class="input-item">🪲 Defects & Reports</div>
+    </div>
+
+    <!-- 3 PILLARS -->
+    <div class="pillars-container">
+      <div class="pillars-grid">
+        
+        <!-- QET PLATFORM -->
+        <div class="pillar-col qet">
+          <div class="pillar-head">🧠 QET PLATFORM</div>
+          
+          <div class="agent-card">
+            <div class="agent-name">Requirement Analysis</div>
+            <ul class="agent-bullets">
+              <li>Converts stories to Gherkin specs</li>
+              <li>Saves 60% discovery effort</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">Gap Analysis</div>
+            <ul class="agent-bullets">
+              <li>Detects unmapped edge cases</li>
+              <li>Prevents defect leakage early</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">Traceability Matrix</div>
+            <ul class="agent-bullets">
+              <li>Bi-directional mapping: Reqs ↔ Tests ↔ Code</li>
+              <li>Instant audit reporting</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">Test Design</div>
+            <ul class="agent-bullets">
+              <li>Boundary & workflow test scenario synthesis</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- AGENTIC TESTING -->
+        <div class="pillar-col agentic">
+          <div class="pillar-head">🤖 AGENTIC TESTING PLATFORM</div>
+          
+          <div class="agent-card">
+            <div class="agent-name">UI Testing Agent</div>
+            <ul class="agent-bullets">
+              <li>Autonomous DOM navigation</li>
+              <li>Visual alignment auditing</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">API Testing Agent</div>
+            <ul class="agent-bullets">
+              <li>REST/GraphQL assertions</li>
+              <li>Negative security tests</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">Performance Testing</div>
+            <ul class="agent-bullets">
+              <li>Simulates concurrent load</li>
+              <li>Latency SLA benchmarking</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">Accessibility (WCAG) & Data</div>
+            <ul class="agent-bullets">
+              <li>WCAG 2.1 AA screen reader audit</li>
+              <li>GDPR-safe synthetic test data</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- AI FRAMEWORK -->
+        <div class="pillar-col ai">
+          <div class="pillar-head">⚙️ AI TEST AUTOMATION</div>
+          
+          <div class="agent-card">
+            <div class="agent-name">Playwright Engine</div>
+            <ul class="agent-bullets">
+              <li>Production TypeScript Playwright code</li>
+              <li>Video & trace capture</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">Self-Healing Engine</div>
+            <ul class="agent-bullets">
+              <li>Auto-heals broken locators on-the-fly</li>
+              <li>Reduces maintenance by 70%</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">AI Root Cause Analysis</div>
+            <ul class="agent-bullets">
+              <li>Stack trace & log triage</li>
+              <li>Suggests developer fixes</li>
+            </ul>
+          </div>
+
+          <div class="agent-card">
+            <div class="agent-name">Release Readiness</div>
+            <ul class="agent-bullets">
+              <li>Computes AI Release Score (0-100%)</li>
+              <li>Automated Go/No-Go decision</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- KNOWLEDGE GRAPH -->
+      <div class="kg-bar">
+        <span>🌐 ENTERPRISE QUALITY KNOWLEDGE GRAPH:</span>
+        <span>Requirements ➔</span>
+        <span>Code ➔</span>
+        <span>APIs ➔</span>
+        <span>Test Assets ➔</span>
+        <span>Defects ➔</span>
+        <span>Execution Data ➔</span>
+        <span>AI Insights</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- OUTCOMES -->
+  <div class="outcomes-row">
+    <span>🎯 BUSINESS OUTCOMES:</span>
+    <span>⏱️ Faster Delivery</span>
+    <span>🤖 AI Automation</span>
+    <span>🛡️ Higher Quality</span>
+    <span>🪲 Reduced Defects</span>
+    <span>🎯 80%+ Coverage</span>
+    <span>🚀 Release Confidence</span>
+  </div>
+
+  <!-- GOVERNANCE -->
+  <div class="gov-bar">
+    <div>🔒 Security & Compliance: <span>COMPLIANT</span></div>
+    <div>🛡️ Data Privacy: <span>ENCRYPTED</span></div>
+    <div>📋 Audit Trail: <span>LOGGED</span></div>
+    <div>👥 Role Based Access: <span>ACTIVE</span></div>
+  </div>
+
+</div>
+
+</body>
+</html>

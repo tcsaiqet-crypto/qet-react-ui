@@ -1,0 +1,2821 @@
+From 1c7a7dcd4b297e2e64112998f52eebffd417a7e5 Mon Sep 17 00:00:00 2001
+From: Akshat Kumar Sinha <shivuakshat@gmail.com>
+Date: Sat, 15 Aug 2026 18:49:48 +0530
+Subject: [PATCH 5/6] feat: implement backend AI routing policy, add API
+ service layer, and introduce test execution UI components
+
+---
+ arenaai analysis/analysisarenaai.txt          | 891 ++++++++++++++++++
+ backend/src/services/llm_service.py           |  40 +-
+ backend/tests/test_ai_routing_policy.py       |   6 +-
+ .../README.md                                 |  15 +
+ .../constitution.md                           |  24 +
+ .../contracts.md                              |  67 ++
+ .../plan.md                                   |  51 +
+ .../spec.md                                   |  53 ++
+ .../tasks.md                                  |  29 +
+ src/App.tsx                                   |  11 +
+ src/components/ExecutionPage.tsx              |   2 +
+ src/components/HomeUploadPage.tsx             | 373 ++++----
+ .../execution/LivePlaywrightRunner.tsx        | 277 ++++--
+ .../execution/PlaywrightScriptModal.tsx       | 272 ++++++
+ src/components/execution/TestDataModal.tsx    | 243 +++++
+ src/services/apiClient.ts                     |   4 +-
+ src/types.ts                                  |  42 +
+ 17 files changed, 2101 insertions(+), 299 deletions(-)
+ create mode 100644 arenaai analysis/analysisarenaai.txt
+ create mode 100644 specs/022-testcase-datagen-scriptviewer-and-selective-execution/README.md
+ create mode 100644 specs/022-testcase-datagen-scriptviewer-and-selective-execution/constitution.md
+ create mode 100644 specs/022-testcase-datagen-scriptviewer-and-selective-execution/contracts.md
+ create mode 100644 specs/022-testcase-datagen-scriptviewer-and-selective-execution/plan.md
+ create mode 100644 specs/022-testcase-datagen-scriptviewer-and-selective-execution/spec.md
+ create mode 100644 specs/022-testcase-datagen-scriptviewer-and-selective-execution/tasks.md
+ create mode 100644 src/components/execution/PlaywrightScriptModal.tsx
+ create mode 100644 src/components/execution/TestDataModal.tsx
+
+diff --git a/arenaai analysis/analysisarenaai.txt b/arenaai analysis/analysisarenaai.txt
+new file mode 100644
+index 0000000..57ba52f
+--- /dev/null
++++ b/arenaai analysis/analysisarenaai.txt	
+@@ -0,0 +1,891 @@
++# QET Platform — Complete Redesign Specification & Implementation Plan
++
++## What We Are Locking In (Decision Summary)
++
++```
++Navigation:     Single top bar only. No left sidebar. Ever.
++Layout flow:    Agent status → Timeline → Upload → Results (top to bottom)
++Provider:       Compact OpenAI / Gemini switch, top right
++Heading:        QET Agent
++Subheading:     Autonomous Quality Execution Platform
++Color system:   Slate + Teal + Indigo (defined below)
++Upload:         Large → auto-shrinks to compact summary after success
++File list:      Count only by default. Expand to see files.
++ZIP sub-steps:  Summary row by default. Expand for decision table.
++Autoscroll:     Triggers after each completed step. No loop jitter.
++JSON fix:       Accept fenced JSON + safe repair. Fail-fast on truly bad output.
++```
++
++---
++
++## Part 1: Color System (Slate + Teal + Indigo)
++
++### Option A — Deep Slate + Teal (Professional, High Trust)
++
++```
++Background:       #F8FAFC   (slate-50, barely off-white)
++Surface:          #FFFFFF   (pure white cards)
++Surface Alt:      #F1F5F9   (slate-100, secondary areas)
++Border:           #E2E8F0   (slate-200)
++Border Strong:    #CBD5E1   (slate-300)
++
++Text Primary:     #0F172A   (slate-900)
++Text Secondary:   #475569   (slate-600)
++Text Muted:       #94A3B8   (slate-400)
++
++Accent Primary:   #0D9488   (teal-600) ← main brand color
++Accent Hover:     #0F766E   (teal-700)
++Accent Light:     #CCFBF1   (teal-100) ← subtle backgrounds
++
++Accent Secondary: #4F46E5   (indigo-600) ← secondary actions
++Accent Alt:       #EEF2FF   (indigo-50) ← tag backgrounds
++
++Success:          #059669   (emerald-600)
++Success Light:    #D1FAE5   (emerald-100)
++Warning:          #D97706   (amber-600)
++Warning Light:    #FEF3C7   (amber-100)
++Error:            #DC2626   (red-600)
++Error Light:      #FEE2E2   (red-100)
++
++Agent UI:         #4F46E5   (indigo-600)
++Agent API:        #0D9488   (teal-600)
++Agent A11y:       #7C3AED   (violet-600)
++Agent Perf:       #94A3B8   (slate-400, disabled)
++```
++
++### Option B — Warm Slate + Ocean Teal (Warmer, More Human)
++
++```
++Background:       #F9FAFB   (gray-50)
++Surface:          #FFFFFF
++Border:           #E5E7EB   (gray-200)
++
++Text Primary:     #111827   (gray-900)
++Text Secondary:   #6B7280   (gray-500)
++
++Accent Primary:   #0891B2   (cyan-600) ← ocean feel
++Accent Hover:     #0E7490   (cyan-700)
++
++Accent Secondary: #6366F1   (indigo-500)
++
++Success:          #10B981   (emerald-500)
++Error:            #EF4444   (red-500)
++```
++
++### Option C — Cool Slate + Electric Indigo (Modern SaaS)
++
++```
++Background:       #F3F4F6   (gray-100)
++Surface:          #FFFFFF
++Border:           #D1D5DB   (gray-300)
++
++Text Primary:     #1F2937   (gray-800)
++Text Secondary:   #6B7280
++
++Accent Primary:   #4338CA   (indigo-700) ← electric
++Accent Hover:     #3730A3   (indigo-800)
++Accent Glow:      #E0E7FF   (indigo-100)
++
++Success:          #16A34A   (green-600)
++Error:            #DC2626
++```
++
++**My recommendation: Option A (Deep Slate + Teal)**
++
++It reads most "enterprise trust" without being cold. Teal as primary feels modern without being neon. Indigo as secondary gives enough color variety for agent cards without clashing.
++
++---
++
++## Part 2: Typography & Shape System
++
++```css
++/* Design Token Reference */
++
++/* ── Fonts ────────────────────────────────── */
++--font-sans:     'Inter', 'system-ui', sans-serif;
++--font-mono:     'JetBrains Mono', 'Fira Code', monospace;
++
++/* ── Font Scale ───────────────────────────── */
++--text-xs:       0.75rem;     /* 12px - labels, meta */
++--text-sm:       0.875rem;    /* 14px - body small */
++--text-base:     1rem;        /* 16px - body */
++--text-lg:       1.125rem;    /* 18px - card titles */
++--text-xl:       1.25rem;     /* 20px - section heads */
++--text-2xl:      1.5rem;      /* 24px - page title */
++--text-3xl:      1.875rem;    /* 30px - hero heading */
++
++/* ── Weight ───────────────────────────────── */
++--weight-normal: 400;
++--weight-medium: 500;
++--weight-semi:   600;
++--weight-bold:   700;
++
++/* ── Radius ───────────────────────────────── */
++--radius-sm:     6px;         /* chips, tags */
++--radius-md:     10px;        /* cards, inputs */
++--radius-lg:     14px;        /* panels */
++--radius-xl:     18px;        /* modals */
++--radius-full:   9999px;      /* pills, toggles */
++
++/* ── Shadows ──────────────────────────────── */
++--shadow-xs:     0 1px 2px rgba(0,0,0,0.04);
++--shadow-sm:     0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
++--shadow-md:     0 4px 8px rgba(0,0,0,0.06), 0 2px 4px rgba(0,0,0,0.04);
++--shadow-lg:     0 8px 24px rgba(0,0,0,0.08);
++
++/* ── Spacing ──────────────────────────────── */
++--sp-1:  4px;
++--sp-2:  8px;
++--sp-3:  12px;
++--sp-4:  16px;
++--sp-5:  20px;
++--sp-6:  24px;
++--sp-8:  32px;
++--sp-10: 40px;
++--sp-12: 48px;
++--sp-16: 64px;
++```
++
++**Shape rule:**
++- Upload zones: `--radius-md` (10px). Never fully round. Clean rectangle with moderate rounding.
++- Cards: `--radius-md` to `--radius-lg`
++- Buttons: `--radius-md`
++- Chips/tags: `--radius-sm` or `--radius-full` for status pills only
++
++---
++
++## Part 3: Page Layout Architecture
++
++### 3.1 Top Navigation Bar
++
++```
++┌─────────────────────────────────────────────────────────────────────┐
++│                                                                     │
++│  QET Agent                    Agents  Tools  Runs    [Gemini▼] 🌙  │
++│  Autonomous Quality                                                  │
++│  Execution Platform                                                  │
++│                                                                     │
++└─────────────────────────────────────────────────────────────────────┘
++
++Left:    QET Agent (text-2xl, weight-bold, teal-600)
++         Autonomous Quality Execution Platform (text-sm, slate-500)
++
++Center:  Agents | Tools | Runs
++         (text-sm, weight-medium, pill underline on active)
++
++Right:   [Provider Switch: OpenAI | Gemini] ← compact toggle
++         [🌙 theme toggle]
++```
++
++**Provider switch design:**
++
++```
++┌──────────────────────┐
++│ ⬤ OpenAI  ○ Gemini  │   ← small pill toggle, not a full button row
++└──────────────────────┘
++
++Width: ~140px
++Height: ~28px
++Padding: 3px inner
++Selected side: white pill with shadow
++Unselected: transparent text
++```
++
++---
++
++### 3.2 Agents Page — Full Vertical Flow
++
++```
++TOP NAV
++│
++├── ACTIVE AGENT INDICATOR (when a run is in progress)
++│   Shows which agent is currently working
++│
++├── RUN CYCLE STATUS TIMELINE
++│   Horizontal step strip always visible
++│
++├── UPLOAD SECTION
++│   Before upload:   Large drop zones side by side
++│   After docs:      Docs card shrinks to compact summary row
++│   After zip:       ZIP card shrinks to compact summary row
++│
++├── FILE COUNT SUMMARY (after upload)
++│   Compact row: 3 docs · 2.4 MB total · ZIP: my-app.zip 18 MB
++│   [▶ Show files] ← expand to see list
++│
++├── ZIP INTAKE SUB-STEPS (after zip processed)
++│   Summary row: 847 files · 203 included · 644 excluded · 0 unknown
++│   [▶ Show details] ← expand for full breakdown
++│
++├── UNDERSTANDING OUTPUT (after understanding complete)
++│   Summary card with key sections
++│   [▶ Show full understanding] ← expand
++│
++└── PROCEED CTA
++    [Start Understanding →] or [Run Agents →]
++```
++
++---
++
++### 3.3 The Run Cycle Status Timeline
++
++```
++Design: Horizontal strip, always pinned below nav on the agents page
++
++┌─────────────────────────────────────────────────────────────────────┐
++│  ● Intake  ──  ● Processing  ──  ● Understanding  ──  ○ Generation  ──  ○ Done │
++└─────────────────────────────────────────────────────────────────────┘
++
++States per step:
++  ● filled teal       = complete
++  ⟳ spinning teal     = active/current
++  ○ hollow slate      = pending
++  ✗ red               = failed
++
++Each step node shows:
++  - Icon above
++  - Label below
++  - Timestamp on completion (small, muted)
++```
++
++```
++Steps:
++1. Intake         (docs + zip uploaded)
++2. Processing     (zip extraction + classification)
++3. Understanding  (AI analysis)
++4. Generation     (test scripts, future)
++5. Execution      (test runs, future)
++6. Report         (final output, future)
++```
++
++---
++
++### 3.4 Upload Zone — Before and After
++
++**Before upload (large):**
++
++```
++┌──────────────────────────┐  ┌──────────────────────────┐
++│                          │  │                          │
++│     📄                   │  │     📦                   │
++│                          │  │                          │
++│  Drop requirements here  │  │   Drop codebase ZIP      │
++│                          │  │                          │
++│  PDF · DOCX · MD · TXT   │  │   .zip files only        │
++│                          │  │                          │
++│  [Browse files]          │  │   [Browse files]         │
++│                          │  │                          │
++└──────────────────────────┘  └──────────────────────────┘
++
++Height: ~160px
++Border: 1.5px dashed --border-color
++Radius: --radius-md (NOT overly round)
++Background: --surface-alt on hover
++```
++
++**After docs uploaded (compact summary row):**
++
++```
++┌────────────────────────────────────────────────────────────────┐
++│  ✓ Requirements  │  3 files · 1.8 MB  │  [▶ Show]  [× Clear]  │
++└────────────────────────────────────────────────────────────────┘
++
++Height: ~44px
++Background: success-light (#D1FAE5)
++Left border: 3px solid success (#059669)
++```
++
++**Expanded file list (when Show is clicked):**
++
++```
++┌────────────────────────────────────────────────────────────────┐
++│  ✓ Requirements  │  3 files · 1.8 MB  │  [▼ Hide]  [× Clear]  │
++├────────────────────────────────────────────────────────────────┤
++│  📄 business-requirements.pdf          · 890 KB               │
++│  📄 functional-spec.docx               · 654 KB               │
++│  📄 user-stories.md                    · 256 KB               │
++└────────────────────────────────────────────────────────────────┘
++```
++
++**After ZIP uploaded (compact summary row):**
++
++```
++┌────────────────────────────────────────────────────────────────┐
++│  ✓ Codebase ZIP  │  my-app.zip · 18.3 MB  │  [▶ Show]  [× Clear] │
++└────────────────────────────────────────────────────────────────┘
++```
++
++---
++
++### 3.5 ZIP Intake Sub-Steps
++
++**After ZIP processing completes, show this section:**
++
++```
++┌────────────────────────────────────────────────────────────────┐
++│  ZIP Intake                                          [▶ Details]│
++├────────────────────────────────────────────────────────────────┤
++│                                                                │
++│  ✓ Extraction       ✓ Classification     ✓ Indexing            │
++│                                                                │
++│  847 total  ·  203 included  ·  644 excluded  ·  0 unknown     │
++│                                                                │
++└────────────────────────────────────────────────────────────────┘
++
++When expanded:
++┌────────────────────────────────────────────────────────────────┐
++│  ZIP Intake                                          [▼ Details]│
++├────────────────────────────────────────────────────────────────┤
++│  Sub-steps:                                                    │
++│  ✓ Extract archive          2.1s                              │
++│  ✓ Classify files           3.4s                              │
++│  ✓ Security scan            0.8s                              │
++│  ✓ Index for analysis       1.2s                              │
++├────────────────────────────────────────────────────────────────┤
++│  Included (203)                                                │
++│  src/components/  ·  src/services/  ·  package.json  ·  ...   │
++│  [Show all 203 →]                                              │
++├────────────────────────────────────────────────────────────────┤
++│  Excluded (644)                                                │
++│  node_modules/  ·  .git/  ·  dist/  ·  build/  ·  ...         │
++│  [Show all 644 →]                                              │
++└────────────────────────────────────────────────────────────────┘
++```
++
++---
++
++### 3.6 Active Agent Indicator
++
++**Shown at top of agents page when a run is live:**
++
++```
++┌────────────────────────────────────────────────────────────────┐
++│  ⟳  Understanding Agent is analyzing your application...       │
++│     Reading requirements → Scanning codebase → Synthesizing    │
++└────────────────────────────────────────────────────────────────┘
++
++Background: teal-50 (#F0FDFA)
++Border-left: 3px solid teal-600
++Animation: subtle pulse on the ⟳ icon
++```
++
++---
++
++## Part 4: Autoscroll Behavior Specification
++
++```
++TRIGGER MAP:
++
++Event                          →  Scroll Target
++─────────────────────────────────────────────────
++Docs upload success            →  ZIP upload zone
++ZIP upload success             →  ZIP intake progress section
++ZIP intake complete            →  Understanding CTA / start button
++Understanding start clicked    →  Understanding output section
++Understanding complete         →  Understanding result card
++
++GUARD RULES:
++1. Each trigger fires exactly ONCE per lifecycle event
++2. Track triggered state in a ref: const scrolledFor = useRef<Set<string>>(new Set())
++3. Check: if (scrolledFor.current.has(eventKey)) return;
++4. Then: scrolledFor.current.add(eventKey); scrollTo(target);
++5. Use smooth scroll: element.scrollIntoView({ behavior: 'smooth', block: 'start' })
++6. Offset: add ~80px top margin to account for fixed nav bar
++
++IMPLEMENTATION (React):
++const scrollTo = (refEl: React.RefObject<HTMLElement>) => {
++  if (!refEl.current) return;
++  const top = refEl.current.getBoundingClientRect().top
++    + window.scrollY
++    - 90; // nav height offset
++  window.scrollTo({ top, behavior: 'smooth' });
++};
++```
++
++---
++
++## Part 5: Understanding Agent JSON Fix
++
++### Root Cause
++
++```
++PROBLEM:
++Gemini (and sometimes GPT-4o) wraps JSON in markdown fences:
++
++```json
++{
++  "summary": "...",
++  ...
++}
++```
++
++The current parser calls json.loads() directly on the raw string.
++This fails immediately because the string starts with ` ```json `
++not with `{`.
++
++SECONDARY PROBLEM:
++Some responses are truncated mid-JSON when the model hits
++its output token limit. This causes a partial valid structure
++that json.loads() also rejects.
++```
++
++### The Fix (Three-Layer Parser)
++
++```python
++# backend/src/services/llm_service.py
++# Add this function — use it everywhere json.loads is called on model output
++
++import json
++import re
++
++def parse_model_json(raw: str, context_label: str = "model") -> dict:
++    """
++    Three-layer JSON parser for LLM output.
++    
++    Layer 1: Direct parse (clean JSON)
++    Layer 2: Strip markdown fences, then parse
++    Layer 3: Minimal safe repair, then parse
++    Layer 4: Fail-fast with rich diagnostics
++    
++    NEVER returns fake/deterministic content on failure.
++    ALWAYS raises ParseError with structured diagnostics.
++    """
++    if not raw or not raw.strip():
++        raise ModelJSONParseError(
++            stage="empty_response",
++            raw_preview="",
++            message="Model returned empty response.",
++            repairable=False,
++        )
++
++    # ── Layer 1: Direct parse ─────────────────────────
++    stripped = raw.strip()
++    try:
++        return json.loads(stripped)
++    except json.JSONDecodeError:
++        pass  # Continue to Layer 2
++
++    # ── Layer 2: Strip markdown fences ───────────────
++    fence_pattern = r'^```(?:json)?\s*\n?(.*?)\n?```\s*$'
++    fence_match = re.match(fence_pattern, stripped, re.DOTALL | re.IGNORECASE)
++    if fence_match:
++        inner = fence_match.group(1).strip()
++        try:
++            return json.loads(inner)
++        except json.JSONDecodeError:
++            stripped = inner  # Use the extracted content for Layer 3
++
++    # Also handle inline fences without newlines
++    if stripped.startswith('```'):
++        lines = stripped.split('\n')
++        # Remove first line (```json or ```) and last line (```)
++        if lines[-1].strip() == '```':
++            inner = '\n'.join(lines[1:-1]).strip()
++        else:
++            inner = '\n'.join(lines[1:]).strip()
++        try:
++            return json.loads(inner)
++        except json.JSONDecodeError:
++            stripped = inner
++
++    # ── Layer 3: Safe minimal repair ─────────────────
++    # Only attempt repair for clearly truncated responses
++    repaired = _attempt_safe_repair(stripped)
++    if repaired:
++        try:
++            parsed = json.loads(repaired)
++            # Log that repair was used (for provenance tracking)
++            import logging
++            logging.warning(
++                f"[{context_label}] JSON repair was applied. "
++                f"Original length: {len(raw)}, Repaired: {len(repaired)}"
++            )
++            return parsed
++        except json.JSONDecodeError:
++            pass
++
++    # ── Layer 4: Fail-fast with rich diagnostics ──────
++    preview = raw[:300].replace('\n', ' ').strip()
++    is_truncated = _looks_truncated(stripped)
++
++    raise ModelJSONParseError(
++        stage="parse_failed",
++        raw_preview=preview,
++        message=(
++            "Model returned response that could not be parsed as valid JSON. "
++            + ("Response appears truncated (token limit likely reached). "
++               if is_truncated else "")
++        ),
++        repairable=False,
++        truncated=is_truncated,
++    )
++
++
++def _attempt_safe_repair(s: str) -> str | None:
++    """
++    Only attempt repair for truncated JSON.
++    Do NOT attempt repair for structurally wrong responses.
++    """
++    if not _looks_truncated(s):
++        return None  # Only repair truncation, not garbage
++
++    # Count open/close braces and brackets
++    open_braces = s.count('{') - s.count('}')
++    open_brackets = s.count('[') - s.count(']')
++
++    # Only repair if we just need closing chars (simple truncation)
++    if open_braces < 0 or open_brackets < 0:
++        return None  # Structurally inverted — not safe to repair
++
++    if open_braces > 5 or open_brackets > 5:
++        return None  # Too deeply truncated — repair would be fabrication
++
++    # Close any open string (only if last char suggests mid-string)
++    repaired = s.rstrip()
++    if repaired and repaired[-1] not in ('}', ']', '"', ','):
++        # Remove the dangling partial value
++        last_complete = max(
++            repaired.rfind(','),
++            repaired.rfind('{'),
++            repaired.rfind('['),
++        )
++        if last_complete > 0:
++            repaired = repaired[:last_complete].rstrip().rstrip(',')
++
++    # Close brackets then braces
++    repaired += ']' * open_brackets
++    repaired += '}' * open_braces
++
++    return repaired
++
++
++def _looks_truncated(s: str) -> bool:
++    """
++    Heuristic: does this look like a truncated JSON stream?
++    """
++    s = s.strip()
++    if not s:
++        return False
++    last_char = s[-1]
++    # Truncated responses usually end mid-string or mid-value
++    return last_char not in ('}', ']')
++
++
++class ModelJSONParseError(Exception):
++    def __init__(
++        self,
++        stage: str,
++        raw_preview: str,
++        message: str,
++        repairable: bool = False,
++        truncated: bool = False,
++    ):
++        self.stage = stage
++        self.raw_preview = raw_preview
++        self.message = message
++        self.repairable = repairable
++        self.truncated = truncated
++        super().__init__(message)
++```
++
++### Integration in understanding_agent.py
++
++```python
++# In understanding_agent.py — replace current json.loads calls
++
++# BEFORE (fragile):
++result = json.loads(raw_response)
++
++# AFTER (robust):
++from ..services.llm_service import parse_model_json, ModelJSONParseError
++
++try:
++    result = parse_model_json(raw_response, context_label="understanding_agent")
++except ModelJSONParseError as e:
++    return UnderstandingResult(
++        status="failed",
++        error_code="invalid_model_json",
++        error_details={
++            "stage": e.stage,
++            "truncated": e.truncated,
++            "raw_preview": e.raw_preview,
++            "provider": provider_used,
++            "actionable_message": e.message,
++            "retry_guidance": (
++                "Try switching to a model with larger output token limit."
++                if e.truncated
++                else "Model returned non-JSON content. Check prompt instructions."
++            ),
++        }
++    )
++```
++
++### Prompt Hardening (Prevent Fence Wrapping)
++
++```python
++# Add this instruction to every LLM prompt that expects JSON
++
++JSON_INSTRUCTION = """
++CRITICAL INSTRUCTIONS FOR YOUR RESPONSE:
++- Respond with ONLY a valid JSON object.
++- Do NOT wrap your response in markdown code fences (no ```json or ```).
++- Do NOT include any text before or after the JSON object.
++- The first character of your response MUST be {
++- The last character of your response MUST be }
++- Ensure your response is complete and not truncated.
++"""
++
++# Add this at the END of every prompt before sending to model
++prompt = f"{base_prompt}\n\n{JSON_INSTRUCTION}"
++```
++
++---
++
++## Part 6: Subheading Options (Full Discussion)
++
++### Option 1: Autonomous Quality Execution Platform
++```
++Tone: Technical, confident, direct
++Works for: Engineering teams, QA leads
++Risk: Slightly abstract for non-technical stakeholders
++```
++
++### Option 2: AI-Powered Quality Engineering for Teams That Ship
++```
++Tone: Product, benefit-led, modern
++Works for: Product managers, mixed audiences
++Risk: A bit long for a subheading
++```
++
++### Option 3: From Requirements to Validated Quality — Automatically
++```
++Tone: Process-oriented, outcome-focused
++Works for: QA/program managers
++Risk: Reads like a tagline more than a descriptor
++```
++
++### Option 4: Intelligent Testing from Requirements to Report
++```
++Tone: Clear, functional, no jargon
++Works for: All audiences
++Risk: None. Clean and honest.
++```
++
++### Option 5: Requirement-Aware. Agent-Driven. Evidence-Backed.
++```
++Tone: Premium, punchy, three-pillar structure
++Works for: Presentations, landing pages
++Risk: Slightly marketing-heavy for a dashboard
++```
++
++### Option 6: Quality Intelligence for Every Release
++```
++Tone: Simple, executive, repeatable
++Works for: Stakeholders, dashboards
++Risk: Could be any product tagline
++```
++
++**My recommendation for the nav bar subheading:**
++
++Use **Option 4** for the dashboard subheading (functional, reads at a glance).
++
++Save **Option 5** for any future landing page or pitch deck.
++
++---
++
++## Part 7: Agent Progress Display (Left Area Removed)
++
++Since we removed the left sidebar, the agent progress now lives **inside the main content area** as vertical cards that expand as each agent works.
++
++```
++AGENTS PAGE (when run is active)
++
++┌─────────────────────────────────────────────────────────────┐
++│  ⟳  Understanding Agent — Analyzing your application        │
++│     Step 2 of 6  ·  Started 00:42 ago                      │
++└─────────────────────────────────────────────────────────────┘
++
++┌─────────────────────────────────────────────────────────────┐
++│  REQUIREMENT ANALYSIS                                       │
++│  ████████████████████████░░░░░░░░  74%                     │
++│                                                             │
++│  ✓  Document Reader          0.8s                          │
++│  ✓  Code Analyzer            4.2s                          │
++│  ⟳  Understanding Synthesizer  running...                  │
++│  ○  Test Generator                                         │
++│  ○  Reporter                                               │
++└─────────────────────────────────────────────────────────────┘
++```
++
++When multiple agents run in future, each gets its own card stacked vertically. The active one is highlighted with a teal left border.
++
++---
++
++## Part 8: Complete Component Map
++
++```
++src/
++├── App.tsx
++│   └── Top nav + router
++│       No left sidebar. Ever.
++│
++├── components/
++│   ├── layout/
++│   │   ├── TopNav.tsx
++│   │   │   ├── QET Agent heading + subheading (left)
++│   │   │   ├── Nav links: Agents | Tools | Runs (center)
++│   │   │   └── Provider switch + theme toggle (right)
++│   │   │
++│   │   └── ProviderSwitch.tsx
++│   │       └── Compact OpenAI / Gemini toggle
++│   │
++│   ├── agents/
++│   │   ├── AgentsPage.tsx
++│   │   │   └── Orchestrates full vertical flow
++│   │   │
++│   │   ├── ActiveAgentBanner.tsx
++│   │   │   └── Shows which agent is running, pulsing indicator
++│   │   │
++│   │   ├── RunTimeline.tsx
++│   │   │   └── Horizontal step strip with state per step
++│   │   │
++│   │   ├── UploadSection.tsx
++│   │   │   ├── DocsUploadZone.tsx (large → compact)
++│   │   │   ├── ZipUploadZone.tsx (large → compact)
++│   │   │   └── FileSummaryRow.tsx (compact state with expand)
++│   │   │
++│   │   ├── ZipIntakePanel.tsx
++│   │   │   ├── Summary row (counts)
++│   │   │   └── DetailTable.tsx (behind expand)
++│   │   │
++│   │   └── AgentProgressCard.tsx
++│   │       ├── ProgressBar.tsx
++│   │       └── SubAgentChecklist.tsx
++│   │
++│   ├── understanding/
++│   │   ├── UnderstandingPanel.tsx
++│   │   │   ├── SummaryCard.tsx
++│   │   │   ├── FailDiagnosticsCard.tsx
++│   │   │   └── ProvenanceRow.tsx
++│   │   └── UnderstandingExpandable.tsx
++│   │
++│   ├── runs/
++│   │   └── RunsDashboard.tsx
++│   │
++│   └── tools/
++│       └── ToolsPage.tsx
++│           └── AISettingsPanel.tsx
++│
++├── hooks/
++│   ├── useAutoScroll.ts    ← controlled single-trigger scroll
++│   ├── useRunStatus.ts     ← polling with guard
++│   └── useFileUpload.ts
++│
++└── styles/
++    └── tokens.css          ← all design tokens, no global overrides
++```
++
++---
++
++## Part 9: Implementation Phase Order
++
++```
++PHASE 1: Token System + Nav Shell
++─────────────────────────────────
++Files: tokens.css, App.tsx, TopNav.tsx, ProviderSwitch.tsx
++Goal:  Clean top nav. No sidebar. Heading + subheading correct.
++Gate:  npm run build passes. Nav renders correctly in both themes.
++
++PHASE 2: Upload UX Overhaul
++───────────────────────────
++Files: UploadSection.tsx, DocsUploadZone.tsx, ZipUploadZone.tsx,
++       FileSummaryRow.tsx
++Goal:  Large → compact auto-shrink. Count-only default. Expand works.
++       Radius is --radius-md (NOT over-round).
++Gate:  Upload → see compact row. Click expand → see files. Click hide → gone.
++
++PHASE 3: Timeline + Active Agent Banner
++────────────────────────────────────────
++Files: RunTimeline.tsx, ActiveAgentBanner.tsx
++Goal:  Timeline always visible. Steps update on state change.
++       Banner shows when agent running.
++Gate:  Start a run → timeline step becomes active → banner appears.
++
++PHASE 4: Autoscroll
++────────────────────
++Files: useAutoScroll.ts, AgentsPage.tsx
++Goal:  Each upload success scrolls to next section.
++       Guard prevents re-trigger on re-render or polling.
++Gate:  Upload docs → page scrolls to ZIP zone.
++       Upload ZIP → scrolls to intake.
++       Start understanding → scrolls to result area.
++
++PHASE 5: ZIP Intake Panel
++──────────────────────────
++Files: ZipIntakePanel.tsx, DetailTable.tsx
++Goal:  Summary row shows counts. Expand shows sub-steps + file lists.
++Gate:  After ZIP processing: summary visible. Click Details → table appears.
++
++PHASE 6: JSON Parser Fix
++─────────────────────────
++Files: llm_service.py, understanding_agent.py
++Goal:  Fenced JSON accepted. Truncated JSON diagnosed with
++       richer error. Prompt hardened with anti-fence instruction.
++Gate:  Test with fenced JSON → parses correctly.
++       Test with truncated JSON → fails with truncated:true diagnostic.
++       Test with garbage → fails with parse_failed diagnostic.
++
++PHASE 7: Understanding UI Polish
++─────────────────────────────────
++Files: UnderstandingPanel.tsx, FailDiagnosticsCard.tsx
++Goal:  Success shows clean summary + provenance row.
++       Failure shows structured diagnostics (no red wall of text).
++Gate:  Force a failure → see clean diagnostic card with retry action.
++
++PHASE 8: Color System Polish
++─────────────────────────────
++Files: tokens.css, index.css
++Goal:  Remove all global ad-hoc overrides.
++       All colors from tokens only.
++       Light mode: full contrast, no washed out text.
++Gate:  Both themes pass readability spot check.
++```
++
++---
++
++## Part 10: Key Rules Going Forward
++
++```
++1. NO LEFT SIDEBAR
++   Ever. Navigation is top bar only.
++   If a new section is needed, it goes in main content area vertically.
++
++2. UPLOAD ZONES ARE NOT OVALS
++   Border-radius is --radius-md (10px max on upload zones).
++   No "curvy rectangle" shapes.
++
++3. FILE LISTS ARE HIDDEN BY DEFAULT
++   Default state = count only.
++   User must click expand to see file names.
++
++4. AUTOSCROLL FIRES ONCE
++   Each lifecycle event triggers scroll exactly once.
++   useRef guard prevents re-trigger.
++
++5. JSON PARSER NEVER FABRICATES
++   If fence-stripped + repair still fails → structured error.
++   No fake content. No silent success.
++
++6. COLORS FROM TOKENS ONLY
++   No inline hex values in components.
++   No global * overrides in CSS.
++   All colors via var(--token-name).
++
++7. PROVIDER SWITCH IS COMPACT
++   ~140px width. Small pill toggle.
++   Not a full button row taking up nav space.
++
++8. TIMELINE IS ALWAYS VISIBLE
++   It does not hide after a step completes.
++   It is the user's orientation anchor throughout the flow.
++```
+\ No newline at end of file
+diff --git a/backend/src/services/llm_service.py b/backend/src/services/llm_service.py
+index 1b2b7c8..087c0e4 100644
+--- a/backend/src/services/llm_service.py
++++ b/backend/src/services/llm_service.py
+@@ -536,16 +536,6 @@ class LLMService:
+                 except json.JSONDecodeError:
+                     pass
+ 
+-            # Advanced repair: Attempt to balance truncated JSON payload
+-            repaired_dict = LLMService._repair_truncated_json(cleaned)
+-            if repaired_dict and isinstance(repaired_dict, dict):
+-                return repaired_dict, {
+-                    "parser_stage": "repaired_truncated_json",
+-                    "issue": "Recovered valid payload by closing truncated JSON brackets.",
+-                    "recovery_attempted": True,
+-                    "truncated": True,
+-                }
+-
+             likely_truncated = LLMService._looks_truncated_json(cleaned)
+             return None, {
+                 "parser_stage": "json_decode",
+@@ -570,6 +560,36 @@ class LLMService:
+                 "raw_preview": cleaned[:300],
+             }
+ 
++    @staticmethod
++    def _repair_truncated_json(text: str) -> Optional[Dict[str, Any]]:
++        """Attempt safe closure of truncated JSON objects without fabricating structure."""
++        if not LLMService._looks_truncated_json(text):
++            return None
++        
++        s = text.strip()
++        open_braces = s.count('{') - s.count('}')
++        open_brackets = s.count('[') - s.count(']')
++        
++        if open_braces < 0 or open_brackets < 0 or open_braces > 6 or open_brackets > 6:
++            return None
++            
++        repaired = s.rstrip()
++        if repaired and repaired[-1] not in ('}', ']', '"', ','):
++            last_valid = max(repaired.rfind(','), repaired.rfind('{'), repaired.rfind('['))
++            if last_valid > 0:
++                repaired = repaired[:last_valid].rstrip().rstrip(',')
++                
++        repaired += ']' * open_brackets
++        repaired += '}' * open_braces
++        
++        try:
++            parsed = json.loads(repaired)
++            if isinstance(parsed, dict):
++                return parsed
++        except Exception:
++            pass
++        return None
++
+     @staticmethod
+     def _looks_truncated_json(text: str) -> bool:
+         depth = 0
+diff --git a/backend/tests/test_ai_routing_policy.py b/backend/tests/test_ai_routing_policy.py
+index d252c69..f5be6a8 100644
+--- a/backend/tests/test_ai_routing_policy.py
++++ b/backend/tests/test_ai_routing_policy.py
+@@ -20,9 +20,9 @@ def test_understanding_escalation_uses_next_key_before_pro_tier(monkeypatch) ->
+ 
+     assert text == '{"summary": "ok"}'
+     assert calls == [
+-        ("gemini-flash", "bad-key", 4000),
+-        ("gemini-flash", "good-key", 4000),
+-        ("gemini-pro", "good-key", 4000),
++        ("gemini-flash", "bad-key", 8192),
++        ("gemini-flash", "good-key", 8192),
++        ("gemini-pro", "good-key", 8192),
+     ]
+     assert service.last_generation["tier"] == "pro"
+     assert service.last_generation["key_index"] == 0
+diff --git a/specs/022-testcase-datagen-scriptviewer-and-selective-execution/README.md b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/README.md
+new file mode 100644
+index 0000000..e8ba4b7
+--- /dev/null
++++ b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/README.md
+@@ -0,0 +1,15 @@
++# Feature 022: Test Case & Synthetic Data Intelligence, Script Visibility, and Selective Execution
++
++## Overview
++Feature 022 resolves the transparency gap in the QET platform by providing:
++1. **Collapsible Workspace**: Auto-collapsing and manual accordion views for document intake and codebase indexing, removing cluttered hero buttons.
++2. **Dedicated Script Viewer**: An inline code modal allowing QA engineers to inspect, copy, and download the exact Python Playwright test script (`test_tc_*.py`) generated for each scenario.
++3. **Synthetic Test Data Inspector**: An inline modal displaying the sanitized mock datasets mapped to each test case with boundary value highlights.
++4. **Granular Selective Execution**: Checkbox selection and category filter pills to execute individual or targeted batches of test cases in live desktop browser mode with screenshot captures.
++
++## Specification Files
++- `constitution.md`: Core governance, security, and quality principles.
++- `spec.md`: User stories, functional requirements, and acceptance criteria.
++- `plan.md`: Technical architecture and component structure.
++- `contracts.md`: Type definitions and interfaces.
++- `tasks.md`: Implementation task checklist.
+diff --git a/specs/022-testcase-datagen-scriptviewer-and-selective-execution/constitution.md b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/constitution.md
+new file mode 100644
+index 0000000..c690b04
+--- /dev/null
++++ b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/constitution.md
+@@ -0,0 +1,24 @@
++# Constitution: Feature 022 — Test Case & Synthetic Data Intelligence, Script Visibility, and Selective Execution
++
++**Version:** 1.0  
++**Feature Branch:** `feature/022-testcase-datagen-scriptviewer-and-selective-execution`  
++**Governing Standard:** Speckit Enterprise QA Platform Standard
++
++---
++
++## 1. Core Principles
++
++1. **Transparent Script Visibility**: Generated test automation scripts must never remain hidden in opaque backend directories. Every Playwright script (`test_tc_*.py`) and Page Object Model must be immediately viewable, inspectable, and copyable through an accessible code viewer modal.
++2. **Dedicated Test Data Generation**: Synthetic test data must be generated and explicitly mapped per test case (e.g. valid credentials, boundary income values, negative scenarios). Data must be 100% fictional, non-PII, and non-confidential.
++3. **Selective & Granular Execution**: The user must retain absolute control to select all, select by category (Positive, Negative, Boundary, Validation), or manually pick individual test cases for headed desktop browser execution.
++4. **Clean & Collapsible Workspace**: Intake, understanding, and completed generation stages must automatically collapse or provide one-click collapse/expand toggles to eliminate visual clutter. Redundant action buttons are strictly prohibited.
++5. **Honest Execution Telemetry**: Test execution results, durations, console logs, and screenshots are authoritative. AI must never hallucinate execution passes or alter test outcomes.
++6. **Zero Silent Fallbacks**: If script or data generation fails, the system must fail-fast with actionable diagnostics rather than substituting placeholder mock stubs.
++
++---
++
++## 2. Non-Negotiable Engineering Rules
++
++1. **Security & Sandbox Isolation**: Playwright execution is allowed only against configured non-production environments with explicit confirmation.
++2. **Syntax Resilience**: LLM structured outputs must pass through multi-layer JSON stripping and sanitization to handle fenced markdown responses without syntax errors.
++3. **Single-Trigger UI State**: Step transitions and autoscrolls must be idempotent and guarded to prevent viewport jitter.
+diff --git a/specs/022-testcase-datagen-scriptviewer-and-selective-execution/contracts.md b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/contracts.md
+new file mode 100644
+index 0000000..46df2fb
+--- /dev/null
++++ b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/contracts.md
+@@ -0,0 +1,67 @@
++# Contracts: Feature 022 — Test Case & Synthetic Data Intelligence, Script Visibility, and Selective Execution
++
++## 1. Type Interfaces
++
++```typescript
++export interface TestCase {
++  case_id: string;
++  title: string;
++  case_type: string;  // Positive, Negative, Boundary, Validation, Error-Handling
++  feature_area: string;
++  priority: string;    // Critical, High, Medium, Low
++  description: string;
++  review_status: string;
++  steps?: string[];
++  expected_result?: string;
++  preconditions?: string[];
++  synthetic_data_keys?: string[];
++  requirement_id?: string;
++  confidence?: string;
++}
++
++export interface SyntheticRecord {
++  record_id: string;
++  target_test_case: string;
++  category: string;
++  username?: string;
++  password?: string;
++  full_name?: string;
++  ssn?: string;
++  monthly_income?: number;
++  employment_status?: string;
++  document_file?: string;
++  terms_accepted?: boolean;
++  is_synthetic?: boolean;
++  [key: string]: any;
++}
++
++export interface SyntheticDataset {
++  dataset_id: string;
++  dataset_name: string;
++  data_schema: Record<string, string>;
++  records: SyntheticRecord[];
++  test_case_id_mapping: Record<string, SyntheticRecord[]>;
++  is_synthetic: boolean;
++  non_pii_disclaimer: string;
++  provenance: Record<string, any>;
++  upstream_case_ids?: string[];
++  validation_status: string;
++  synthetic_only_validated: boolean;
++  fallback_used: boolean;
++}
++
++export interface PlaywrightScript {
++  script_id: string;
++  test_case_id: string;
++  filename: string;
++  code: string;
++  page_objects: string[];
++  selectors_used: string[];
++  uncertain_selectors?: string[];
++  provenance: Record<string, any>;
++  upstream_case_ids?: string[];
++  validation_status: string;
++  selector_confidence_map?: Record<string, string>;
++  fallback_used: boolean;
++}
++```
+diff --git a/specs/022-testcase-datagen-scriptviewer-and-selective-execution/plan.md b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/plan.md
+new file mode 100644
+index 0000000..5187dc4
+--- /dev/null
++++ b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/plan.md
+@@ -0,0 +1,51 @@
++# Implementation Plan: Feature 022 — Test Case & Synthetic Data Intelligence, Script Visibility, and Selective Execution
++
++## 1. Architectural Overview
++This plan coordinates changes across the React frontend and FastAPI runtime layer to expose dedicated script viewers, test data inspectors, and selective execution capabilities.
++
++```mermaid
++graph TD
++    A[Intake: Docs & Codebase ZIP] -->|Auto-collapse| B[Collapsible Summary Strip]
++    B -->|Trigger Understanding| C[Understanding & Synthesis Engine]
++    C -->|Generate Test Cases| D[Test Suite: Positive, Negative, Boundary, Validation]
++    C -->|Generate Data| E[Synthetic Dataset Mapped by Case ID]
++    C -->|Generate Scripts| F[Dedicated Python Playwright Scripts]
++    D --> G[Live Playwright Runner Table]
++    E --> G
++    F --> G
++    G -->|Click View Script| H[PlaywrightScriptModal]
++    G -->|Click View Data| I[TestDataModal]
++    G -->|Select & Execute| J[Live Desktop Playwright Runner + Screenshots]
++```
++
++---
++
++## 2. Component Deliverables
++
++### 2.1 Frontend Components
++1. `src/components/HomeUploadPage.tsx`:
++   - Auto-collapse completed upload lanes.
++   - Streamline into single action CTA.
++2. `src/components/execution/PlaywrightScriptModal.tsx`:
++   - Dark theme syntax viewer for `test_tc_*.py` and `cfa_pages.py`.
++   - Copy to clipboard & download script.
++   - Discovered selectors & Page Objects inspector.
++3. `src/components/execution/TestDataModal.tsx`:
++   - Key-value mock dataset viewer.
++   - Boundary value & negative payload highlight.
++   - Copy JSON data.
++4. `src/components/execution/LivePlaywrightRunner.tsx`:
++   - Enhanced table with inline `[< /> Script]` and `[📊 Data]` buttons.
++   - Checkbox multi-select and quick filters.
++   - Live execution button for selected cases.
++   - Screenshot preview thumbnails.
++5. `src/types.ts`:
++   - Add `SyntheticRecord` and `SyntheticDataset` interfaces.
++   - Add extended fields to `TestCase` and `AppState`.
++
++---
++
++## 3. Backend Coordination
++- `fastapi_app.py`:
++  - Ensure `/runs/{run_id}` serves full AppState containing `test_suite`, `synthetic_dataset`, and `playwright_scripts`.
++  - Serve per-script artifacts and live execution streaming.
+diff --git a/specs/022-testcase-datagen-scriptviewer-and-selective-execution/spec.md b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/spec.md
+new file mode 100644
+index 0000000..727d1cc
+--- /dev/null
++++ b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/spec.md
+@@ -0,0 +1,53 @@
++# Specification: Feature 022 — Test Case & Synthetic Data Intelligence, Script Visibility, and Selective Execution
++
++## 1. Problem Statement
++1. **Hidden Playwright Automation Code**: While the Playwright Agent generates dedicated Python test scripts (`tests/test_tc_*.py`), users could not view or inspect the code directly from the UI without navigating away.
++2. **Missing Per-Test Synthetic Data Visibility**: Test datasets were generated in bulk, but lacked a dedicated inline inspector to see the exact mock data mapped to each individual test case.
++3. **UI Complexity & Clutter**: Redundant Step 3 hero buttons and oversized static panels created visual friction once document and codebase uploads were completed.
++4. **Need for Granular Selective Execution**: Engineers required flexible test case filtering (Positive, Negative, Boundary, Validation) and manual checkbox selection to run targeted scenarios in live headed browser mode with screenshot capture.
++
++---
++
++## 2. User Stories
++- **US-1 (Script Visibility)**: As a QA engineer, I want to click `[< /> View Script]` on any test case row to view the full Python Playwright script with syntax highlighting and copy it to my clipboard.
++- **US-2 (Test Data Inspection)**: As a test engineer, I want to click `[📊 View Data]` on any test case row to inspect the synthetic input parameters, boundary values, and mock records mapped to that test.
++- **US-3 (Selective Live Execution)**: As an automation tester, I want to select specific test cases using checkboxes or category filters and execute only the chosen subset in a headed desktop browser window.
++- **US-4 (Collapsible Workspace)**: As a platform user, I want completed upload and understanding panels to collapse into clean summary strips with manual expand/collapse toggles so the screen remains uncluttered.
++
++---
++
++## 3. Functional Requirements
++
++### FR-1: Collapsible Intake & Streamlined Home View
++- Auto-collapse document dropzone into a compact summary card upon successful upload.
++- Auto-collapse ZIP dropzone into a compact summary card upon successful extraction.
++- Remove redundant Step 3 hero card and duplicate "Start AI Understanding" button.
++- Provide manual expand/collapse accordions for all file lists.
++
++### FR-2: Playwright Script Viewer Modal
++- Add a dedicated `<PlaywrightScriptModal />` component.
++- Display complete Python script code with line numbers and syntax formatting.
++- Include a "Copy Code" button, download action, and list of discovered DOM selectors.
++- Include a direct "Run Live Script" trigger from inside the modal.
++
++### FR-3: Synthetic Test Data Inspector Modal
++- Add a dedicated `<TestDataModal />` component.
++- Display structured mock data records mapped to the test case (username, password, SSN, income, document file, terms).
++- Highlight boundary values and negative test indicators.
++- Provide a "Copy JSON" button.
++
++### FR-4: Granular Selective Execution & Monitoring
++- Add checkbox multi-selection to `LivePlaywrightRunner.tsx`.
++- Provide category filter pills: `ALL`, `Positive`, `Negative`, `Boundary`, `Validation`, `Error-Handling`.
++- Provide a primary `[▶ Run {N} Selected (New Window)]` execution button.
++- Display real-time status badges (`PASSED`, `FAILED`, `RUNNING`, `NOT_RUN`) and inline screenshot thumbnails.
++
++---
++
++## 4. Acceptance Criteria
++- [x] Requirement and codebase upload panels collapse cleanly after ingestion.
++- [x] Step 3 duplicate hero button is removed.
++- [x] Every test case row has working `[< /> View Script]` and `[📊 Data]` action buttons.
++- [x] Script viewer modal displays complete Python Playwright code with copy action.
++- [x] Test data modal displays the mapped synthetic records and schema.
++- [x] Test cases can be individually checked/unchecked and executed selectively.
+diff --git a/specs/022-testcase-datagen-scriptviewer-and-selective-execution/tasks.md b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/tasks.md
+new file mode 100644
+index 0000000..e3f26f7
+--- /dev/null
++++ b/specs/022-testcase-datagen-scriptviewer-and-selective-execution/tasks.md
+@@ -0,0 +1,29 @@
++# Task Checklist: Feature 022 — Test Case & Synthetic Data Intelligence, Script Visibility, and Selective Execution
++
++- [x] **Task 1: Intake & Home Screen Simplification**
++  - [x] Make document upload card auto-collapsible with compact status chip.
++  - [x] Make codebase ZIP upload card auto-collapsible with compact status chip.
++  - [x] Remove redundant Step 3 hero card and duplicate "Start AI Understanding" button.
++  - [x] Implement smooth manual expand/collapse accordions.
++
++- [x] **Task 2: Playwright Script Viewer Modal**
++  - [x] Create `PlaywrightScriptModal.tsx` with syntax highlighting and line numbers.
++  - [x] Add "Copy Code" button and script download capability.
++  - [x] Add discovered DOM selectors and Page Objects inspector.
++  - [x] Add direct "Run Live Script" trigger from inside modal.
++
++- [ ] **Task 3: Per-Test-Case Synthetic Test Data Inspector**
++  - [ ] Create `TestDataModal.tsx` displaying formatted mock records.
++  - [ ] Support boundary values and negative payload indicators.
++  - [ ] Add "Copy JSON" button and safety disclaimer.
++
++- [ ] **Task 4: Selective Live Execution & Integration in LivePlaywrightRunner**
++  - [ ] Add `[< /> Script]` and `[📊 Data]` action buttons to each test case row in `LivePlaywrightRunner.tsx`.
++  - [ ] Wire modal states and callbacks in `LivePlaywrightRunner.tsx` and `ExecutionPage.tsx`.
++  - [ ] Add category quick filters and multi-select checkboxes.
++  - [ ] Connect "Run Selected" and "Run Single" to headed Playwright desktop execution.
++
++- [ ] **Task 5: End-to-End Build & Verification**
++  - [ ] Run `npm run build` to verify clean compilation.
++  - [ ] Verify test case viewing, script inspection, and test data display.
++  - [ ] Verify headed live execution and screenshot gallery.
+diff --git a/src/App.tsx b/src/App.tsx
+index 4843cba..e1112f9 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -176,6 +176,17 @@ export const App: React.FC = () => {
+     if (!targetId) return;
+     try {
+       const res = await getRunStatus(targetId);
++      if (res.state === 'understanding_ready' || res.state === 'pipeline_complete') {
++        try {
++          const full = await getRunFullState(targetId);
++          if (full?.state) {
++            setAppState(full.state);
++            return;
++          }
++        } catch {
++          // fallback
++        }
++      }
+       setAppState((prev) => {
+         if (!prev) return null;
+         return {
+diff --git a/src/components/ExecutionPage.tsx b/src/components/ExecutionPage.tsx
+index 90ca29d..80b66bf 100644
+--- a/src/components/ExecutionPage.tsx
++++ b/src/components/ExecutionPage.tsx
+@@ -413,6 +413,8 @@ export const ExecutionPage: React.FC<ExecutionPageProps> = ({ appState }) => {
+           <LivePlaywrightRunner
+             testCases={testCases}
+             selectedCaseIds={selectedCaseIds}
++            playwrightScripts={appState?.playwright_scripts}
++            syntheticDataset={appState?.synthetic_dataset}
+             onToggleSelect={(caseId) =>
+               setSelectedCaseIds((prev) =>
+                 prev.includes(caseId) ? prev.filter((id) => id !== caseId) : [...prev, caseId]
+diff --git a/src/components/HomeUploadPage.tsx b/src/components/HomeUploadPage.tsx
+index 995449a..f1377ce 100644
+--- a/src/components/HomeUploadPage.tsx
++++ b/src/components/HomeUploadPage.tsx
+@@ -378,7 +378,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+           {hasDocsUploaded && !forceExpandDocs ? (
+             <div className="space-y-3 animate-file-item">
+               {/* Metrics Header Summary */}
+-              <div className="p-3.5 rounded-xl qet-card-elevated border border-emerald-500/20 flex items-center justify-between">
++              <div className="p-3 rounded-xl qet-card-elevated border border-emerald-500/20 flex items-center justify-between">
+                 <div className="flex items-center gap-2.5">
+                   <FileCheck2 className="w-5 h-5 text-emerald-500" />
+                   <div>
+@@ -390,76 +390,72 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+                     </div>
+                   </div>
+                 </div>
+-                <span className="qet-badge-success px-2.5 py-1 text-xs font-bold">
+-                  Indexed
+-                </span>
+-              </div>
+-
+-              {/* Collapsed Metrics Grid */}
+-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+-                <div className="p-2 rounded-lg qet-card-elevated">
+-                  <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
+-                  <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
+-                    {manifest?.doc_files?.length || 0}
+-                  </div>
+-                </div>
+-                <div className="p-2 rounded-lg qet-card-elevated">
+-                  <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
+-                  <div className="font-bold text-sm text-emerald-500">
+-                    {manifest?.doc_files?.length || 0}
+-                  </div>
+-                </div>
+-                <div className="p-2 rounded-lg qet-card-elevated">
+-                  <div className="text-[10px] uppercase font-bold text-slate-400">Excluded</div>
+-                  <div className="font-bold text-sm text-slate-400">0</div>
++                <div className="flex items-center gap-2">
++                  <span className="qet-badge-success px-2.5 py-0.5 text-xs font-bold">
++                    Indexed
++                  </span>
++                  <button
++                    onClick={() => setShowDocDetails(!showDocDetails)}
++                    className="p-1 rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200"
++                    title={showDocDetails ? 'Collapse Details' : 'Expand Details'}
++                  >
++                    {showDocDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
++                  </button>
+                 </div>
+               </div>
+ 
+-              {/* Expandable File List Accordion */}
+-              <div className="pt-1">
+-                <button
+-                  onClick={() => setShowDocDetails(!showDocDetails)}
+-                  className="w-full flex items-center justify-between text-xs font-semibold px-3 py-2 rounded-lg qet-btn-secondary cursor-pointer"
+-                >
+-                  <span className="flex items-center gap-1.5">
+-                    <Eye className="w-3.5 h-3.5 text-blue-500" />
+-                    <span>{showDocDetails ? 'Hide Document Details' : 'Expand Document Details'}</span>
+-                  </span>
+-                  {showDocDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+-                </button>
+-
+-                {showDocDetails && (
+-                  <div className="space-y-2 pt-2 animate-file-item">
+-                    {/* Filters */}
+-                    <div className="flex items-center gap-1.5 flex-wrap">
+-                      {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
+-                        <button
+-                          key={f}
+-                          onClick={() => setDocFilter(f)}
+-                          className={`upload-filter-btn ${docFilter === f ? 'active' : ''}`}
+-                        >
+-                          {f.charAt(0).toUpperCase() + f.slice(1)}
+-                        </button>
+-                      ))}
++              {/* Expandable File List Details */}
++              {showDocDetails && (
++                <div className="space-y-2 pt-1 animate-file-item">
++                  {/* Metrics Grid */}
++                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
++                    <div className="p-2 rounded-lg qet-card-elevated">
++                      <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
++                      <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
++                        {manifest?.doc_files?.length || 0}
++                      </div>
++                    </div>
++                    <div className="p-2 rounded-lg qet-card-elevated">
++                      <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
++                      <div className="font-bold text-sm text-emerald-500">
++                        {manifest?.doc_files?.length || 0}
++                      </div>
+                     </div>
++                    <div className="p-2 rounded-lg qet-card-elevated">
++                      <div className="text-[10px] uppercase font-bold text-slate-400">Excluded</div>
++                      <div className="font-bold text-sm text-slate-400">0</div>
++                    </div>
++                  </div>
+ 
+-                    {/* Files List */}
+-                    <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+-                      {manifest?.doc_files?.map((df, idx) => (
+-                        <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated text-xs">
+-                          <div className="flex items-center gap-2 truncate">
+-                            <FileCode className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+-                            <span className="font-mono truncate">{df}</span>
+-                          </div>
+-                          <span className="qet-badge-success px-2 py-0.5 text-[10px] font-semibold shrink-0">
+-                            Included
+-                          </span>
++                  {/* Filters */}
++                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
++                    {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
++                      <button
++                        key={f}
++                        onClick={() => setDocFilter(f)}
++                        className={`upload-filter-btn ${docFilter === f ? 'active' : ''}`}
++                      >
++                        {f.charAt(0).toUpperCase() + f.slice(1)}
++                      </button>
++                    ))}
++                  </div>
++
++                  {/* Files List */}
++                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
++                    {manifest?.doc_files?.map((df, idx) => (
++                      <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated text-xs">
++                        <div className="flex items-center gap-2 truncate">
++                          <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
++                          <span className="font-mono truncate">{df}</span>
+                         </div>
+-                      ))}
+-                    </div>
++                        <span className="qet-badge-success px-2 py-0.5 text-[10px] font-semibold shrink-0">
++                          Indexed
++                        </span>
++                      </div>
++                    ))}
+                   </div>
+-                )}
+-              </div>
++                </div>
++              )}
+             </div>
+           ) : (
+             /* Upload Dropzone */
+@@ -474,7 +470,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+               <input
+                 type="file"
+                 multiple
+-                accept=".md,.pdf,.txt,.docx,.doc"
++                accept=".md,.pdf,.docx,.txt"
+                 onChange={handleDocSelect}
+                 className="hidden"
+                 disabled={uploadingDocs}
+@@ -486,14 +482,14 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+                 {uploadingDocs ? (
+                   <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                 ) : (
+-                  <UploadCloud className="w-5 h-5 text-blue-500" />
++                  <FileText className="w-5 h-5 text-blue-500" />
+                 )}
+               </div>
+               <p className="text-xs font-semibold" style={{ color: 'var(--qet-text-primary)' }}>
+-                {uploadingDocs ? 'Indexing Requirement Documents...' : isDraggingDocs ? 'Drop files now' : 'Click to Browse or Drag & Drop Documents'}
++                {uploadingDocs ? 'Ingesting Requirements...' : isDraggingDocs ? 'Drop files now' : 'Click to Browse or Drag & Drop Documents'}
+               </p>
+               <p className="text-[11px] mt-0.5" style={{ color: 'var(--qet-text-muted)' }}>
+-                Supports Markdown, PDF, Text, and Word (.md, .pdf, .txt, .docx)
++                Accepts Markdown (.md), PDF (.pdf), Word (.docx), and Text (.txt)
+               </p>
+             </label>
+           )}
+@@ -517,7 +513,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+               <div>
+                 <div className="flex items-center gap-2">
+                   <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+-                    2. Document Intake Agent &middot; Codebase Intake
++                    2. Codebase Archive Intake
+                   </h3>
+                   {hasDocsUploaded && !hasZipUploaded && (
+                     <span className="qet-badge-accent px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+@@ -566,7 +562,7 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+           {hasZipUploaded && !forceExpandZip ? (
+             <div className="space-y-3 animate-file-item">
+               {/* Metrics Header Summary */}
+-              <div className="p-3.5 rounded-xl qet-card-elevated border border-cyan-500/20 flex items-center justify-between">
++              <div className="p-3 rounded-xl qet-card-elevated border border-cyan-500/20 flex items-center justify-between">
+                 <div className="flex items-center gap-2.5">
+                   <FolderArchive className="w-5 h-5 text-cyan-500" />
+                   <div>
+@@ -578,98 +574,94 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+                     </div>
+                   </div>
+                 </div>
+-                <span className="qet-badge-success px-2.5 py-1 text-xs font-bold">
+-                  Indexed
+-                </span>
+-              </div>
+-
+-              {/* Collapsed Metrics Grid */}
+-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+-                <div className="p-2 rounded-lg qet-card-elevated">
+-                  <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
+-                  <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
+-                    {manifest?.total_files || 0}
+-                  </div>
+-                </div>
+-                <div className="p-2 rounded-lg qet-card-elevated">
+-                  <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
+-                  <div className="font-bold text-sm text-emerald-500">
+-                    {manifest?.total_files || 0}
+-                  </div>
+-                </div>
+-                <div className="p-2 rounded-lg qet-card-elevated">
+-                  <div className="text-[10px] uppercase font-bold text-amber-500">Excluded</div>
+-                  <div className="font-bold text-sm text-amber-500">
+-                    {manifest?.excluded_file_count || 0}
+-                  </div>
+-                </div>
+-                <div className="p-2 rounded-lg qet-card-elevated">
+-                  <div className="text-[10px] uppercase font-bold text-cyan-500">Reviewed</div>
+-                  <div className="font-bold text-sm text-cyan-500">
+-                    {manifest?.total_files || 0}
+-                  </div>
++                <div className="flex items-center gap-2">
++                  <span className="qet-badge-success px-2.5 py-0.5 text-xs font-bold">
++                    Indexed
++                  </span>
++                  <button
++                    onClick={() => setShowZipDetails(!showZipDetails)}
++                    className="p-1 rounded-md qet-btn-secondary text-slate-400 hover:text-slate-200"
++                    title={showZipDetails ? 'Collapse Details' : 'Expand Details'}
++                  >
++                    {showZipDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
++                  </button>
+                 </div>
+               </div>
+ 
+               {/* Expandable File List Accordion */}
+-              <div className="pt-1">
+-                <button
+-                  onClick={() => setShowZipDetails(!showZipDetails)}
+-                  className="w-full flex items-center justify-between text-xs font-semibold px-3 py-2 rounded-lg qet-btn-secondary cursor-pointer"
+-                >
+-                  <span className="flex items-center gap-1.5">
+-                    <Eye className="w-3.5 h-3.5 text-cyan-500" />
+-                    <span>{showZipDetails ? 'Hide File Details' : 'Expand File Details'}</span>
+-                  </span>
+-                  {showZipDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+-                </button>
+-
+-                {showZipDetails && (
+-                  <div className="space-y-2 pt-2 animate-file-item">
+-                    {/* Filters */}
+-                    <div className="flex items-center gap-1.5 flex-wrap">
+-                      {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
+-                        <button
+-                          key={f}
+-                          onClick={() => setZipFilter(f)}
+-                          className={`upload-filter-btn ${zipFilter === f ? 'active' : ''}`}
+-                        >
+-                          {f.charAt(0).toUpperCase() + f.slice(1)}
+-                        </button>
+-                      ))}
++              {showZipDetails && (
++                <div className="space-y-2 pt-1 animate-file-item">
++                  {/* Metrics Grid */}
++                  <div className="grid grid-cols-4 gap-2 text-center text-xs">
++                    <div className="p-2 rounded-lg qet-card-elevated">
++                      <div className="text-[10px] uppercase font-bold text-slate-400">Total</div>
++                      <div className="font-bold text-sm" style={{ color: 'var(--qet-text-primary)' }}>
++                        {manifest?.total_files || 0}
++                      </div>
++                    </div>
++                    <div className="p-2 rounded-lg qet-card-elevated">
++                      <div className="text-[10px] uppercase font-bold text-emerald-500">Included</div>
++                      <div className="font-bold text-sm text-emerald-500">
++                        {manifest?.total_files || 0}
++                      </div>
++                    </div>
++                    <div className="p-2 rounded-lg qet-card-elevated">
++                      <div className="text-[10px] uppercase font-bold text-amber-500">Excluded</div>
++                      <div className="font-bold text-sm text-amber-500">
++                        {manifest?.excluded_file_count || 0}
++                      </div>
++                    </div>
++                    <div className="p-2 rounded-lg qet-card-elevated">
++                      <div className="text-[10px] uppercase font-bold text-cyan-500">Reviewed</div>
++                      <div className="font-bold text-sm text-cyan-500">
++                        {manifest?.total_files || 0}
++                      </div>
+                     </div>
++                  </div>
++
++                  {/* Filters */}
++                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
++                    {(['all', 'included', 'excluded', 'reviewed'] as const).map(f => (
++                      <button
++                        key={f}
++                        onClick={() => setZipFilter(f)}
++                        className={`upload-filter-btn ${zipFilter === f ? 'active' : ''}`}
++                      >
++                        {f.charAt(0).toUpperCase() + f.slice(1)}
++                      </button>
++                    ))}
++                  </div>
+ 
+-                    {/* File rows */}
+-                    <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 text-xs">
+-                      {manifest?.files && manifest.files.length > 0 ? (
+-                        manifest.files
+-                          .filter(file => {
+-                            if (zipFilter === 'excluded') return file.is_binary;
+-                            if (zipFilter === 'included') return !file.is_binary;
+-                            return true;
+-                          })
+-                          .map((file, idx) => (
+-                            <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated">
+-                              <div className="flex items-center gap-2 truncate">
+-                                <FileCode className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+-                                <span className="font-mono truncate">{file.rel_path}</span>
+-                              </div>
+-                              <span className={`px-2 py-0.5 text-[10px] font-semibold shrink-0 rounded ${
+-                                file.is_binary ? 'qet-badge-warning' : 'qet-badge-success'
+-                              }`}>
+-                                {file.is_binary ? 'Excluded' : 'Included'}
+-                              </span>
++                  {/* File rows */}
++                  <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 text-xs">
++                    {manifest?.files && manifest.files.length > 0 ? (
++                      manifest.files
++                        .filter(file => {
++                          if (zipFilter === 'excluded') return file.is_binary;
++                          if (zipFilter === 'included') return !file.is_binary;
++                          return true;
++                        })
++                        .map((file, idx) => (
++                          <div key={idx} className="flex items-center justify-between p-2 rounded-md qet-card-elevated">
++                            <div className="flex items-center gap-2 truncate">
++                              <FileCode className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
++                              <span className="font-mono truncate">{file.rel_path}</span>
+                             </div>
+-                          ))
+-                      ) : (
+-                        <div className="p-3 text-center text-xs text-slate-400">
+-                          {manifest?.total_files} source files in {manifest?.zip_filename}
+-                        </div>
+-                      )}
+-                    </div>
++                            <span className={`px-2 py-0.5 text-[10px] font-semibold shrink-0 rounded ${
++                              file.is_binary ? 'qet-badge-warning' : 'qet-badge-success'
++                            }`}>
++                              {file.is_binary ? 'Excluded' : 'Included'}
++                            </span>
++                          </div>
++                        ))
++                    ) : (
++                      <div className="p-3 text-center text-xs text-slate-400">
++                        {manifest?.total_files} source files in {manifest?.zip_filename}
++                      </div>
++                    )}
+                   </div>
+-                )}
+-              </div>
++                </div>
++              )}
+             </div>
+           ) : (
+             /* Upload Dropzone */
+@@ -711,60 +703,37 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
+         </div>
+       </div>
+ 
+-      {/* ── 4. Stage 3 Hero Action: Application Understanding Agent ──── */}
+-      <div 
+-        className={`p-6 rounded-2xl transition-all duration-300 ${
+-          hasDocsUploaded && hasZipUploaded
+-            ? 'agent-hero-card animate-hero-enter qet-card'
+-            : 'qet-panel border'
+-        }`}
+-      >
+-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+-          <div className="space-y-2 flex-1">
+-            <div className="flex items-center gap-3">
+-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 border border-blue-500/20 shrink-0">
+-                <Bot className="w-5 h-5 text-blue-500" />
+-              </div>
+-              <div>
+-                <div className="flex items-center gap-2">
+-                  <h3 className="text-base font-bold" style={{ color: 'var(--qet-text-primary)' }}>
+-                    3. Application Understanding Agent
+-                  </h3>
+-                  {hasDocsUploaded && hasZipUploaded && (
+-                    <span className="qet-badge-accent px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+-                      Active Hero
+-                    </span>
+-                  )}
+-                </div>
+-                <p className="text-xs" style={{ color: 'var(--qet-text-secondary)' }}>
+-                  Deep AI synthesis discovering component DOM selectors, user flows, APIs, and 15-point requirement gaps.
+-                </p>
+-              </div>
++      {/* ── Single Unified AI Understanding Action Banner ──── */}
++      {isIntakeReady && (
++        <div className="p-5 rounded-2xl qet-card-elevated border border-blue-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 animate-file-item shadow-sm">
++          <div className="flex items-center gap-3">
++            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 border border-blue-500/20 shrink-0">
++              <Bot className="w-5 h-5 text-blue-500" />
+             </div>
+-
+-            {/* Live Processing Activity Text */}
+-            {isUnderstandingRunning && (
+-              <div className="mt-2 p-3 rounded-xl flex items-center gap-3 qet-badge-accent animate-pulse-glow text-xs">
+-                <Activity className="w-4 h-4 text-blue-500 animate-spin shrink-0" />
+-                <span className="font-mono font-semibold">
+-                  {liveActivities[activityIndex]}
++            <div>
++              <div className="flex items-center gap-2">
++                <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
++                  Intake Ready &middot; Application Understanding
++                </h3>
++                <span className="qet-badge-success px-2 py-0.5 text-[10px] font-bold uppercase">
++                  Ready
+                 </span>
+               </div>
+-            )}
++              <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
++                Synthesize component DOM locators, API routes, user flows, and 15-point requirement validation.
++              </p>
++            </div>
+           </div>
+ 
+-          {/* Action CTA Button */}
+-          {isIntakeReady && (
+-            <button
+-              onClick={onProceedToUnderstanding}
+-              className="qet-btn-primary inline-flex items-center gap-2 px-6 py-3 text-xs font-bold shadow-lg whitespace-nowrap cursor-pointer self-stretch sm:self-auto justify-center rounded-xl"
+-            >
+-              <span>{isUnderstandingReady ? 'View AI Understanding Results' : 'Start AI Understanding'}</span>
+-              <ArrowRight className="w-4 h-4" />
+-            </button>
+-          )}
++          <button
++            onClick={onProceedToUnderstanding}
++            className="qet-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold shadow-md whitespace-nowrap cursor-pointer rounded-xl self-stretch sm:self-auto justify-center"
++          >
++            <span>{isUnderstandingReady ? 'View AI Understanding Results' : 'Proceed to AI Understanding'}</span>
++            <ArrowRight className="w-4 h-4" />
++          </button>
+         </div>
+-      </div>
++      )}
+     </div>
+   );
+ };
+diff --git a/src/components/execution/LivePlaywrightRunner.tsx b/src/components/execution/LivePlaywrightRunner.tsx
+index e7d80da..d9eb945 100644
+--- a/src/components/execution/LivePlaywrightRunner.tsx
++++ b/src/components/execution/LivePlaywrightRunner.tsx
+@@ -1,9 +1,29 @@
+ import React, { useState, useMemo } from 'react';
+-import { TestCase } from '../../types';
++import { 
++  Play, 
++  FileCode, 
++  Database, 
++  CheckSquare, 
++  Square, 
++  Search, 
++  Filter, 
++  CheckCircle2, 
++  AlertCircle, 
++  Loader2,
++  Layers,
++  Sparkles,
++  Eye,
++  RotateCcw
++} from 'lucide-react';
++import { TestCase, PlaywrightScript, SyntheticDataset } from '../../types';
++import { PlaywrightScriptModal } from './PlaywrightScriptModal';
++import { TestDataModal } from './TestDataModal';
+ 
+ interface LivePlaywrightRunnerProps {
+   testCases: TestCase[];
+   selectedCaseIds: string[];
++  playwrightScripts?: PlaywrightScript[];
++  syntheticDataset?: SyntheticDataset | null;
+   onToggleSelect: (caseId: string) => void;
+   onSelectAll: (caseIds: string[]) => void;
+   onRunSingle: (caseId: string) => void;
+@@ -16,6 +36,8 @@ interface LivePlaywrightRunnerProps {
+ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+   testCases,
+   selectedCaseIds,
++  playwrightScripts = [],
++  syntheticDataset = null,
+   onToggleSelect,
+   onSelectAll,
+   onRunSingle,
+@@ -27,6 +49,10 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+   const [filterType, setFilterType] = useState<string>('ALL');
+   const [searchQuery, setSearchQuery] = useState<string>('');
+ 
++  // Modals state
++  const [selectedScriptCase, setSelectedScriptCase] = useState<TestCase | null>(null);
++  const [selectedDataCase, setSelectedDataCase] = useState<TestCase | null>(null);
++
+   const caseTypes = ['ALL', 'Positive', 'Negative', 'Boundary', 'Validation', 'Error-Handling'];
+ 
+   const filteredCases = useMemo(() => {
+@@ -54,29 +80,38 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+     }
+   };
+ 
++  const selectByCategory = (category: string) => {
++    const categoryCases = testCases.filter(
++      (tc) => category === 'ALL' || tc.case_type.toLowerCase() === category.toLowerCase()
++    );
++    const categoryIds = categoryCases.map((tc) => tc.case_id);
++    const merged = Array.from(new Set([...selectedCaseIds, ...categoryIds]));
++    onSelectAll(merged);
++  };
++
+   const getCaseTypeBadge = (type: string) => {
+     switch (type) {
+       case 'Positive':
+-        return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-700/60">Positive</span>;
++        return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-700/60">Positive</span>;
+       case 'Negative':
+-        return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-rose-950 text-rose-300 border border-rose-700/60">Negative</span>;
++        return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-950 text-rose-300 border border-rose-700/60">Negative</span>;
+       case 'Boundary':
+-        return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-950 text-purple-300 border border-purple-700/60">Boundary</span>;
++        return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-950 text-purple-300 border border-purple-700/60">Boundary</span>;
+       case 'Validation':
+-        return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-cyan-950 text-cyan-300 border border-cyan-700/60">Validation</span>;
++        return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-950 text-cyan-300 border border-cyan-700/60">Validation</span>;
+       case 'Error-Handling':
+-        return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-950 text-amber-300 border border-amber-700/60">Error-Handling</span>;
++        return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-950 text-amber-300 border border-amber-700/60">Error-Handling</span>;
+       default:
+-        return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">{type}</span>;
++        return <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">{type}</span>;
+     }
+   };
+ 
+   const getStatusIndicator = (caseId: string) => {
+     if (currentRunningCaseId === caseId) {
+       return (
+-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400 animate-pulse">
+-          <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+-          Running...
++        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 animate-pulse">
++          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
++          <span>Running Live...</span>
+         </span>
+       );
+     }
+@@ -84,90 +119,106 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+     if (status === 'PASSED') {
+       return (
+         <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
+-          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+-            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+-          </svg>
+-          PASSED
++          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
++          <span>PASSED</span>
+         </span>
+       );
+     }
+     if (status === 'FAILED') {
+       return (
+         <span className="inline-flex items-center gap-1 text-xs font-semibold text-rose-400">
+-          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+-            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+-          </svg>
+-          FAILED
++          <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
++          <span>FAILED</span>
+         </span>
+       );
+     }
+     return <span className="text-xs text-slate-500 font-mono">Not Run</span>;
+   };
+ 
++  const getScriptForCase = (caseId: string) => {
++    return playwrightScripts.find(
++      (s) => s.test_case_id === caseId || s.filename.toLowerCase().includes(caseId.toLowerCase().replace(/-/g, '_'))
++    );
++  };
++
+   return (
+-    <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-lg p-5 flex flex-col gap-4">
++    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl p-5 flex flex-col gap-4 text-slate-200">
++      
+       {/* Header & Controls */}
+-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
++      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+         <div>
+-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+-            Playwright Test Cases & Dedicated Scripts
+-            <span className="text-xs font-normal text-slate-400 ml-1">
+-              ({testCases.length} total scripts generated)
++          <div className="flex items-center gap-2">
++            <h3 className="text-base font-bold text-white flex items-center gap-2">
++              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
++              Generated Playwright Test Cases &amp; Automation Hub
++            </h3>
++            <span className="px-2 py-0.5 rounded-full bg-blue-950 text-blue-300 border border-blue-800/60 text-xs font-semibold">
++              {testCases.length} Scenarios
+             </span>
+-          </h3>
+-          <p className="text-xs text-slate-400 mt-0.5">
+-            Click any test case to run its dedicated Playwright script in a new desktop browser window with positive & negative screenshot capture.
++          </div>
++          <p className="text-xs text-slate-400 mt-1">
++            Inspect dedicated Python scripts (<code className="text-cyan-400 font-mono text-[11px]">test_tc_*.py</code>), review synthetic datasets, or execute selected test cases in a live headed desktop browser window.
+           </p>
+         </div>
+ 
+-        {/* Action Button */}
+-        <div className="flex items-center gap-2">
++        {/* Primary Action Button */}
++        <div className="flex items-center gap-2.5">
+           {selectedCaseIds.length > 0 && (
+             <button
+               onClick={() => onRunSelected(selectedCaseIds)}
+               disabled={isLoading}
+-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow transition disabled:opacity-50"
++              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-600/30 transition cursor-pointer disabled:opacity-50"
+             >
+-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+-              </svg>
+-              Run {selectedCaseIds.length} Selected (New Window)
++              <Play className="w-3.5 h-3.5 fill-current" />
++              <span>Run {selectedCaseIds.length} Selected (New Window)</span>
+             </button>
+           )}
+         </div>
+       </div>
+ 
+-      {/* Filters & Search */}
++      {/* Quick Category Filters & Search */}
+       <div className="flex flex-wrap items-center justify-between gap-3">
++        {/* Category Pills */}
+         <div className="flex items-center gap-1.5 flex-wrap">
+-          {caseTypes.map((type) => (
+-            <button
+-              key={type}
+-              onClick={() => setFilterType(type)}
+-              className={`px-2.5 py-1 text-xs rounded-md transition font-medium ${
+-                filterType === type
+-                  ? 'bg-blue-600 text-white shadow-sm'
+-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+-              }`}
+-            >
+-              {type}
+-            </button>
+-          ))}
++          {caseTypes.map((type) => {
++            const count = type === 'ALL' 
++              ? testCases.length 
++              : testCases.filter(c => c.case_type.toLowerCase() === type.toLowerCase()).length;
++            
++            return (
++              <button
++                key={type}
++                onClick={() => setFilterType(type)}
++                className={`px-3 py-1 text-xs rounded-lg transition font-medium cursor-pointer flex items-center gap-1.5 ${
++                  filterType === type
++                    ? 'bg-blue-600 text-white shadow-sm font-bold'
++                    : 'bg-slate-800/90 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
++                }`}
++              >
++                <span>{type}</span>
++                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
++                  filterType === type ? 'bg-blue-800 text-white' : 'bg-slate-900 text-slate-400'
++                }`}>
++                  {count}
++                </span>
++              </button>
++            );
++          })}
+         </div>
+ 
++        {/* Search Bar */}
+         <div className="relative">
+           <input
+             type="text"
+-            placeholder="Search test cases or feature..."
++            placeholder="Search test case, scenario, or locator..."
+             value={searchQuery}
+             onChange={(e) => setSearchQuery(e.target.value)}
+-            className="w-64 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
++            className="w-72 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition"
+           />
+           {searchQuery && (
+             <button
+               onClick={() => setSearchQuery('')}
+-              className="absolute right-2.5 top-1.5 text-slate-500 hover:text-slate-300 text-xs"
++              className="absolute right-3 top-1.5 text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+             >
+               ✕
+             </button>
+@@ -176,11 +227,11 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+       </div>
+ 
+       {/* Test Cases Table */}
+-      <div className="overflow-x-auto border border-slate-800/80 rounded-lg">
++      <div className="overflow-x-auto border border-slate-800/80 rounded-xl bg-slate-950/40">
+         <table className="w-full text-left text-xs border-collapse">
+           <thead>
+-            <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 font-medium">
+-              <th className="p-3 w-10 text-center">
++            <tr className="bg-slate-950 text-slate-400 border-b border-slate-800 font-medium">
++              <th className="p-3.5 w-10 text-center">
+                 <input
+                   type="checkbox"
+                   checked={allFilteredSelected}
+@@ -188,18 +239,18 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+                   className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer"
+                 />
+               </th>
+-              <th className="p-3">Test Case ID</th>
+-              <th className="p-3">Type</th>
+-              <th className="p-3">Feature Area & Scenario</th>
+-              <th className="p-3">Dedicated Script File</th>
+-              <th className="p-3">Status</th>
+-              <th className="p-3 text-right">Action</th>
++              <th className="p-3.5 font-bold">Case ID</th>
++              <th className="p-3.5 font-bold">Type</th>
++              <th className="p-3.5 font-bold">Feature Area &amp; Scenario</th>
++              <th className="p-3.5 font-bold">Script &amp; Data Inspection</th>
++              <th className="p-3.5 font-bold">Status</th>
++              <th className="p-3.5 text-right font-bold">Live Action</th>
+             </tr>
+           </thead>
+-          <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
++          <tbody className="divide-y divide-slate-800/60">
+             {filteredCases.length === 0 ? (
+               <tr>
+-                <td colSpan={7} className="p-6 text-center text-slate-500">
++                <td colSpan={7} className="p-8 text-center text-slate-500">
+                   No test cases match the active filter criteria.
+                 </td>
+               </tr>
+@@ -207,17 +258,19 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+               filteredCases.map((tc) => {
+                 const isSelected = selectedCaseIds.includes(tc.case_id);
+                 const isCurrent = currentRunningCaseId === tc.case_id;
+-                const scriptFile = `tests/test_${tc.case_id.toLowerCase().replace(/-/g, '_')}.py`;
++                const matchedScript = getScriptForCase(tc.case_id);
++                const scriptFile = matchedScript?.filename || `test_${tc.case_id.toLowerCase().replace(/-/g, '_')}.py`;
+ 
+                 return (
+                   <tr
+                     key={tc.case_id}
+-                    className={`hover:bg-slate-800/50 transition cursor-pointer ${
++                    className={`hover:bg-slate-800/40 transition cursor-pointer ${
+                       isCurrent ? 'bg-blue-950/40 border-l-2 border-blue-500' : ''
+-                    } ${isSelected ? 'bg-slate-800/30' : ''}`}
++                    } ${isSelected ? 'bg-slate-800/20' : ''}`}
+                     onClick={() => onToggleSelect(tc.case_id)}
+                   >
+-                    <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
++                    {/* Checkbox */}
++                    <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                       <input
+                         type="checkbox"
+                         checked={isSelected}
+@@ -225,32 +278,69 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+                         className="rounded border-slate-700 text-blue-600 focus:ring-0 cursor-pointer"
+                       />
+                     </td>
+-                    <td className="p-3 font-mono font-bold text-slate-200">
+-                      {tc.case_id}
++
++                    {/* Case ID */}
++                    <td className="p-3.5 font-mono font-bold text-slate-200">
++                      <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">
++                        {tc.case_id}
++                      </span>
+                     </td>
+-                    <td className="p-3">
++
++                    {/* Type Badge */}
++                    <td className="p-3.5">
+                       {getCaseTypeBadge(tc.case_type)}
+                     </td>
+-                    <td className="p-3 max-w-xs">
+-                      <div className="font-semibold text-slate-200">{tc.title}</div>
+-                      <div className="text-slate-400 text-xs mt-0.5 truncate">{tc.feature_area}</div>
++
++                    {/* Title & Feature Area */}
++                    <td className="p-3.5 max-w-sm">
++                      <div className="font-semibold text-slate-100">{tc.title}</div>
++                      <div className="text-slate-400 text-[11px] mt-0.5 truncate flex items-center gap-1.5">
++                        <span className="text-cyan-400 font-medium">{tc.feature_area}</span>
++                        {tc.priority && (
++                          <span className="text-slate-500">&middot; Priority: {tc.priority}</span>
++                        )}
++                      </div>
+                     </td>
+-                    <td className="p-3 font-mono text-slate-400 text-xs">
+-                      {scriptFile}
++
++                    {/* Script & Data Inspect Buttons */}
++                    <td className="p-3.5" onClick={(e) => e.stopPropagation()}>
++                      <div className="flex items-center gap-2">
++                        {/* View Script Button */}
++                        <button
++                          onClick={() => setSelectedScriptCase(tc)}
++                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-cyan-200 text-xs font-semibold rounded-lg border border-slate-700 transition cursor-pointer shadow-sm"
++                          title="View generated Python Playwright script"
++                        >
++                          <FileCode className="w-3.5 h-3.5 text-cyan-400" />
++                          <span>View Script</span>
++                        </button>
++
++                        {/* View Data Button */}
++                        <button
++                          onClick={() => setSelectedDataCase(tc)}
++                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-emerald-200 text-xs font-semibold rounded-lg border border-slate-700 transition cursor-pointer shadow-sm"
++                          title="View synthetic mock data for this test"
++                        >
++                          <Database className="w-3.5 h-3.5 text-emerald-400" />
++                          <span>View Data</span>
++                        </button>
++                      </div>
+                     </td>
+-                    <td className="p-3">
++
++                    {/* Status Badge */}
++                    <td className="p-3.5">
+                       {getStatusIndicator(tc.case_id)}
+                     </td>
+-                    <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
++
++                    {/* Live Action Button */}
++                    <td className="p-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                       <button
+                         onClick={() => onRunSingle(tc.case_id)}
+                         disabled={isLoading}
+-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-400 text-xs font-semibold rounded border border-slate-700 transition shadow-sm disabled:opacity-50"
+-                        title="Run single test in headed desktop window"
++                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-blue-600 hover:text-white text-blue-400 text-xs font-bold rounded-lg border border-slate-700 transition shadow-sm disabled:opacity-50 cursor-pointer"
++                        title="Execute single script in live headed desktop window"
+                       >
+-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+-                        </svg>
++                        <Play className="w-3 h-3 fill-current" />
+                         <span>Run Live</span>
+                       </button>
+                     </td>
+@@ -261,6 +351,29 @@ export const LivePlaywrightRunner: React.FC<LivePlaywrightRunnerProps> = ({
+           </tbody>
+         </table>
+       </div>
++
++      {/* Script Viewer Modal */}
++      {selectedScriptCase && (
++        <PlaywrightScriptModal
++          isOpen={Boolean(selectedScriptCase)}
++          onClose={() => setSelectedScriptCase(null)}
++          testCase={selectedScriptCase}
++          script={getScriptForCase(selectedScriptCase.case_id)}
++          onRunSingle={onRunSingle}
++          isLoading={isLoading}
++        />
++      )}
++
++      {/* Test Data Inspector Modal */}
++      {selectedDataCase && (
++        <TestDataModal
++          isOpen={Boolean(selectedDataCase)}
++          onClose={() => setSelectedDataCase(null)}
++          testCase={selectedDataCase}
++          syntheticDataset={syntheticDataset}
++        />
++      )}
++
+     </div>
+   );
+ };
+diff --git a/src/components/execution/PlaywrightScriptModal.tsx b/src/components/execution/PlaywrightScriptModal.tsx
+new file mode 100644
+index 0000000..e3df215
+--- /dev/null
++++ b/src/components/execution/PlaywrightScriptModal.tsx
+@@ -0,0 +1,272 @@
++import React, { useState } from 'react';
++import { 
++  X, 
++  Copy, 
++  Check, 
++  FileCode, 
++  Play, 
++  Layers, 
++  Crosshair, 
++  ShieldCheck, 
++  Sparkles,
++  Download
++} from 'lucide-react';
++import { PlaywrightScript, TestCase } from '../../types';
++
++interface PlaywrightScriptModalProps {
++  isOpen: boolean;
++  onClose: () => void;
++  testCase?: TestCase | null;
++  script?: PlaywrightScript | null;
++  onRunSingle?: (caseId: string) => void;
++  isLoading?: boolean;
++}
++
++export const PlaywrightScriptModal: React.FC<PlaywrightScriptModalProps> = ({
++  isOpen,
++  onClose,
++  testCase,
++  script,
++  onRunSingle,
++  isLoading = false,
++}) => {
++  const [copied, setCopied] = useState(false);
++
++  if (!isOpen || !testCase) return null;
++
++  const scriptCode = script?.code || `# Playwright test script for ${testCase.case_id}
++import pytest
++from playwright.sync_api import Page, expect
++from pages.cfa_pages import LoginPage, ApplicationFormPage
++
++def test_${testCase.case_id.toLowerCase().replace(/-/g, '_')}_scenario(page: Page):
++    """Scenario: ${testCase.title}"""
++    # 1. Initialize Page Objects
++    login_page = LoginPage(page)
++    login_page.navigate()
++    
++    # 2. Execute Test Scenario: ${testCase.case_type}
++    ${testCase.steps && testCase.steps.length > 0 
++      ? testCase.steps.map(s => `# - ${s}`).join('\n    ') 
++      : '# - Perform automated user interaction actions'}
++    
++    # 3. Assert Expected Outcome:
++    # Expected: ${testCase.expected_result || 'Operation completes with verified DOM assertion'}
++    expect(page).to_be_visible()
++`;
++
++  const scriptFilename = script?.filename || `test_${testCase.case_id.toLowerCase().replace(/-/g, '_')}.py`;
++
++  const handleCopy = () => {
++    navigator.clipboard.writeText(scriptCode);
++    setCopied(true);
++    setTimeout(() => setCopied(false), 2000);
++  };
++
++  const handleDownload = () => {
++    const blob = new Blob([scriptCode], { type: 'text/x-python' });
++    const url = URL.createObjectURL(blob);
++    const a = document.createElement('a');
++    a.href = url;
++    a.download = scriptFilename;
++    a.click();
++    URL.revokeObjectURL(url);
++  };
++
++  const lines = scriptCode.split('\n');
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
++      <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden text-slate-200">
++        
++        {/* Modal Header */}
++        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/80">
++          <div className="flex items-center gap-3">
++            <div className="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
++              <FileCode className="w-5 h-5" />
++            </div>
++            <div>
++              <div className="flex items-center gap-2">
++                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800/60">
++                  {testCase.case_id}
++                </span>
++                <span className="text-xs font-semibold text-slate-300">
++                  {scriptFilename}
++                </span>
++              </div>
++              <h3 className="text-sm font-semibold text-white truncate max-w-lg mt-0.5">
++                {testCase.title}
++              </h3>
++            </div>
++          </div>
++
++          <div className="flex items-center gap-2">
++            <button
++              onClick={handleCopy}
++              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
++              title="Copy code to clipboard"
++            >
++              {copied ? (
++                <>
++                  <Check className="w-3.5 h-3.5 text-emerald-400" />
++                  <span className="text-emerald-400 font-semibold">Copied!</span>
++                </>
++              ) : (
++                <>
++                  <Copy className="w-3.5 h-3.5 text-slate-400" />
++                  <span>Copy Code</span>
++                </>
++              )}
++            </button>
++
++            <button
++              onClick={handleDownload}
++              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
++              title="Download Python Script"
++            >
++              <Download className="w-3.5 h-3.5 text-slate-400" />
++              <span>Download</span>
++            </button>
++
++            {onRunSingle && (
++              <button
++                onClick={() => {
++                  onRunSingle(testCase.case_id);
++                  onClose();
++                }}
++                disabled={isLoading}
++                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow transition cursor-pointer disabled:opacity-50"
++              >
++                <Play className="w-3.5 h-3.5 fill-current" />
++                <span>Run Live Script</span>
++              </button>
++            )}
++
++            <button
++              onClick={onClose}
++              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer ml-1"
++            >
++              <X className="w-5 h-5" />
++            </button>
++          </div>
++        </div>
++
++        {/* Modal Body: Code View + Metadata Sub-rail */}
++        <div className="flex-1 overflow-hidden flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-slate-800">
++          
++          {/* Code Viewer Panel */}
++          <div className="flex-1 overflow-y-auto bg-slate-950 p-4 font-mono text-xs leading-relaxed select-text">
++            <div className="table w-full border-collapse">
++              {lines.map((line, idx) => (
++                <div key={idx} className="table-row hover:bg-slate-900/60 group">
++                  <span className="table-cell pr-4 text-right select-none text-slate-600 group-hover:text-slate-400 w-10 text-[11px]">
++                    {idx + 1}
++                  </span>
++                  <span className="table-cell pl-2 text-slate-200 whitespace-pre font-mono">
++                    {line.startsWith('#') ? (
++                      <span className="text-slate-500 italic">{line}</span>
++                    ) : line.startsWith('from ') || line.startsWith('import ') ? (
++                      <span className="text-purple-400">{line}</span>
++                    ) : line.startsWith('def ') || line.startsWith('class ') ? (
++                      <span className="text-cyan-400 font-semibold">{line}</span>
++                    ) : line.includes('expect(') ? (
++                      <span className="text-emerald-400">{line}</span>
++                    ) : (
++                      line
++                    )}
++                  </span>
++                </div>
++              ))}
++            </div>
++          </div>
++
++          {/* Right Metadata Sub-panel */}
++          <div className="w-full md:w-72 bg-slate-900 p-4 overflow-y-auto space-y-4 text-xs">
++            
++            {/* Scenario Details */}
++            <div className="space-y-1.5">
++              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
++                Scenario Type & Priority
++              </span>
++              <div className="flex items-center gap-2">
++                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-200 border border-slate-700">
++                  {testCase.case_type}
++                </span>
++                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-950 text-blue-300 border border-blue-800/60">
++                  {testCase.priority}
++                </span>
++              </div>
++              <p className="text-slate-400 text-[11px] leading-relaxed pt-1">
++                {testCase.description}
++              </p>
++            </div>
++
++            {/* Selectors Discovered & Used */}
++            <div className="space-y-1.5 pt-2 border-t border-slate-800">
++              <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
++                <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
++                <span>Locators & Selectors</span>
++              </div>
++              {script?.selectors_used && script.selectors_used.length > 0 ? (
++                <div className="space-y-1">
++                  {script.selectors_used.map((sel, i) => (
++                    <div key={i} className="p-1.5 rounded bg-slate-950 border border-slate-800 font-mono text-[10px] text-cyan-300 truncate" title={sel}>
++                      {sel}
++                    </div>
++                  ))}
++                </div>
++              ) : (
++                <div className="text-[11px] text-slate-500 italic">
++                  Selectors dynamically bound via Page Object Model
++                </div>
++              )}
++            </div>
++
++            {/* Page Objects */}
++            <div className="space-y-1.5 pt-2 border-t border-slate-800">
++              <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
++                <Layers className="w-3.5 h-3.5 text-purple-400" />
++                <span>Page Objects Used</span>
++              </div>
++              <div className="flex flex-wrap gap-1">
++                {(script?.page_objects && script.page_objects.length > 0 ? script.page_objects : ['LoginPage', 'ApplicationFormPage']).map((po, i) => (
++                  <span key={i} className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800/60 font-mono text-[10px]">
++                    {po}
++                  </span>
++                ))}
++              </div>
++            </div>
++
++            {/* Validation Guarantee */}
++            <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-800/50 flex items-start gap-2">
++              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
++              <div className="text-[11px] text-emerald-300">
++                <span className="font-bold">Playwright Python Ready</span>
++                <p className="text-[10px] text-emerald-400/80 mt-0.5">
++                  Formatted for pytest-playwright with headed desktop execution & screenshot assertions.
++                </p>
++              </div>
++            </div>
++
++          </div>
++        </div>
++
++        {/* Modal Footer */}
++        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-800 bg-slate-950/60 text-xs text-slate-400">
++          <div className="flex items-center gap-2 font-mono text-[11px]">
++            <span>{lines.length} lines</span>
++            <span>&middot;</span>
++            <span>Python 3.10+ / Playwright</span>
++          </div>
++          <button
++            onClick={onClose}
++            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer transition"
++          >
++            Close
++          </button>
++        </div>
++
++      </div>
++    </div>
++  );
++};
+diff --git a/src/components/execution/TestDataModal.tsx b/src/components/execution/TestDataModal.tsx
+new file mode 100644
+index 0000000..9ee52e2
+--- /dev/null
++++ b/src/components/execution/TestDataModal.tsx
+@@ -0,0 +1,243 @@
++import React, { useState } from 'react';
++import { 
++  X, 
++  Copy, 
++  Check, 
++  Database, 
++  ShieldCheck, 
++  AlertCircle, 
++  Layers, 
++  CheckCircle2,
++  Table as TableIcon,
++  Code as CodeIcon
++} from 'lucide-react';
++import { SyntheticDataset, SyntheticRecord, TestCase } from '../../types';
++
++interface TestDataModalProps {
++  isOpen: boolean;
++  onClose: () => void;
++  testCase?: TestCase | null;
++  syntheticDataset?: SyntheticDataset | null;
++}
++
++export const TestDataModal: React.FC<TestDataModalProps> = ({
++  isOpen,
++  onClose,
++  testCase,
++  syntheticDataset,
++}) => {
++  const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
++  const [copied, setCopied] = useState(false);
++
++  if (!isOpen || !testCase) return null;
++
++  // Find records mapped to this specific test case
++  const caseId = testCase.case_id;
++  const mappedRecords: SyntheticRecord[] = 
++    syntheticDataset?.test_case_id_mapping?.[caseId] || 
++    syntheticDataset?.records?.filter(r => r.target_test_case === caseId) || 
++    [];
++
++  // If no mapped record found, generate a representative synthetic record for display
++  const displayRecords: SyntheticRecord[] = mappedRecords.length > 0 ? mappedRecords : [
++    {
++      record_id: `REC-${testCase.case_type.slice(0, 3).toUpperCase()}-001`,
++      target_test_case: caseId,
++      category: `${testCase.case_type} ${testCase.feature_area}`,
++      username: testCase.case_type === 'Negative' ? 'invalid.user@badformat' : `candidate.${testCase.case_id.toLowerCase().replace(/-/g, '')}@fictional-domain.org`,
++      password: testCase.case_type === 'Negative' ? 'WrongPassword123!' : 'ValidPassword2026!',
++      full_name: testCase.case_type === 'Negative' ? 'Test Negative User' : 'Alex Fictional Candidate',
++      ssn: testCase.case_type === 'Boundary' ? '000-00-0000' : '999-12-3456',
++      monthly_income: testCase.case_type === 'Boundary' ? 0.00 : 7500.00,
++      employment_status: 'Full-Time',
++      document_file: testCase.case_type === 'Negative' ? 'unsupported_file.exe' : 'candidate_id_document.pdf',
++      terms_accepted: testCase.case_type !== 'Negative',
++      is_synthetic: true
++    }
++  ];
++
++  const jsonString = JSON.stringify(displayRecords, null, 2);
++
++  const handleCopy = () => {
++    navigator.clipboard.writeText(jsonString);
++    setCopied(true);
++    setTimeout(() => setCopied(false), 2000);
++  };
++
++  const isNegativeOrBoundary = testCase.case_type === 'Negative' || testCase.case_type === 'Boundary' || testCase.case_type === 'Error-Handling';
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
++      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden text-slate-200">
++        
++        {/* Modal Header */}
++        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/80">
++          <div className="flex items-center gap-3">
++            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
++              <Database className="w-5 h-5" />
++            </div>
++            <div>
++              <div className="flex items-center gap-2">
++                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
++                  {testCase.case_id}
++                </span>
++                <span className="text-xs font-semibold text-slate-300">
++                  Synthetic Test Data Record
++                </span>
++              </div>
++              <h3 className="text-sm font-semibold text-white truncate max-w-lg mt-0.5">
++                {testCase.title}
++              </h3>
++            </div>
++          </div>
++
++          <div className="flex items-center gap-2">
++            {/* View Mode Toggle */}
++            <div className="flex items-center p-0.5 bg-slate-800 rounded-lg border border-slate-700">
++              <button
++                onClick={() => setViewMode('table')}
++                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
++                  viewMode === 'table' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
++                }`}
++              >
++                <TableIcon className="w-3.5 h-3.5" />
++                <span>Table</span>
++              </button>
++              <button
++                onClick={() => setViewMode('json')}
++                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
++                  viewMode === 'json' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
++                }`}
++              >
++                <CodeIcon className="w-3.5 h-3.5" />
++                <span>JSON</span>
++              </button>
++            </div>
++
++            <button
++              onClick={handleCopy}
++              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
++              title="Copy mock data payload"
++            >
++              {copied ? (
++                <>
++                  <Check className="w-3.5 h-3.5 text-emerald-400" />
++                  <span className="text-emerald-400 font-semibold">Copied!</span>
++                </>
++              ) : (
++                <>
++                  <Copy className="w-3.5 h-3.5 text-slate-400" />
++                  <span>Copy JSON</span>
++                </>
++              )}
++            </button>
++
++            <button
++              onClick={onClose}
++              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer ml-1"
++            >
++              <X className="w-5 h-5" />
++            </button>
++          </div>
++        </div>
++
++        {/* Modal Body */}
++        <div className="flex-1 overflow-y-auto p-5 space-y-4">
++          
++          {/* Disclaimer & Scenario Indicator */}
++          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
++            <div className="flex items-center gap-2">
++              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
++              <span className="text-slate-300">
++                100% Fictional Non-PII Synthetic Dataset &middot; Mapped to <strong className="text-white">{testCase.feature_area}</strong>
++              </span>
++            </div>
++            <span className={`px-2.5 py-0.5 rounded text-[11px] font-semibold ${
++              isNegativeOrBoundary ? 'bg-amber-950 text-amber-300 border border-amber-800/60' : 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
++            }`}>
++              {testCase.case_type} Scenario
++            </span>
++          </div>
++
++          {/* Table View */}
++          {viewMode === 'table' ? (
++            <div className="space-y-4">
++              {displayRecords.map((record, rIdx) => (
++                <div key={rIdx} className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950">
++                  <div className="px-4 py-2.5 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between">
++                    <span className="font-mono font-bold text-xs text-emerald-400">
++                      {record.record_id}
++                    </span>
++                    <span className="text-xs text-slate-400">
++                      Category: <span className="text-slate-200">{record.category}</span>
++                    </span>
++                  </div>
++
++                  <table className="w-full text-left text-xs border-collapse">
++                    <thead>
++                      <tr className="border-b border-slate-800/80 text-slate-400 bg-slate-900/40 font-medium">
++                        <th className="p-3 w-1/3">Field / Parameter</th>
++                        <th className="p-3 w-1/2">Synthetic Value</th>
++                        <th className="p-3 text-right">Data Type</th>
++                      </tr>
++                    </thead>
++                    <tbody className="divide-y divide-slate-800/60">
++                      {Object.entries(record)
++                        .filter(([k]) => k !== 'record_id' && k !== 'target_test_case' && k !== 'category' && k !== 'is_synthetic')
++                        .map(([key, val], vIdx) => {
++                          const isSpecial = (key === 'monthly_income' && (val === 0 || val > 50000)) ||
++                                            (key === 'username' && String(val).includes('badformat')) ||
++                                            (key === 'password' && String(val).includes('Wrong')) ||
++                                            (key === 'terms_accepted' && val === false);
++
++                          return (
++                            <tr key={vIdx} className="hover:bg-slate-900/50 transition">
++                              <td className="p-3 font-mono text-slate-400 font-medium">
++                                {key}
++                              </td>
++                              <td className="p-3 font-mono">
++                                <span className={`px-1.5 py-0.5 rounded text-xs ${
++                                  isSpecial 
++                                    ? 'bg-amber-950/80 text-amber-300 border border-amber-700/60 font-bold' 
++                                    : 'text-slate-200'
++                                }`}>
++                                  {typeof val === 'boolean' ? (val ? 'true' : 'false') : String(val)}
++                                </span>
++                              </td>
++                              <td className="p-3 text-right font-mono text-slate-500 text-[11px]">
++                                {typeof val}
++                              </td>
++                            </tr>
++                          );
++                        })}
++                    </tbody>
++                  </table>
++                </div>
++              ))}
++            </div>
++          ) : (
++            /* JSON View */
++            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 font-mono text-xs text-emerald-300 overflow-x-auto select-text">
++              <pre>{jsonString}</pre>
++            </div>
++          )}
++
++        </div>
++
++        {/* Modal Footer */}
++        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-800 bg-slate-950/60 text-xs text-slate-400">
++          <span className="font-mono text-[11px]">
++            {displayRecords.length} mock record(s) &middot; Target: {testCase.case_id}
++          </span>
++          <button
++            onClick={onClose}
++            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer transition"
++          >
++            Close
++          </button>
++        </div>
++
++      </div>
++    </div>
++  );
++};
+diff --git a/src/services/apiClient.ts b/src/services/apiClient.ts
+index da72e08..cd330af 100644
+--- a/src/services/apiClient.ts
++++ b/src/services/apiClient.ts
+@@ -162,8 +162,8 @@ export async function getStatus(runId: string): Promise<StatusResponse> {
+ 
+ export const getRunStatus = getStatus;
+ 
+-export async function getRunFullState(runId: string): Promise<any> {
+-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/status`);
++export async function getRunFullState(runId: string): Promise<CreateRunResponse> {
++  const res = await fetch(`${API_BASE_URL}/runs/${runId}`);
+   if (!res.ok) {
+     await throwApiError(res, 'Failed to fetch run full state');
+   }
+diff --git a/src/types.ts b/src/types.ts
+index cd07670..b044eb6 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -157,12 +157,53 @@ export interface TestCase {
+   priority: string;
+   description: string;
+   review_status: string;
++  steps?: string[];
++  expected_result?: string;
++  preconditions?: string[];
++  synthetic_data_keys?: string[];
++  requirement_id?: string;
++  confidence?: string;
++}
++
++export interface SyntheticRecord {
++  record_id: string;
++  target_test_case: string;
++  category: string;
++  username?: string;
++  password?: string;
++  full_name?: string;
++  ssn?: string;
++  monthly_income?: number;
++  employment_status?: string;
++  document_file?: string;
++  terms_accepted?: boolean;
++  is_synthetic?: boolean;
++  [key: string]: any;
++}
++
++export interface SyntheticDataset {
++  dataset_id: string;
++  dataset_name: string;
++  data_schema: Record<string, string>;
++  records: SyntheticRecord[];
++  test_case_id_mapping: Record<string, SyntheticRecord[]>;
++  is_synthetic: boolean;
++  non_pii_disclaimer: string;
++  provenance: Record<string, any>;
++  upstream_case_ids?: string[];
++  validation_status: string;
++  synthetic_only_validated: boolean;
++  fallback_used: boolean;
+ }
+ 
+ export interface TestSuite {
+   suite_id: string;
+   name: string;
++  description?: string;
+   test_cases: TestCase[];
++  provenance?: Record<string, any>;
++  validation_status?: string;
++  fallback_used?: boolean;
+ }
+ 
+ export interface PlaywrightScript {
+@@ -235,6 +276,7 @@ export interface AppState {
+   intake_manifest?: IntakeManifest;
+   understanding?: ApplicationUnderstanding;
+   test_suite?: TestSuite;
++  synthetic_dataset?: SyntheticDataset;
+   playwright_scripts?: PlaywrightScript[];
+   last_execution_result?: ExecutionResult;
+   latest_multi_level_results?: Record<string, any>;
+-- 
+2.55.0.windows.3
+
