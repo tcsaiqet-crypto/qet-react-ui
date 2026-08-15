@@ -514,6 +514,21 @@ def start_understanding(run_id: str, background_tasks: BackgroundTasks):
     if not state:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
+    intake_manifest = state.intake_manifest
+    has_intake = bool(intake_manifest) and (
+        bool(intake_manifest.doc_files) or (getattr(intake_manifest, "total_files", 0) or 0) > 0
+    )
+    if not has_intake:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "intake_not_ready",
+                "error_message": "Understanding analysis can only start after at least one document or codebase upload has been indexed.",
+                "diagnostics": {"intake_manifest": intake_manifest.model_dump() if intake_manifest else None},
+                "retryable": False,
+            },
+        )
+
     update_run_status(run_id, status="ai_understanding_running", progress=75.0)
     background_tasks.add_task(_execute_understanding_task, run_id)
     return {"status": "started", "run_id": run_id}

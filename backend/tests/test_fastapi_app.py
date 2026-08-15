@@ -82,6 +82,40 @@ def test_understanding_ai_failfast_when_no_key(monkeypatch: pytest.MonkeyPatch):
     assert exc_info.value.diagnostics is not None
 
 
+def test_understanding_prefers_selected_provider(monkeypatch: pytest.MonkeyPatch):
+    from src.config import config
+    from src.services.llm_service import LLMService
+
+    monkeypatch.setattr(type(config), "get_active_provider", lambda self: "gemini")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: ["gemini-key"] if provider == "gemini" else ["gpt-key"])
+
+    agent = UnderstandingAgent(run_id="RUN-TEST-PROVIDER")
+    state = AppState(run_id="RUN-TEST-PROVIDER", project_name="Provider Test", status="idle", progress=0.0)
+
+    calls: list[str] = []
+
+    def fake_call_gemini(prompt: str, api_key: str):
+        calls.append("gemini")
+        return '{"summary": "ok", "architecture_notes": "ok", "testability_observations": [], "entry_points": [], "components": [], "flows": [], "gaps": []}'
+
+    monkeypatch.setattr(agent, "_call_gemini", fake_call_gemini)
+    monkeypatch.setattr(agent, "_call_gpt", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("OpenAI should not be invoked when Gemini is selected")))
+
+    agent.run_ai_required(state)
+
+    assert calls == ["gemini"]
+
+
+def test_start_understanding_requires_upload_ready_state():
+    run_resp = client.post("/api/v1/runs", json={"project_name": "Gate Test"})
+    run_id = run_resp.json()["run_id"]
+
+    resp = client.post(f"/api/v1/runs/{run_id}/understanding/start")
+    assert resp.status_code == 400
+    payload = resp.json()
+    assert payload["detail"]["error_code"] == "intake_not_ready"
+
+
 def test_ai_settings_round_trip():
     get_resp = client.get("/api/v1/ai/settings")
     assert get_resp.status_code == 200

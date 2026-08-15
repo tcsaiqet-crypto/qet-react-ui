@@ -129,18 +129,20 @@ class UnderstandingAgent(BaseAgent):
         gpt_keys = self.llm._provider_keys("gpt")
         provider_keys = {"gemini": gemini_keys, "gpt": gpt_keys}
 
-        # Try the configured provider first, then fall back to the other configured
-        # provider (still a real AI call, never sample/deterministic data).
-        provider_order = [preferred_provider] + [p for p in ("gemini", "gpt") if p != preferred_provider]
+        # Respect the user's selected provider. The app intentionally fails fast
+        # rather than silently switching to the other provider when the chosen one
+        # is missing or invalid.
+        provider_order = [preferred_provider] if preferred_provider in {"gemini", "gpt"} else ["gemini", "gpt"]
         provider_order = [p for p in provider_order if provider_keys.get(p)]
 
         if not provider_order:
             raise AIRequiredFailureException(
                 error_code="provider_key_missing",
-                error_message="No valid Gemini or OpenAI API key is configured.",
+                error_message=f"No valid {preferred_provider.upper()} API key is configured for the active provider selection.",
                 diagnostics={
-                    "reason": "Missing or placeholder API key for all providers",
-                    "remediation": "Configure GEMINI_API_KEY/OPENAI_API_KEY or a key file under backend/keys/."
+                    "reason": f"Missing or placeholder API key for active provider '{preferred_provider}'",
+                    "selected_provider": preferred_provider,
+                    "remediation": "Open Tools > AI Settings, paste a valid provider key, or switch to the provider that has a valid key configured."
                 }
             )
 
