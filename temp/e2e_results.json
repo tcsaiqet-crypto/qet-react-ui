@@ -69,7 +69,7 @@
   },
   "create_run": {
     "status": 200,
-    "run_id": "RUN-20260815-120147-527425"
+    "run_id": "RUN-20260815-124759-7787FD"
   },
   "upload_document": {
     "status": 200,
@@ -84,9 +84,9 @@
     "status": 200,
     "data": {
       "intake_manifest": {
-        "upload_id": "RUN-20260815-120147-527425",
+        "upload_id": "RUN-20260815-124759-7787FD",
         "zip_filename": "codebase.zip",
-        "extracted_path": "uploads\\RUN-20260815-120147-527425",
+        "extracted_path": "uploads\\RUN-20260815-124759-7787FD",
         "total_files": 2,
         "total_size_bytes": 167,
         "files": [
@@ -110,12 +110,12 @@
         "created_at": "2026-08-13T14:00:00Z"
       },
       "state": {
-        "run_id": "RUN-20260815-120147-527425",
+        "run_id": "RUN-20260815-124759-7787FD",
         "project_name": "CFA Digital Journey",
         "intake_manifest": {
-          "upload_id": "RUN-20260815-120147-527425",
+          "upload_id": "RUN-20260815-124759-7787FD",
           "zip_filename": "codebase.zip",
-          "extracted_path": "uploads\\RUN-20260815-120147-527425",
+          "extracted_path": "uploads\\RUN-20260815-124759-7787FD",
           "total_files": 2,
           "total_size_bytes": 167,
           "files": [
@@ -147,10 +147,10 @@
         "latest_report": null,
         "errors": [],
         "stage_timestamps": {
-          "created_at": "2026-08-15T12:01:47.361622+00:00",
-          "uploading": "2026-08-15T12:01:47.405354+00:00",
-          "processing_zip": "2026-08-15T12:01:47.431542+00:00",
-          "indexing": "2026-08-15T12:01:47.468867+00:00"
+          "created_at": "2026-08-15T12:47:59.412193+00:00",
+          "uploading": "2026-08-15T12:47:59.528089+00:00",
+          "processing_zip": "2026-08-15T12:47:59.578957+00:00",
+          "indexing": "2026-08-15T12:47:59.618564+00:00"
         },
         "stage_validation": {},
         "stage_provenance": {},
@@ -203,7 +203,7 @@
     "status": 200,
     "data": {
       "status": "started",
-      "run_id": "RUN-20260815-120147-527425"
+      "run_id": "RUN-20260815-124759-7787FD"
     }
   },
   "coverage": {
@@ -212,14 +212,14 @@
   },
   "backend_logs": {
     "status": 200,
-    "size_bytes": 135,
-    "preview": "[2026-08-15 17:31:47,528] [INFO] [qet_accelerator] Executing AI-Required Understanding analysis for run RUN-20260815-120147-527425...\r\n"
+    "size_bytes": 2164,
+    "preview": "[2026-08-15 18:17:59,419] [INFO] [qet_accelerator] Ingesting 1 specification document(s) for run RUN-20260815-124759-7787FD...\r\n[2026-08-15 18:17:59,525] [INFO] [qet_accelerator] Saved document: 'paym"
   },
   "cancel_run": {
     "status": 200,
     "data": {
       "status": "stopped",
-      "run_id": "RUN-20260815-120147-527425"
+      "run_id": "RUN-20260815-124759-7787FD"
     }
   }
 }

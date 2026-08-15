@@ -47,10 +47,10 @@ class AgentModelPolicy:
 
 
 AGENT_MODEL_POLICIES = {
-    "default": AgentModelPolicy("flash", None, 0.2, 2500),
-    "understanding": AgentModelPolicy("flash", "pro", 0.2, 4000),
-    "categorization": AgentModelPolicy("flash_lite", "flash", 0.1, 2200),
-    "test_cases": AgentModelPolicy("flash", "pro", 0.15, 8000),
+    "default": AgentModelPolicy("flash", None, 0.2, 8192),
+    "understanding": AgentModelPolicy("flash", "pro", 0.2, 8192),
+    "categorization": AgentModelPolicy("flash_lite", "flash", 0.1, 4000),
+    "test_cases": AgentModelPolicy("flash", "pro", 0.15, 8192),
 }
 
 
@@ -324,7 +324,11 @@ class LLMService:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
         active_policy = policy or AGENT_MODEL_POLICIES["default"]
         payload = {
-            "generationConfig": {"temperature": active_policy.temperature, "maxOutputTokens": active_policy.max_output_tokens},
+            "generationConfig": {
+                "temperature": active_policy.temperature,
+                "maxOutputTokens": active_policy.max_output_tokens,
+                "responseMimeType": "application/json"
+            },
             "contents": [{"parts": [{"text": prompt}]}],
         }
         try:
@@ -531,6 +535,16 @@ class LLMService:
                     }
                 except json.JSONDecodeError:
                     pass
+
+            # Advanced repair: Attempt to balance truncated JSON payload
+            repaired_dict = LLMService._repair_truncated_json(cleaned)
+            if repaired_dict and isinstance(repaired_dict, dict):
+                return repaired_dict, {
+                    "parser_stage": "repaired_truncated_json",
+                    "issue": "Recovered valid payload by closing truncated JSON brackets.",
+                    "recovery_attempted": True,
+                    "truncated": True,
+                }
 
             likely_truncated = LLMService._looks_truncated_json(cleaned)
             return None, {

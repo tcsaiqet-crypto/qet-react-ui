@@ -491,84 +491,97 @@ async def upload_documents(
     if not upload_files:
         raise HTTPException(status_code=400, detail="No files provided for document upload")
 
-    state = load_run_state(run_id)
-    if not state:
-        state = create_run_state(run_id=run_id)
+    with log_run_context(run_id):
+        logger.info(f"Ingesting {len(upload_files)} specification document(s) for run {run_id}...")
 
-    doc_dir = Path("uploads") / run_id / "documents"
-    doc_dir.mkdir(parents=True, exist_ok=True)
+        state = load_run_state(run_id)
+        if not state:
+            state = create_run_state(run_id=run_id)
 
-    saved_filenames = []
-    for idx, f in enumerate(upload_files):
-        raw_name = f.filename or f"doc_{idx + 1}.md"
-        safe_name = Path(raw_name).name or f"doc_{idx + 1}.md"
-        file_path = doc_dir / safe_name
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(f.file, buffer)
-        saved_filenames.append(safe_name)
+        doc_dir = Path("uploads") / run_id / "documents"
+        doc_dir.mkdir(parents=True, exist_ok=True)
 
-    update_run_status(run_id, status="uploading", progress=30.0)
+        saved_filenames = []
+        for idx, f in enumerate(upload_files):
+            raw_name = f.filename or f"doc_{idx + 1}.md"
+            safe_name = Path(raw_name).name or f"doc_{idx + 1}.md"
+            file_path = doc_dir / safe_name
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(f.file, buffer)
+            file_size_kb = file_path.stat().st_size / 1024.0 if file_path.exists() else 0
+            logger.info(f"Saved document: '{safe_name}' ({file_size_kb:.1f} KB)")
+            saved_filenames.append(safe_name)
 
-    state = load_run_state(run_id)
-    if state:
-        if not state.intake_manifest:
-            state.intake_manifest = IntakeManifest(
-                upload_id=run_id,
-                zip_filename="",
-                extracted_path=str(Path("uploads") / run_id / "extracted"),
-                total_files=0,
-                total_size_bytes=0,
-                doc_files=saved_filenames,
-                created_at=datetime.now(timezone.utc).isoformat()
-            )
-        else:
-            state.intake_manifest.doc_files = list(set(state.intake_manifest.doc_files + saved_filenames))
-        save_run_state(state)
+        update_run_status(run_id, status="uploading", progress=30.0)
 
-    return DocumentUploadResponse(uploaded_count=len(saved_filenames), files=saved_filenames)
+        state = load_run_state(run_id)
+        if state:
+            if not state.intake_manifest:
+                state.intake_manifest = IntakeManifest(
+                    upload_id=run_id,
+                    zip_filename="",
+                    extracted_path=str(Path("uploads") / run_id / "extracted"),
+                    total_files=0,
+                    total_size_bytes=0,
+                    doc_files=saved_filenames,
+                    created_at=datetime.now(timezone.utc).isoformat()
+                )
+            else:
+                state.intake_manifest.doc_files = list(set(state.intake_manifest.doc_files + saved_filenames))
+            save_run_state(state)
+
+        logger.info(f"Successfully indexed {len(saved_filenames)} requirement document(s) into intake manifest.")
+        return DocumentUploadResponse(uploaded_count=len(saved_filenames), files=saved_filenames)
 
 
 @app.post("/api/v1/runs/{run_id}/codebase", response_model=CodebaseUploadResponse)
 @app.post("/api/v1/runs/{run_id}/upload/codebase", response_model=CodebaseUploadResponse)
 async def upload_codebase(run_id: str, file: UploadFile = File(...)):
-    state = load_run_state(run_id)
-    if not state:
-        state = create_run_state(run_id=run_id)
+    with log_run_context(run_id):
+        state = load_run_state(run_id)
+        if not state:
+            state = create_run_state(run_id=run_id)
 
-    raw_name = file.filename or "codebase.zip"
-    safe_filename = Path(raw_name).name or "codebase.zip"
-    if not safe_filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="Only .zip files are supported for codebase upload")
+        raw_name = file.filename or "codebase.zip"
+        safe_filename = Path(raw_name).name or "codebase.zip"
+        if not safe_filename.endswith(".zip"):
+            raise HTTPException(status_code=400, detail="Only .zip files are supported for codebase upload")
 
-    update_run_status(run_id, status="processing_zip", progress=45.0)
+        update_run_status(run_id, status="processing_zip", progress=45.0)
 
-    upload_dir = Path("uploads") / run_id
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = upload_dir / safe_filename
+        upload_dir = Path("uploads") / run_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        zip_path = upload_dir / safe_filename
 
-    with open(zip_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        with open(zip_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    try:
-        zip_service = ZipService(target_dir=Path("uploads"))
-        manifest, zip_processing = zip_service.process_zip_upload(run_id, zip_path, safe_filename)
-    except Exception as e:
-        error_code = "zip_validation_failed" if isinstance(e, SecurityError) else "zip_extraction_failed"
-        err = {"error_code": error_code, "error_message": str(e), "diagnostics": {"file": file.filename}}
-        update_run_status(run_id, status="error", progress=45.0, error=err)
-        raise HTTPException(status_code=400, detail=err)
+        file_size_kb = zip_path.stat().st_size / 1024.0 if zip_path.exists() else 0
+        logger.info(f"Received codebase archive '{safe_filename}' ({file_size_kb:.1f} KB). Extracting files safely...")
 
-    state = load_run_state(run_id)
-    if state and state.intake_manifest and state.intake_manifest.doc_files:
-        manifest.doc_files = list(set(manifest.doc_files + state.intake_manifest.doc_files))
+        try:
+            zip_service = ZipService(target_dir=Path("uploads"))
+            manifest, zip_processing = zip_service.process_zip_upload(run_id, zip_path, safe_filename)
+            logger.info(f"Archive unpacked successfully: {manifest.total_files} source files ({manifest.total_size_bytes / 1024:.1f} KB) indexed.")
+        except Exception as e:
+            error_code = "zip_validation_failed" if isinstance(e, SecurityError) else "zip_extraction_failed"
+            logger.error(f"ZIP processing failure ({error_code}): {str(e)}")
+            err = {"error_code": error_code, "error_message": str(e), "diagnostics": {"file": file.filename}}
+            update_run_status(run_id, status="error", progress=45.0, error=err)
+            raise HTTPException(status_code=400, detail=err)
 
-    state.intake_manifest = manifest
-    state.launcher_state["zip_processing"] = zip_processing
-    save_run_state(state)
-    update_run_status(run_id, status="indexing", progress=60.0)
+        state = load_run_state(run_id)
+        if state and state.intake_manifest and state.intake_manifest.doc_files:
+            manifest.doc_files = list(set(manifest.doc_files + state.intake_manifest.doc_files))
 
-    state = load_run_state(run_id)
-    return CodebaseUploadResponse(intake_manifest=manifest, state=state)
+        state.intake_manifest = manifest
+        state.launcher_state["zip_processing"] = zip_processing
+        save_run_state(state)
+        update_run_status(run_id, status="indexing", progress=60.0)
+
+        logger.info(f"Intake pipeline complete: {len(manifest.doc_files)} doc(s), {manifest.total_files} code file(s) ready for AI Understanding.")
+        state = load_run_state(run_id)
+        return CodebaseUploadResponse(intake_manifest=manifest, state=state)
 
 
 @app.get("/api/v1/runs/{run_id}/logs")

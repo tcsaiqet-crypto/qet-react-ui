@@ -35,6 +35,8 @@ interface HomeUploadPageProps {
   onProceedToUnderstanding: () => void;
   onCreateNewRun: () => void;
   onInspectAgent?: (agentId: string) => void;
+  onLogEvent?: (message: string, type?: 'info' | 'warn' | 'error') => void;
+  onFetchLogsNow?: () => void;
 }
 
 export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
@@ -42,7 +44,9 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   onRefreshStatus,
   onProceedToUnderstanding,
   onCreateNewRun,
-  onInspectAgent
+  onInspectAgent,
+  onLogEvent,
+  onFetchLogsNow
 }) => {
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const [zipFile, setZipFile] = useState<File | null>(null);
@@ -175,10 +179,12 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     let targetRunId = runId;
     if (!targetRunId) {
       try {
+        onLogEvent?.('Initializing new execution session for document intake...', 'info');
         const newRun = await createRun('CFA Digital Journey');
         targetRunId = newRun.run_id;
         onRefreshStatus();
       } catch {
+        onLogEvent?.('Failed to create run session. Please ensure backend is running.', 'error');
         setDocError(new Error('Failed to create run session. Please ensure backend is running.'));
         return;
       }
@@ -186,12 +192,17 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     setUploadingDocs(true);
     setDocError(null);
     setDocSuccess(null);
+    onLogEvent?.(`Ingesting ${files.length} requirement specification document(s)...`, 'info');
     try {
       const res = await uploadDocuments(targetRunId, files);
       setDocSuccess(`Successfully indexed ${res.uploaded_count} requirement document(s).`);
+      onLogEvent?.(`[STATUS] Successfully indexed ${res.uploaded_count} requirement document(s).`, 'info');
       setForceExpandDocs(false);
       onRefreshStatus();
+      onFetchLogsNow?.();
     } catch (err: any) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      onLogEvent?.(`Document ingestion failed: ${errorMsg}`, 'error');
       setDocError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setUploadingDocs(false);
@@ -222,10 +233,12 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     let targetRunId = runId;
     if (!targetRunId) {
       try {
+        onLogEvent?.('Initializing new execution session for codebase upload...', 'info');
         const newRun = await createRun('CFA Digital Journey');
         targetRunId = newRun.run_id;
         onRefreshStatus();
       } catch {
+        onLogEvent?.('Failed to create run session. Please ensure backend is running.', 'error');
         setZipError(new Error('Failed to create run session. Please ensure backend is running.'));
         return;
       }
@@ -233,12 +246,18 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
     setUploadingZip(true);
     setZipError(null);
     setZipSuccess(null);
+    const sizeKb = (file.size / 1024.0).toFixed(1);
+    onLogEvent?.(`Uploading codebase archive '${file.name}' (${sizeKb} KB)...`, 'info');
     try {
       const res = await uploadCodebase(targetRunId, file);
       setZipSuccess(`Archive unpacked: ${res.intake_manifest.total_files} files indexed.`);
+      onLogEvent?.(`[STATUS] Codebase unpacked: ${res.intake_manifest.total_files} source files indexed into workspace.`, 'info');
       setForceExpandZip(false);
       onRefreshStatus();
+      onFetchLogsNow?.();
     } catch (err: any) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      onLogEvent?.(`Codebase upload failed: ${errorMsg}`, 'error');
       setZipError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setUploadingZip(false);

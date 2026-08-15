@@ -82,22 +82,24 @@ export const App: React.FC = () => {
     }
   };
 
+  const fetchBackendLogs = async (targetId?: string) => {
+    const runId = targetId || appState?.run_id;
+    if (!runId) return;
+    try {
+      const res = await getRunLogs(runId);
+      setBackendLogs(res.backend_logs);
+    } catch (err) {
+      // silent fail
+    }
+  };
+
   // Poll backend execution logs when drawer is open and run ID is active
   useEffect(() => {
     const runId = appState?.run_id;
     if (!runId || !logDrawerOpen) return;
 
-    const fetchLogs = async () => {
-      try {
-        const res = await getRunLogs(runId);
-        setBackendLogs(res.backend_logs);
-      } catch (err) {
-        // silent fail
-      }
-    };
-
-    void fetchLogs();
-    const interval = setInterval(fetchLogs, 3000);
+    void fetchBackendLogs(runId);
+    const interval = setInterval(() => fetchBackendLogs(runId), 3000);
     return () => clearInterval(interval);
   }, [appState?.run_id, logDrawerOpen]);
 
@@ -567,6 +569,8 @@ export const App: React.FC = () => {
                         setSelectedAgentId(agentId);
                         setIsDrawerOpen(true);
                       }}
+                      onLogEvent={logUiEvent}
+                      onFetchLogsNow={fetchBackendLogs}
                     />
 
                     {isIntakeReady && (
