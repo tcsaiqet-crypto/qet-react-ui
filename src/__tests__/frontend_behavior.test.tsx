@@ -4,6 +4,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { NavigationHeader } from '../components/NavigationHeader';
 import { HomeUploadPage } from '../components/HomeUploadPage';
+import { AgentPipelineRail } from '../components/AgentPipelineRail';
+import { ActiveProcessBar } from '../components/ActiveProcessBar';
 import { RunsDashboard } from '../components/RunsDashboard';
 import { AppState } from '../types';
 
@@ -72,8 +74,8 @@ describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
 
     expect(screen.getByText(/Execution Workspace & Agent Orchestration/i)).toBeInTheDocument();
     expect(screen.getByText(/Subagent Stream & Live Status/i)).toBeInTheDocument();
-    expect(screen.getByText(/Requirement Parser/i)).toBeInTheDocument();
-    expect(screen.getByText(/Codebase AST Extractor/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Requirement Parser/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Codebase AST Extractor/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1. Requirement Understanding Agent/i)).toBeInTheDocument();
     expect(screen.getByText(/2. Document Intake Agent/i)).toBeInTheDocument();
     expect(screen.getByText('Active Hero')).toBeInTheDocument();
@@ -170,7 +172,82 @@ describe('Spec-Kit 011 Choreography & Staged Agent Surface', () => {
       />
     );
 
-    expect(screen.getByText(/Parsing TypeScript & React component AST/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Parsing TypeScript & React component AST/i).length).toBeGreaterThan(0);
+  });
+
+});
+
+describe('Full QET left agent rail', () => {
+  test('shows completed history, active italic subagent, and downstream stages', () => {
+    const mockState: AppState = {
+      run_id: 'RUN-RAIL-001',
+      project_name: 'Rail Test',
+      status: 'ai_understanding_running',
+      progress: 40,
+      intake_manifest: {
+        upload_id: 'up-rail',
+        zip_filename: 'app.zip',
+        extracted_path: '/uploads/extracted',
+        total_files: 8,
+        total_size_bytes: 2048,
+        doc_files: ['requirements.md'],
+        files: [],
+        created_at: '2026-08-15T00:00:00Z',
+      },
+      agent_timeline: [
+        { agent_id: 'requirement_understanding', status: 'completed', generation: 1 },
+        { agent_id: 'document_intake', status: 'completed', generation: 1 },
+        { agent_id: 'application_understanding', status: 'running', generation: 1 },
+      ],
+      subagent_timeline: [
+        {
+          parent_agent_id: 'application_understanding',
+          subagent_id: 'sub_flow_synthesizer',
+          label: 'UI Journey Synthesizer',
+          status: 'running',
+          generation: 1,
+          message: 'Mapping routes',
+        },
+      ],
+    };
+
+    render(<AgentPipelineRail appState={mockState} />);
+
+    expect(screen.getByTestId('agent-pipeline-active')).toHaveTextContent('Application Understanding Agent');
+    expect(screen.getByTestId('agent-pipeline-active')).toHaveTextContent('UI Journey Synthesizer');
+    expect(screen.getByText('Requirement Understanding Agent')).toBeInTheDocument();
+    expect(screen.getByText('Accessibility Agent')).toBeInTheDocument();
+    expect(screen.getByText('Script Writer Agent')).toBeInTheDocument();
+    expect(screen.getByText('Final Dashboard')).toBeInTheDocument();
+  });
+});
+
+describe('ActiveProcessBar horizontal subagent process strip', () => {
+  test('shows active agent, italic subagent, and live process message', () => {
+    const mockState: AppState = {
+      run_id: 'RUN-BAR-001',
+      project_name: 'Bar Test',
+      status: 'ai_understanding_running',
+      progress: 75,
+      subagent_timeline: [
+        {
+          parent_agent_id: 'application_understanding',
+          subagent_id: 'sub_flow_synthesizer',
+          label: 'UI Journey Synthesizer',
+          status: 'running',
+          generation: 1,
+          message: 'Mapping routes and DOM selectors',
+        },
+      ],
+    };
+
+    render(<ActiveProcessBar appState={mockState} />);
+
+    expect(screen.getByTestId('active-process-bar')).toHaveTextContent('Application Understanding Agent');
+    expect(screen.getByTestId('active-process-subagent')).toHaveTextContent('UI Journey Synthesizer');
+    expect(screen.getByTestId('active-process-subagent')).toHaveClass('italic');
+    expect(screen.getByTestId('active-process-message')).toHaveTextContent('Mapping routes and DOM selectors');
+    expect(screen.getByTestId('active-process-bar')).toHaveTextContent('75%');
   });
 });
 

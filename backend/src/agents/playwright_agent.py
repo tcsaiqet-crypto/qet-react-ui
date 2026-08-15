@@ -114,6 +114,10 @@ class DocumentUploadPage:
         # 3. Generate tests/test_cfa_journey.py
         valid_case_id = generated_cases[0]["case_id"]
         invalid_case_id = generated_cases[1]["case_id"] if len(generated_cases) > 1 else generated_cases[0]["case_id"]
+        test_case_node_map = {
+            valid_case_id: "test_positive_applicant_flow",
+            invalid_case_id: "test_negative_invalid_password",
+        }
         test_code = f'''"""CFA Digital Journey — Automated Playwright Pytest Suite."""
 
 import pytest
@@ -211,7 +215,7 @@ pytest tests/test_cfa_journey.py --headed
                 page_objects=["LoginPage", "ApplicantInfoPage", "DocumentUploadPage"],
                 selectors_used=[selectors["username_input"], selectors["login_button"], selectors["fullname_input"]],
                 uncertain_selectors=[],
-                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream"},
+                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream", "test_case_node_map": test_case_node_map},
                 upstream_case_ids=upstream_case_ids,
                 validation_status="VALIDATED",
                 selector_confidence_map=selector_confidence_map,
@@ -225,7 +229,7 @@ pytest tests/test_cfa_journey.py --headed
                 page_objects=["LoginPage", "ApplicantInfoPage"],
                 selectors_used=[selectors["error_banner"]],
                 uncertain_selectors=[],
-                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream"},
+                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream", "test_case_node_map": test_case_node_map},
                 upstream_case_ids=upstream_case_ids,
                 validation_status="VALIDATED",
                 selector_confidence_map=selector_confidence_map,

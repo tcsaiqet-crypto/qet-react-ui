@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from src.models.schemas import AppState, ExecutionMode, ExecutionRequest
+from src.models.schemas import AppState, ExecutionMode, ExecutionRequest, IntakeManifest
 from src.services.zip_service import ZipService
 from src.services.execution_engine import ExecutionEngine, ExecutionNotAllowedError
 from src.workflows.pipeline import SequentialQETPipeline
@@ -13,7 +13,7 @@ def test_end_to_end_mvp_pipeline(tmp_path: Path) -> None:
     assert sample_zip.exists(), "Sample ZIP archive must exist"
     
     zip_service = ZipService()
-    manifest = zip_service.process_zip_upload(
+    manifest, _ = zip_service.process_zip_upload(
         upload_id="test_upl_001",
         zip_path=sample_zip,
         filename="cfa_digital_journey_sample.zip"
@@ -115,3 +115,74 @@ def test_run_single_stage_rerun_resets_downstream(monkeypatch) -> None:
 
     updated = pipeline.run_single_stage(state, "Test Cases")
     assert updated.test_suite == "recomputed"
+
+
+def test_pipeline_records_stage_lifecycle_and_upcoming_agent(monkeypatch) -> None:
+    pipeline = SequentialQETPipeline()
+    manifest = IntakeManifest(
+        upload_id="test",
+        zip_filename="",
+        extracted_path="uploads/test/extracted",
+        total_files=1,
+        total_size_bytes=1,
+        doc_files=["requirements.md"],
+        created_at="2026-08-15T00:00:00+00:00",
+    )
+    state = AppState(intake_manifest=manifest)
+
+    monkeypatch.setattr(pipeline, "_dependencies_satisfied", lambda current, stage: True)
+    monkeypatch.setattr(pipeline, "_validate_stage_outputs", lambda stage, current: True)
+    monkeypatch.setattr(pipeline.understanding_agent, "run", lambda current: current)
+
+    updated = pipeline.run_single_stage(state, "Understanding")
+
+    assert [event["event_type"] for event in updated.agent_timeline] == [
+        "agent_entered",
+        "agent_completed",
+    ]
+    assert updated.agent_timeline[-1]["generation"] == 1
+    assert updated.active_agent == "Requirement Categorization" if pipeline.STAGES[1] == "Requirement Categorization" else "Test Cases"
+    assert updated.upcoming_agent == pipeline.STAGES[1]
+
+
+def test_pipeline_retry_increments_generation_and_invalidates_downstream(monkeypatch) -> None:
+    pipeline = SequentialQETPipeline()
+    manifest = IntakeManifest(
+        upload_id="test",
+        zip_filename="",
+        extracted_path="uploads/test/extracted",
+        total_files=1,
+        total_size_bytes=1,
+        doc_files=["requirements.md"],
+        created_at="2026-08-15T00:00:00+00:00",
+    )
+    state = AppState(intake_manifest=manifest, reset_generation=1)
+    state.test_suite = object()
+    state.agent_timeline = [
+        {"agent_id": "Understanding", "generation": 1, "status": "completed"},
+        {"agent_id": "Test Cases", "generation": 1, "status": "completed"},
+    ]
+
+    monkeypatch.setattr(pipeline, "_dependencies_satisfied", lambda current, stage: True)
+    monkeypatch.setattr(pipeline, "_validate_stage_outputs", lambda stage, current: True)
+    monkeypatch.setattr(pipeline.understanding_agent, "run", lambda current: current)
+    monkeypatch.setattr(pipeline, "_execute_stage", lambda stage, current: current)
+
+    updated = pipeline.retry_stage(state, "Understanding")
+
+    assert updated.reset_generation == 2
+    assert updated.test_suite is None
+    invalidated = [event for event in updated.agent_timeline if event["status"] == "invalidated"]
+    assert invalidated
+    assert all(event["generation"] == 2 for event in invalidated)
+
+
+def test_pipeline_records_blocked_dependency() -> None:
+    pipeline = SequentialQETPipeline()
+    state = AppState()
+
+    updated = pipeline.run_single_stage(state, "Understanding")
+
+    assert updated.errors
+    assert updated.agent_timeline[-1]["status"] == "blocked"
+    assert updated.agent_timeline[-1]["agent_id"] == "Understanding"

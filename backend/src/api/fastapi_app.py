@@ -1,23 +1,27 @@
 ﻿"""FastAPI Runtime Layer exposing REST API contracts for React frontend with UI hosting."""
 
+import asyncio
 import shutil
+from uuid import uuid4
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
 import requests
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
-from schemas.contracts import AppState, ApplicationUnderstanding, IntakeManifest
+from schemas.contracts import AppState, ApplicationUnderstanding, IntakeManifest, ExecutionMode, ExecutionRequest, ExecutionStatusResponse
 from src.config import config
 from src.services.run_state_service import create_run_state, load_run_state, update_run_status, save_run_state, list_saved_runs, retry_run
 from src.services.ai_settings_store import load_ai_settings_dict, save_ai_settings_dict
 from src.services.zip_service import ZipService
 from src.agents.understanding_agent import UnderstandingAgent, AIRequiredFailureException
+from src.workflows.pipeline import SequentialQETPipeline
 from src.services.llm_service import LLMService
+from src.services.execution_manager import execution_manager
 from src.utils.security import SecurityError
 from src.utils.logger import logger
 
@@ -81,6 +85,11 @@ class StatusResponse(BaseModel):
     intake_manifest: Optional[IntakeManifest] = None
     stage_timestamps: Dict[str, str] = {}
     launcher_state: Dict[str, Any] = {}
+    agent_timeline: List[Dict[str, Any]] = []
+    subagent_timeline: List[Dict[str, Any]] = []
+    active_agent: Optional[str] = None
+    upcoming_agent: Optional[str] = None
+    reset_generation: int = 1
 
 
 class AIProviderConfig(BaseModel):
@@ -117,6 +126,13 @@ class VerifyAISettingsResponse(BaseModel):
   active_provider: str
   verified_at: str
   results: Dict[str, AIProviderVerificationResult]
+
+
+class ExecutionLaunchRequest(BaseModel):
+    test_case_ids: List[str] = []
+    explicit_user_approval: bool = False
+    is_non_production_confirmed: bool = False
+    is_script_reviewed: bool = False
 
 
 @app.get("/api/v1/health")
@@ -467,45 +483,112 @@ def get_run_status(run_id: str):
         intake_manifest=state.intake_manifest,
       stage_timestamps=state.stage_timestamps,
       launcher_state=state.launcher_state,
+      agent_timeline=state.agent_timeline,
+      subagent_timeline=state.subagent_timeline,
+      active_agent=state.active_agent,
+      upcoming_agent=state.upcoming_agent,
+      reset_generation=state.reset_generation,
     )
 
 
 def _execute_understanding_task(run_id: str):
-    state = load_run_state(run_id)
-    if not state:
-        return
-    update_run_status(run_id, status="ai_understanding_running", progress=75.0)
-    agent = UnderstandingAgent(run_id=run_id)
-    try:
-        updated_state, provenance = agent.run_ai_required(state)
-        
-        # Run categorizer stage if active
-        if config.features.enable_requirement_categorization:
-            from src.agents.requirement_categorizer import RequirementCategorizer
-            categorizer = RequirementCategorizer(run_id=run_id)
-            if not categorizer.llm.is_enabled():
-                updated_state = categorizer.run(updated_state)
-            else:
-                updated_state, cat_prov = categorizer.run_ai_required(updated_state)
+  state = load_run_state(run_id)
+  if not state:
+    return
 
-        save_run_state(updated_state)
-        update_run_status(run_id, status="understanding_ready", progress=100.0)
-    except AIRequiredFailureException as e:
-        err_payload = {
-            "error_code": e.error_code,
-            "error_message": e.error_message,
-            "diagnostics": e.diagnostics,
-            "retryable": True
-        }
-        update_run_status(run_id, status="error", progress=75.0, error=err_payload)
-    except Exception as e:
-        err_payload = {
-            "error_code": "understanding_execution_error",
-            "error_message": str(e),
-            "diagnostics": {"exception": str(e)},
-            "retryable": True
-        }
-        update_run_status(run_id, status="error", progress=75.0, error=err_payload)
+  generation = getattr(state, "reset_generation", 1) or 1
+  state.subagent_timeline = [
+    event for event in state.subagent_timeline if event.get("generation") != generation
+  ]
+  state.agent_timeline.append({
+    "event_id": str(uuid4()),
+    "event_type": "agent_entered",
+    "agent_id": "Understanding",
+    "label": "Understanding Agent",
+    "subagent_id": None,
+    "status": "running",
+    "generation": generation,
+    "message": "Understanding Agent started",
+    "timestamp": datetime.now(timezone.utc).isoformat(),
+    "source": "backend.fastapi",
+  })
+  state.active_agent = "Understanding"
+  state.upcoming_agent = "Requirement Categorization" if config.features.enable_requirement_categorization else "Test Cases"
+  save_run_state(state)
+  update_run_status(run_id, status="ai_understanding_running", progress=75.0)
+  agent = UnderstandingAgent(run_id=run_id, event_sink=save_run_state)
+  try:
+    updated_state, provenance = agent.run_ai_required(state)
+
+    if config.features.enable_requirement_categorization:
+      from src.agents.requirement_categorizer import RequirementCategorizer
+      categorizer = RequirementCategorizer(run_id=run_id)
+      if not categorizer.llm.is_enabled():
+        updated_state = categorizer.run(updated_state)
+      else:
+        updated_state, cat_prov = categorizer.run_ai_required(updated_state)
+
+    updated_state.agent_timeline.append({
+      "event_id": str(uuid4()),
+      "event_type": "agent_completed",
+      "agent_id": "Understanding",
+      "label": "Understanding Agent",
+      "subagent_id": None,
+      "status": "completed",
+      "generation": generation,
+      "message": "Understanding Agent completed",
+      "timestamp": datetime.now(timezone.utc).isoformat(),
+      "source": "backend.fastapi",
+    })
+    updated_state.active_agent = updated_state.upcoming_agent
+    save_run_state(updated_state)
+    update_run_status(run_id, status="understanding_ready", progress=100.0)
+  except AIRequiredFailureException as e:
+    err_payload = {
+      "error_code": e.error_code,
+      "error_message": e.error_message,
+      "diagnostics": e.diagnostics,
+      "retryable": True,
+    }
+    failed_state = load_run_state(run_id) or state
+    failed_state.agent_timeline.append({
+      "event_id": str(uuid4()),
+      "event_type": "agent_failed",
+      "agent_id": "Understanding",
+      "label": "Understanding Agent",
+      "subagent_id": None,
+      "status": "failed",
+      "generation": generation,
+      "message": e.error_message,
+      "timestamp": datetime.now(timezone.utc).isoformat(),
+      "source": "backend.fastapi",
+    })
+    failed_state.active_agent = "Understanding"
+    save_run_state(failed_state)
+    update_run_status(run_id, status="error", progress=75.0, error=err_payload)
+  except Exception as e:
+    err_payload = {
+      "error_code": "understanding_execution_error",
+      "error_message": str(e),
+      "diagnostics": {"exception": str(e)},
+      "retryable": True,
+    }
+    failed_state = load_run_state(run_id) or state
+    failed_state.agent_timeline.append({
+      "event_id": str(uuid4()),
+      "event_type": "agent_failed",
+      "agent_id": "Understanding",
+      "label": "Understanding Agent",
+      "subagent_id": None,
+      "status": "failed",
+      "generation": generation,
+      "message": str(e),
+      "timestamp": datetime.now(timezone.utc).isoformat(),
+      "source": "backend.fastapi",
+    })
+    failed_state.active_agent = "Understanding"
+    save_run_state(failed_state)
+    update_run_status(run_id, status="error", progress=75.0, error=err_payload)
 
 
 @app.post("/api/v1/runs/{run_id}/understanding/start")
@@ -531,6 +614,55 @@ def start_understanding(run_id: str, background_tasks: BackgroundTasks):
 
     update_run_status(run_id, status="ai_understanding_running", progress=75.0)
     background_tasks.add_task(_execute_understanding_task, run_id)
+    return {"status": "started", "run_id": run_id}
+
+
+def _execute_pipeline_task(run_id: str):
+    state = load_run_state(run_id)
+    if not state:
+        return
+
+    update_run_status(run_id, status="generation_running", progress=80.0)
+    state = load_run_state(run_id)
+    pipeline = SequentialQETPipeline()
+    updated_state = pipeline.run_from(state, "Test Cases")
+    save_run_state(updated_state)
+
+    if updated_state.errors:
+        update_run_status(
+            run_id,
+            status="error",
+            progress=80.0,
+            error={
+                "error_code": "pipeline_stage_failed",
+                "error_message": updated_state.errors[-1],
+                "diagnostics": {"errors": updated_state.errors},
+                "retryable": True,
+            },
+        )
+    else:
+        update_run_status(run_id, status="pipeline_complete", progress=100.0)
+
+
+@app.post("/api/v1/runs/{run_id}/pipeline/start")
+def start_pipeline(run_id: str, background_tasks: BackgroundTasks):
+    """Run the downstream agents (test cases, data, Playwright, report) after Understanding."""
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    if not state.understanding:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "understanding_not_ready",
+                "error_message": "Downstream agents require a completed Understanding stage.",
+                "diagnostics": {"status": state.status},
+                "retryable": False,
+            },
+        )
+
+    background_tasks.add_task(_execute_pipeline_task, run_id)
     return {"status": "started", "run_id": run_id}
 
 
@@ -646,6 +778,70 @@ def get_requirement_coverage(run_id: str):
         "categories": categories_out,
         "requirements": reqs_out
     }
+
+
+    @app.post("/api/v1/runs/{run_id}/executions", response_model=ExecutionStatusResponse)
+    def launch_execution(run_id: str, payload: ExecutionLaunchRequest):
+      state = load_run_state(run_id)
+      if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+      request = ExecutionRequest(
+        execution_id=f"EXEC-{uuid4().hex[:12].upper()}",
+        mode=ExecutionMode.PLAYWRIGHT_UI,
+        test_case_ids=payload.test_case_ids,
+        explicit_user_approval=payload.explicit_user_approval,
+        is_non_production_confirmed=payload.is_non_production_confirmed,
+        is_script_reviewed=payload.is_script_reviewed,
+      )
+      try:
+        managed = execution_manager.start(state, request)
+        return execution_manager.snapshot(managed.execution_id)
+      except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"error_code": "invalid_test_selection", "error_message": str(exc)})
+
+
+    @app.get("/api/v1/runs/{run_id}/executions/{execution_id}", response_model=ExecutionStatusResponse)
+    def get_execution_status(run_id: str, execution_id: str):
+      try:
+        snapshot = execution_manager.snapshot(execution_id)
+      except KeyError:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+      if snapshot.run_id != run_id:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found for run {run_id}")
+      return snapshot
+
+
+    @app.post("/api/v1/runs/{run_id}/executions/{execution_id}/cancel", response_model=ExecutionStatusResponse)
+    def cancel_execution(run_id: str, execution_id: str):
+      try:
+        managed = execution_manager.cancel(execution_id)
+        snapshot = execution_manager.snapshot(managed.execution_id)
+      except KeyError:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+      if snapshot.run_id != run_id:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found for run {run_id}")
+      return snapshot
+
+
+    @app.websocket("/api/v1/runs/{run_id}/executions/{execution_id}/events")
+    async def stream_execution_events(websocket: WebSocket, run_id: str, execution_id: str):
+      await websocket.accept()
+      try:
+        while True:
+          try:
+            snapshot = execution_manager.snapshot(execution_id)
+          except KeyError:
+            await websocket.send_json({"error": "execution_not_found"})
+            return
+          if snapshot.run_id != run_id:
+            await websocket.send_json({"error": "execution_not_found"})
+            return
+          await websocket.send_json(snapshot.model_dump(mode="json"))
+          if snapshot.status.value in {"passed", "failed", "cancelled", "timed_out", "not_run"}:
+            return
+          await asyncio.sleep(0.5)
+      except WebSocketDisconnect:
+        return
 
 from fastapi.staticfiles import StaticFiles
 import os

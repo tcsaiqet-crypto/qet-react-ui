@@ -17,6 +17,7 @@ class ExecutionFeatureFlags(BaseModel):
     accessibility_execution_enabled: bool = False
     security_scanning_enabled: bool = False
     enable_requirement_categorization: bool = Field(default_factory=lambda: os.getenv("QET_ENABLE_REQUIREMENT_CATEGORIZATION", "0") in {"1", "true", "yes"})
+    enable_accessibility_scanning: bool = Field(default_factory=lambda: os.getenv("QET_ENABLE_ACCESSIBILITY_SCANNING", "0") in {"1", "true", "yes"})
 
 
 class AppConfig(BaseModel):

@@ -4,7 +4,10 @@ import { AISettingsPanel } from './components/AISettingsPanel';
 import { RunsDashboard } from './components/RunsDashboard';
 import { TabId } from './components/NavigationHeader';
 import { HomeUploadPage } from './components/HomeUploadPage';
+import { AgentPipelineRail } from './components/AgentPipelineRail';
+import { ActiveProcessBar } from './components/ActiveProcessBar';
 import { UnderstandingPage } from './components/UnderstandingPage';
+import { ExecutionPage } from './components/ExecutionPage';
 import { AISettingsResponse, AppState } from './types';
 import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings } from './services/apiClient';
 
@@ -15,7 +18,7 @@ export const App: React.FC = () => {
   const [aiSettings, setAISettings] = useState<AISettingsResponse | null>(null);
   const [switchingProvider, setSwitchingProvider] = useState(false);
   const [copiedRunId, setCopiedRunId] = useState(false);
-  const prevStatusRef = useRef<string>('idle');
+  const scrolledEventsRef = useRef<Set<string>>(new Set());
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const stored = window.localStorage.getItem('qet-ui-theme');
     return stored === 'dark' ? 'dark' : 'light';
@@ -39,23 +42,40 @@ export const App: React.FC = () => {
     window.localStorage.setItem('qet-ui-theme', theme);
   }, [theme]);
 
+  const scrollToSection = (elementId: string) => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    const top = element.getBoundingClientRect().top + window.scrollY - 90; // clears the sticky header
+    window.scrollTo({ top, behavior: 'smooth' });
+  };
+
   useEffect(() => {
     const currentStatus = appState?.status;
-    if (!currentStatus) return;
-    const previousStatus = prevStatusRef.current;
-    prevStatusRef.current = currentStatus;
+    const runId = appState?.run_id;
+    if (!currentStatus || !runId) return;
 
-    if (currentStatus === 'ai_understanding_running' && previousStatus !== 'ai_understanding_running') {
-      setTimeout(() => {
-        document.getElementById('understanding-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 250);
-    }
-  }, [appState?.status]);
+    const scrollTargets: Record<string, string> = {
+      processing_zip: 'zip-intake-panel',
+      indexing: 'zip-intake-panel',
+      ai_understanding_running: 'understanding-panel',
+      understanding_ready: 'understanding-panel',
+    };
+
+    const targetId = scrollTargets[currentStatus];
+    if (!targetId) return;
+
+    const eventKey = `${runId}:${appState?.reset_generation ?? 1}:${currentStatus}`;
+    if (scrolledEventsRef.current.has(eventKey)) return;
+    scrolledEventsRef.current.add(eventKey);
+
+    const timer = window.setTimeout(() => scrollToSection(targetId), 250);
+    return () => window.clearTimeout(timer);
+  }, [appState?.status, appState?.run_id, appState?.reset_generation]);
 
   useEffect(() => {
     if (!appState?.run_id) return;
 
-    const activeStates = ['uploading', 'processing_zip', 'ai_understanding_running'];
+    const activeStates = ['uploading', 'processing_zip', 'indexing', 'ai_understanding_running', 'generation_running'];
     if (activeStates.includes(appState.status)) {
       const timer = setInterval(() => {
         refreshStatus(appState.run_id);
@@ -92,6 +112,11 @@ export const App: React.FC = () => {
           intake_manifest: res.intake_manifest || prev.intake_manifest,
           stage_timestamps: res.stage_timestamps || prev.stage_timestamps,
           launcher_state: res.launcher_state || prev.launcher_state,
+          agent_timeline: res.agent_timeline || prev.agent_timeline,
+          subagent_timeline: res.subagent_timeline || prev.subagent_timeline,
+          active_agent: res.active_agent || prev.active_agent,
+          upcoming_agent: res.upcoming_agent || prev.upcoming_agent,
+          reset_generation: res.reset_generation || prev.reset_generation,
         };
       });
     } catch (err) {
@@ -145,7 +170,7 @@ export const App: React.FC = () => {
   };
 
   const scrollToUnderstanding = () => {
-    document.getElementById('understanding-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToSection('understanding-panel');
   };
 
   const toggleTheme = () => {
@@ -161,6 +186,7 @@ export const App: React.FC = () => {
 
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: 'home', label: 'Home' },
+    { id: 'execution', label: 'Execution' },
     { id: 'runs', label: 'Runs' },
     { id: 'tools', label: 'Tools' },
   ];
@@ -376,7 +402,7 @@ export const App: React.FC = () => {
         </header>
 
         {/* Main Body */}
-        <main className="mx-auto max-w-7xl flex-1 w-full px-4 py-6 sm:px-6 lg:px-8">
+        <main className="flex-1 w-full px-4 py-6 sm:px-6 lg:px-8">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 space-y-4">
               <div
@@ -388,38 +414,47 @@ export const App: React.FC = () => {
               </p>
             </div>
           ) : (
-            <>
-              {activeTab === 'home' && (
-                <div className="space-y-6">
-                  <HomeUploadPage
-                    appState={appState}
-                    onRefreshStatus={() => refreshStatus()}
-                    onProceedToUnderstanding={scrollToUnderstanding}
-                    onCreateNewRun={initRun}
+            <div className="mx-auto flex max-w-7xl flex-col items-start gap-6 lg:flex-row">
+              <AgentPipelineRail appState={appState} />
+              <div className="min-w-0 w-full flex-1">
+                {activeTab === 'home' && (
+                  <div key={activeTab} className="animate-fade-in-up space-y-6">
+                    <div className="animate-slide-down">
+                      <ActiveProcessBar appState={appState} />
+                    </div>
+
+                    <HomeUploadPage
+                      appState={appState}
+                      onRefreshStatus={() => refreshStatus()}
+                      onProceedToUnderstanding={scrollToUnderstanding}
+                      onCreateNewRun={initRun}
+                    />
+
+                    {isIntakeReady && (
+                      <section id="understanding-panel">
+                        <UnderstandingPage
+                          appState={appState}
+                          onRefreshStatus={() => refreshStatus()}
+                        />
+                      </section>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'runs' && (
+                  <RunsDashboard
+                    activeRunId={appState?.run_id}
+                    onOpenRun={(runId) => void openExistingRun(runId)}
                   />
+                )}
 
-                  {isIntakeReady && (
-                    <section id="understanding-panel">
-                      <UnderstandingPage
-                        appState={appState}
-                        onRefreshStatus={() => refreshStatus()}
-                      />
-                    </section>
-                  )}
-                </div>
-              )}
+                {activeTab === 'execution' && <ExecutionPage appState={appState} />}
 
-              {activeTab === 'runs' && (
-                <RunsDashboard
-                  activeRunId={appState?.run_id}
-                  onOpenRun={(runId) => void openExistingRun(runId)}
-                />
-              )}
-
-              {activeTab === 'tools' && (
-                <AISettingsPanel onSaved={setAISettings} />
-              )}
-            </>
+                {activeTab === 'tools' && (
+                  <AISettingsPanel onSaved={setAISettings} />
+                )}
+              </div>
+            </div>
           )}
         </main>
 

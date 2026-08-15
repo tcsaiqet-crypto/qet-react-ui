@@ -141,6 +141,8 @@ class ExecutionEngine:
             try:
                 # Run Pytest Playwright subprocess
                 cmd = [sys.executable, "-m", "pytest", str(test_file), "-v", "--tb=short"]
+                if request.target_script_ids:
+                    cmd.extend(["-k", " or ".join(request.target_script_ids)])
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 
                 logs.append(f"Subprocess exit code: {res.returncode}")

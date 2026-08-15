@@ -16,7 +16,7 @@ import {
   Info
 } from 'lucide-react';
 import { AppState, ApplicationUnderstanding } from '../types';
-import { startUnderstanding, getUnderstanding } from '../services/apiClient';
+import { startUnderstanding, getUnderstanding, startPipeline } from '../services/apiClient';
 
 interface UnderstandingPageProps {
   appState: AppState | null;
@@ -28,6 +28,7 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
   onRefreshStatus
 }) => {
   const [isRunning, setIsRunning] = useState(false);
+  const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [understanding, setUnderstanding] = useState<ApplicationUnderstanding | undefined>(appState?.understanding);
   const [errorDetails, setErrorDetails] = useState<{
     error_code: string;
@@ -100,8 +101,26 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
     }
   };
 
-  const provenance = understanding?.provenance;
-  const attempts = Array.isArray(errorDetails?.diagnostics?.attempts)
+  const handleStartPipeline = async () => {
+    if (!runId) return;
+    setIsPipelineRunning(true);
+    setErrorDetails(null);
+    try {
+      await startPipeline(runId);
+      onRefreshStatus();
+    } catch (err: any) {
+      setErrorDetails({
+        error_code: err.error_code || 'pipeline_start_failed',
+        error_message: err.message || 'Could not start downstream agents.',
+        diagnostics: err.diagnostics,
+        retryable: true,
+      });
+    } finally {
+      setIsPipelineRunning(false);
+    }
+  };
+
+  const provenance = understanding?.provenance;  const attempts = Array.isArray(errorDetails?.diagnostics?.attempts)
     ? errorDetails?.diagnostics?.attempts
     : [];
 
@@ -156,6 +175,26 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
                 </>
               )}
             </button>
+
+            {understanding && (
+              <button
+                onClick={handleStartPipeline}
+                disabled={isPipelineRunning || currentStatus === 'generation_running'}
+                className="qet-btn-secondary inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold"
+              >
+                {isPipelineRunning || currentStatus === 'generation_running' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Running Downstream Agents...</span>
+                  </>
+                ) : (
+                  <>
+                    <Workflow className="w-4 h-4" />
+                    <span>Run Test Generation Agents</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>

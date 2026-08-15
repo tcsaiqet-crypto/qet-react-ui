@@ -19,6 +19,7 @@ from schemas.contracts import (
 )
 from src.agents.base_agent import BaseAgent
 from src.services.llm_service import LLMService
+from src.prompts.requirement_categorization_v2 import PROMPT_VERSION, build_prompt
 from src.utils.logger import logger
 
 
@@ -46,12 +47,10 @@ class RequirementCategorizer(BaseAgent):
         logger.info(f"Executing AI-Required Requirement Categorization for run {self.run_id}...")
 
         provider = self.llm._active_provider()
-        api_key = self.llm._provider_key(provider)
-
-        if not api_key or "placeholder" in api_key.lower():
+        if not self.llm.is_enabled():
             raise AIRequiredFailureException(
                 error_code="provider_key_missing",
-                error_message="Gemini API key missing or set to placeholder.",
+                error_message="No selected AI provider key is configured or usable.",
                 diagnostics={"provider": provider, "reason": "Missing API key"}
             )
 
@@ -64,51 +63,15 @@ class RequirementCategorizer(BaseAgent):
 
         # Build prompt using existing understanding elements
         und = state.understanding
-        prompt = (
-            "You are a QA requirements analyst. Analyze the following application gaps, components, and notes, "
-            "and output a structured requirement catalog in strict JSON format. "
-            "Return JSON with key 'requirements', which is an array of objects. "
-            "Each requirement object must have: requirement_id (string, e.g. REQ-F01), title (string), "
-            "description (string), type (string, must be exactly one of: Functional, NonFunctional, Security, "
-            "Performance, Accessibility, Reliability, Integration, Compliance, DataQuality, Usability), "
-            "category_id (string, e.g. CAT-SEC), source_evidence (string).\\n"
-            f"Summary: {und.summary}\\n"
-            f"Architecture: {und.architecture_notes}\\n"
-            f"Components: {[c.name for c in und.components]}\\n"
-            f"Gaps: {[g.title for g in und.gaps]}\\n"
-        )
+        prompt = build_prompt(und.summary, und.architecture_notes, [component.name for component in und.components], [gap.title for gap in und.gaps], self.llm.JSON_OUTPUT_INSTRUCTION)
 
         # G3: Route through LLMService instead of raw inline HTTP calls.
         # This ensures model discovery, candidate ranking, and timeout/error
         # diagnostics are handled consistently by the shared LLM service layer.
-        llm_text: Optional[str] = None
-        if provider == "gpt":
-            llm_text = self.llm._generate_with_gpt(prompt, api_key)
-            if llm_text is None:
-                err = self.llm.last_error or {}
-                err_code = err.get("error_code", "provider_disabled")
-                status = err.get("status_code")
-                if status in (401, 403):
-                    err_code = "provider_key_missing"
-                raise AIRequiredFailureException(
-                    error_code=err_code,
-                    error_message=err.get("error_message", "OpenAI GPT generation failed."),
-                    diagnostics={**err, "provider": "gpt"}
-                )
-        else:
-            # Gemini: use model-discovery + candidate-ranking path
-            llm_text, attempts = self.llm.generate_with_gemini(prompt, api_key)
-            if llm_text is None:
-                last = attempts[-1] if attempts else {}
-                err_code = last.get("error_code", "model_discovery_failed")
-                status = last.get("status_code")
-                if status in (401, 403):
-                    err_code = "provider_key_missing"
-                raise AIRequiredFailureException(
-                    error_code=err_code,
-                    error_message=last.get("error_message", "Gemini generation failed across all candidate models."),
-                    diagnostics={"provider": "gemini", "attempts": attempts}
-                )
+        llm_text = self.llm.generate_text(prompt, profile="categorization")
+        if llm_text is None:
+            err = self.llm.last_error or {}
+            raise AIRequiredFailureException(error_code=err.get("error_code", "provider_disabled"), error_message=err.get("error_message", "No configured AI provider generated a requirement catalog."), diagnostics={"selected_provider": provider, "routing": err})
 
         llm_data, parse_diag = self.llm.parse_json_payload_with_diagnostics(llm_text)
         if not llm_data or not isinstance(llm_data, dict) or "requirements" not in llm_data:
@@ -157,10 +120,12 @@ class RequirementCategorizer(BaseAgent):
         self._save_artifacts(requirements, categories)
 
         provenance = {
-            "provider": provider,
+            "provider": (self.llm.last_generation or {}).get("provider", provider),
+            "model": (self.llm.last_generation or {}).get("model"),
+            "prompt_version": PROMPT_VERSION,
             "stage": "requirement_categorization",
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "fallback_used": False,
+            "fallback_used": bool((self.llm.last_generation or {}).get("fallback_used")),
             "validation_status": "VALIDATED"
         }
         return state, provenance

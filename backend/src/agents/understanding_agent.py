@@ -4,7 +4,8 @@ import json
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, Callable
+from uuid import uuid4
 from schemas.contracts import (
     AppState,
     ApplicationUnderstanding,
@@ -20,6 +21,7 @@ from schemas.contracts import (
 )
 from src.agents.base_agent import BaseAgent
 from src.services.llm_service import LLMService
+from src.prompts.understanding_v3 import PROMPT_VERSION, build_prompt
 from src.utils.errors import AIRequiredFailureException
 from src.utils.logger import logger
 
@@ -47,12 +49,32 @@ class UnderstandingAgent(BaseAgent):
         (15, "Integration & API Contracts")
     ]
 
-    def __init__(self, run_id: str = "RUN-20260813-001"):
+    def __init__(self, run_id: str = "RUN-20260813-001", event_sink: Optional[Callable[[AppState], None]] = None):
         super().__init__(agent_name="UnderstandingAgent", description="Requirement & Codebase Analyst")
         self.run_id = run_id
         self.artifact_dir = Path("uploads") / run_id / "artifacts"
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
         self.llm = LLMService()
+        # Persists partial progress mid-run so the UI can render live subagent state.
+        self.event_sink = event_sink
+
+    def _emit_subagent(self, state: AppState, subagent_id: str, label: str, status: str, message: str) -> None:
+        state.subagent_timeline.append({
+            "event_id": str(uuid4()),
+            "parent_agent_id": "application_understanding",
+            "subagent_id": subagent_id,
+            "label": label,
+            "status": status,
+            "message": message,
+            "generation": getattr(state, "reset_generation", 1) or 1,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "backend.understanding_agent",
+        })
+        if self.event_sink:
+            try:
+                self.event_sink(state)
+            except Exception:
+                logger.warning("Subagent event sink failed; continuing analysis.")
 
     def _call_gpt(self, prompt: str, api_key: str) -> str:
         """Call OpenAI; raises AIRequiredFailureException with diagnostics on any failure."""
@@ -129,79 +151,99 @@ class UnderstandingAgent(BaseAgent):
         gpt_keys = self.llm._provider_keys("gpt")
         provider_keys = {"gemini": gemini_keys, "gpt": gpt_keys}
 
-        # Respect the user's selected provider. The app intentionally fails fast
-        # rather than silently switching to the other provider when the chosen one
-        # is missing or invalid.
-        provider_order = [preferred_provider] if preferred_provider in {"gemini", "gpt"} else ["gemini", "gpt"]
-        provider_order = [p for p in provider_order if provider_keys.get(p)]
-
-        if not provider_order:
+        if not any(provider_keys.values()):
             raise AIRequiredFailureException(
                 error_code="provider_key_missing",
-                error_message=f"No valid {preferred_provider.upper()} API key is configured for the active provider selection.",
+                error_message="No valid Gemini or GPT API key is configured for AI understanding.",
                 diagnostics={
-                    "reason": f"Missing or placeholder API key for active provider '{preferred_provider}'",
+                    "reason": "No configured provider has a usable API key",
                     "selected_provider": preferred_provider,
-                    "remediation": "Open Tools > AI Settings, paste a valid provider key, or switch to the provider that has a valid key configured."
+                    "remediation": "Open Tools > AI Settings and configure a valid Gemini or GPT key."
                 }
             )
 
         extracted_path = Path(state.intake_manifest.extracted_path) if state.intake_manifest else Path("sample_cfa_app")
         doc_files = state.intake_manifest.doc_files if state.intake_manifest else ["requirements.md"]
+        self._emit_subagent(state, "source_snapshot", "Source Snapshot Builder", "running", "Scanning extracted source files")
         source_snapshot = self._build_source_snapshot(extracted_path)
-
-        prompt = (
-            "You are a QA automation architect analyzing an uploaded application. "
-            "Return strict JSON with keys: "
-            "summary (string), architecture_notes (string), testability_observations (string array max 4), "
-            "entry_points (string array max 6), components (array max 6), flows (array max 4), gaps (array max 6). "
-            "Each component needs component_id, name, type, file_path, description, selectors. "
-            "Each flow needs flow_id, name, start_point, end_point, steps, description. "
-            "Each gap needs gap_id, title, description, category, severity, evidence_source, confidence.\n"
-            f"Requirement docs: {doc_files}\n"
-            f"Source snapshot:\n{source_snapshot}\n"
+        self._emit_subagent(
+            state,
+            "source_snapshot",
+            "Source Snapshot Builder",
+            "completed",
+            f"Indexed source snapshot from {len(doc_files)} requirement document(s)",
         )
 
+        prompt = build_prompt(doc_files, source_snapshot, self.llm.JSON_OUTPUT_INSTRUCTION)
+
         llm_text = ""
-        provider = provider_order[0]
+        provider = preferred_provider
         attempt_failures: List[Dict[str, Any]] = []
-        for candidate in provider_order:
-            if candidate == "gpt":
-                for key_index, api_key in enumerate(provider_keys["gpt"]):
-                    try:
-                        llm_text = self._call_gpt(prompt, api_key)
-                        if llm_text:
-                            provider = candidate
-                            break
-                    except AIRequiredFailureException as exc:
-                        attempt_failures.append({"provider": candidate, "key_index": key_index, "error_code": exc.error_code, "error_message": exc.error_message, "diagnostics": exc.diagnostics})
-                        llm_text = ""
-                        continue
-                if llm_text:
-                    break
-            else:
-                for key_index, api_key in enumerate(provider_keys["gemini"]):
-                    try:
-                        llm_text = self._call_gemini(prompt, api_key)
-                        if llm_text:
-                            provider = candidate
-                            break
-                    except AIRequiredFailureException as exc:
-                        attempt_failures.append({"provider": candidate, "key_index": key_index, "error_code": exc.error_code, "error_message": exc.error_message, "diagnostics": exc.diagnostics})
-                        llm_text = ""
-                        continue
-                if llm_text:
-                    break
+        self._emit_subagent(
+            state,
+            "journey_synthesizer",
+            "UI Journey Synthesizer",
+            "running",
+            f"Requesting application synthesis from {preferred_provider} with fallback routing",
+        )
+        llm_text = self.llm.generate_text(prompt, profile="understanding") or ""
+        routing = self.llm.last_generation or {}
+        provider = str(routing.get("provider") or preferred_provider)
+        if not llm_text and self.llm.last_error:
+            attempt_failures.append(self.llm.last_error)
 
         if not llm_text:
-            raise AIRequiredFailureException(
-                error_code="all_providers_failed",
-                error_message="All configured AI providers failed to produce a response.",
-                diagnostics={"attempts": attempt_failures}
+            self._emit_subagent(
+                state,
+                "journey_synthesizer",
+                "UI Journey Synthesizer",
+                "failed",
+                "No usable response from the selected AI provider",
             )
+            raise AIRequiredFailureException(
+                error_code="provider_key_rejected" if self._looks_like_key_failure(attempt_failures) else "all_providers_failed",
+                error_message=(
+                    "Every configured AI key was rejected by the provider (authentication failed). "
+                    "Replace it with a valid key, or add a different key, and run the analysis again."
+                    if self._looks_like_key_failure(attempt_failures)
+                    else "All configured AI providers, models, and keys failed to produce a response."
+                ),
+                diagnostics={
+                    "attempts": attempt_failures,
+                    "selected_provider": preferred_provider,
+                    "keys_tried": {name: len(keys) for name, keys in provider_keys.items()},
+                    "remediation": (
+                        "Open Tools > AI Settings, clear the rejected key, paste a different valid key, then retry."
+                        if self._looks_like_key_failure(attempt_failures)
+                        else "Retry the analysis; if it repeats, switch provider or supply an additional key."
+                    ),
+                }
+            )
+
+        self._emit_subagent(
+            state,
+            "journey_synthesizer",
+            "UI Journey Synthesizer",
+            "completed",
+            f"Received application synthesis from {provider}",
+        )
+        self._emit_subagent(
+            state,
+            "gap_analyzer",
+            "Requirement Gap Analyzer",
+            "running",
+            "Validating model output and requirement gap coverage",
+        )
 
         llm_data, parse_diag = self.llm.parse_json_payload_with_diagnostics(llm_text)
         if not llm_data or not isinstance(llm_data, dict):
+            self._emit_subagent(
+                state,
+                "gap_analyzer",
+                "Requirement Gap Analyzer",
+                "failed",
+                "Model output was not valid JSON",
+            )
             raise AIRequiredFailureException(
                 error_code="invalid_model_json",
                 error_message="Model returned response that could not be parsed as valid JSON.",
@@ -215,56 +257,93 @@ class UnderstandingAgent(BaseAgent):
         summary = llm_data.get("summary")
         architecture_notes = llm_data.get("architecture_notes")
         if not summary or not architecture_notes:
+            self._emit_subagent(
+                state,
+                "gap_analyzer",
+                "Requirement Gap Analyzer",
+                "failed",
+                "AI output missing mandatory summary or architecture notes",
+            )
             raise AIRequiredFailureException(
                 error_code="schema_validation_failed",
                 error_message="AI output missing mandatory summary or architecture_notes fields.",
                 diagnostics={"received_keys": list(llm_data.keys())}
             )
 
-        fallback_components = self._extract_components(extracted_path)
-        fallback_flows = self._extract_flows()
-        fallback_gaps = self._identify_gaps(fallback_components, doc_files)
+        self._emit_subagent(
+            state,
+            "gap_analyzer",
+            "Requirement Gap Analyzer",
+            "completed",
+            "Validated AI output schema and gap coverage",
+        )
 
-        ai_components = self._parse_components(llm_data.get("components"), fallback_components)
-        ai_flows = self._parse_flows(llm_data.get("flows"), fallback_flows)
-        ai_gaps = self._parse_gaps(llm_data.get("gaps"), fallback_gaps)
+        # AI-required mode: no deterministic sample data may enter the output.
+        components = self._parse_components(llm_data.get("components"), [])
+        flows = self._parse_flows(llm_data.get("flows"), [])
+        gaps = self._parse_gaps(llm_data.get("gaps"), [])
 
-        components = ai_components or fallback_components
-        flows = ai_flows or fallback_flows
-        gaps = ai_gaps or fallback_gaps
+        missing_sections = [
+            key for key, value in (("components", components), ("flows", flows)) if not value
+        ]
+        if missing_sections:
+            self._emit_subagent(
+                state,
+                "gap_analyzer",
+                "Requirement Gap Analyzer",
+                "failed",
+                f"AI output missing required sections: {', '.join(missing_sections)}",
+            )
+            raise AIRequiredFailureException(
+                error_code="schema_validation_failed",
+                error_message=(
+                    f"AI output did not contain usable {' and '.join(missing_sections)}. "
+                    "No sample or placeholder content is substituted in AI-required mode."
+                ),
+                diagnostics={
+                    "provider": provider,
+                    "model": routing.get("model"),
+                    "missing_sections": missing_sections,
+                    "received_keys": list(llm_data.keys()),
+                    "remediation": "Retry the analysis, or switch provider/model if the model keeps truncating output.",
+                },
+            )
 
         testability_obs = llm_data.get("testability_observations")
-        if isinstance(testability_obs, list) and testability_obs:
-            testability_observations = [str(x).strip() for x in testability_obs if str(x).strip()][:4]
-        else:
-            testability_observations = [
-                "Stable data-testid attributes detected on primary form controls.",
-                "Client-side form validation feedback elements visible in DOM."
-            ]
+        testability_observations = (
+            [str(x).strip() for x in testability_obs if str(x).strip()][:4]
+            if isinstance(testability_obs, list)
+            else []
+        )
 
         entry_pts = llm_data.get("entry_points")
-        if isinstance(entry_pts, list) and entry_pts:
-            entry_points = [str(x).strip() for x in entry_pts if str(x).strip()][:6]
-        else:
-            entry_points = ["/login", "/applicant/info", "/applicant/documents", "/applicant/status"]
+        entry_points = (
+            [str(x).strip() for x in entry_pts if str(x).strip()][:6]
+            if isinstance(entry_pts, list)
+            else []
+        )
 
-        ui_inventory = self._build_ui_inventory_from_components(components, self._extract_ui_inventory(extracted_path))
-        api_inventory = self._extract_api_inventory(extracted_path)
-        validation_report = self._evaluate_15_point_checklist(doc_files)
+        ui_inventory = self._build_ui_inventory_from_components(
+            components, UIInventory(total_controls=0, controls=[], controls_by_type={})
+        )
+        api_inventory = self._parse_api_inventory(llm_data.get("api_endpoints"))
+        validation_report = self._parse_validation_report(llm_data.get("requirement_validation"))
 
         provenance = {
             "provider": provider,
-            "model": self.llm.gpt_model if provider == "gpt" else next((self.llm.get_gemini_model(api_key) for api_key in provider_keys["gemini"] if self.llm.get_gemini_model(api_key)), None),
-            "prompt_version": "understanding-v2-ai-required",
+            "model": routing.get("model"),
+            "prompt_version": PROMPT_VERSION,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "fallback_used": False,
+            "fallback_used": bool(routing.get("fallback_used")),
+            "sample_data_used": False,
+            "requirement_validation_source": "ai" if validation_report else "not_evaluated",
             "validation_status": "VALIDATED"
         }
 
         understanding = ApplicationUnderstanding(
             summary=summary,
             architecture_notes=architecture_notes,
-            quality_score_percentage=validation_report.quality_score_percentage,
+            quality_score_percentage=validation_report.quality_score_percentage if validation_report else 0.0,
             components=components,
             flows=flows,
             entry_points=entry_points,
@@ -275,7 +354,7 @@ class UnderstandingAgent(BaseAgent):
             testability_observations=testability_observations,
             provenance=provenance,
             validation_status="VALIDATED",
-            fallback_used=False
+            fallback_used=bool(routing.get("fallback_used"))
         )
 
         state.understanding = understanding
@@ -287,123 +366,9 @@ class UnderstandingAgent(BaseAgent):
         return state, provenance
 
     def run(self, state: AppState) -> AppState:
-        logger.info("Executing Phase 2 Application Understanding Agent...")
-
-        extracted_path = Path(state.intake_manifest.extracted_path) if state.intake_manifest else Path("sample_cfa_app")
-        doc_files = state.intake_manifest.doc_files if state.intake_manifest else ["requirements.md"]
-        source_snapshot = self._build_source_snapshot(extracted_path)
-
-        fallback_ui_inventory = self._extract_ui_inventory(extracted_path)
-        fallback_api_inventory = self._extract_api_inventory(extracted_path)
-        fallback_components = self._extract_components(extracted_path)
-        fallback_flows = self._extract_flows()
-
-        validation_report = self._evaluate_15_point_checklist(doc_files)
-        fallback_gaps = self._identify_gaps(fallback_components, doc_files)
-
-        summary = (
-            "CFA Digital Journey is a multi-step financial application web portal covering "
-            "Applicant Authentication, Personal Information intake, Income/Employment verification, "
-            "Document Upload, and Application Status tracking."
-        )
-        architecture_notes = (
-            "React/TypeScript single-page application structure with RESTful backend integration, "
-            "data-testid locators, and form validation state management."
-        )
-        testability_observations = [
-            "Stable data-testid attributes detected on primary form controls.",
-            "Client-side form validation feedback elements visible in DOM.",
-            "Multi-step form state allows direct route isolation during automation."
-        ]
-        entry_points = ["/login", "/applicant/info", "/applicant/documents", "/applicant/status"]
-
-        components = fallback_components
-        flows = fallback_flows
-        gaps = fallback_gaps
-        ui_inventory = fallback_ui_inventory
-        api_inventory = fallback_api_inventory
-        fallback_used = True
-        provider_used = "deterministic"
-        analysis_mode = "heuristic-fallback"
-
-        if self.llm.is_enabled():
-            prompt = (
-                "You are a QA automation architect analyzing an uploaded application. "
-                "Return strict JSON with keys: "
-                "summary (string), architecture_notes (string), testability_observations (string array max 4), "
-                "entry_points (string array max 6), components (array max 6), flows (array max 4), gaps (array max 6). "
-                "Each component needs component_id, name, type, file_path, description, selectors. "
-                "Each flow needs flow_id, name, start_point, end_point, steps, description. "
-                "Each gap needs gap_id, title, description, category, severity, evidence_source, confidence.\n"
-                f"Requirement docs: {doc_files}\n"
-                f"Source snapshot:\n{source_snapshot}\n"
-            )
-            llm_text = self.llm.generate_text(prompt)
-            llm_data, _ = self.llm.parse_json_payload_with_diagnostics(llm_text)
-            if llm_data:
-                provider_used = self.llm._active_provider()
-                analysis_mode = "ai-first"
-                fallback_used = False
-                summary = llm_data.get("summary") or summary
-                architecture_notes = llm_data.get("architecture_notes") or architecture_notes
-                llm_obs = llm_data.get("testability_observations")
-                if isinstance(llm_obs, list):
-                    cleaned_obs = [str(x).strip() for x in llm_obs if str(x).strip()]
-                    if cleaned_obs:
-                        testability_observations = cleaned_obs[:4]
-                llm_entry_points = llm_data.get("entry_points")
-                if isinstance(llm_entry_points, list):
-                    cleaned_entry_points = [str(x).strip() for x in llm_entry_points if str(x).strip()]
-                    if cleaned_entry_points:
-                        entry_points = cleaned_entry_points[:6]
-
-                ai_components = self._parse_components(llm_data.get("components"), fallback_components)
-                ai_flows = self._parse_flows(llm_data.get("flows"), fallback_flows)
-                ai_gaps = self._parse_gaps(llm_data.get("gaps"), fallback_gaps)
-                components = ai_components or fallback_components
-                flows = ai_flows or fallback_flows
-                gaps = ai_gaps or fallback_gaps
-                ui_inventory = self._build_ui_inventory_from_components(components, fallback_ui_inventory)
-                api_inventory = fallback_api_inventory
-                fallback_used = not bool(ai_components and ai_flows and ai_gaps)
-                if fallback_used:
-                    analysis_mode = "ai-hybrid-fallback"
-
-        provenance = {
-            "provider": provider_used,
-            "analysis_mode": analysis_mode,
-            "prompt_version": "understanding-v2",
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "source_snapshot_length": len(source_snapshot),
-            "doc_files": list(doc_files),
-            "fallback_used": fallback_used,
-            "validation_status": "VALIDATED"
-        }
-
-        understanding = ApplicationUnderstanding(
-            summary=summary,
-            architecture_notes=architecture_notes,
-            quality_score_percentage=validation_report.quality_score_percentage,
-            components=components,
-            flows=flows,
-            entry_points=entry_points,
-            gaps=gaps,
-            validation_report=validation_report,
-            ui_inventory=ui_inventory,
-            api_inventory=api_inventory,
-            testability_observations=testability_observations,
-            provenance=provenance,
-            validation_status="VALIDATED",
-            fallback_used=fallback_used
-        )
-
-        state.understanding = understanding
-        state.stage_provenance["understanding"] = provenance
-        state.stage_validation["understanding"] = "VALIDATED"
-        state.stage_timestamps["understanding"] = datetime.now(timezone.utc).isoformat()
-
-        self._save_artifacts(understanding, validation_report, gaps, components, ui_inventory, api_inventory)
-        return state
+        """AI-required. There is no deterministic sample-data path; failures surface as errors."""
+        updated_state, _ = self.run_ai_required(state)
+        return updated_state
 
     def _build_source_snapshot(self, extracted_path: Path) -> str:
         if not extracted_path.exists():
@@ -471,6 +436,92 @@ class UnderstandingAgent(BaseAgent):
             conf = str(item.get("confidence") or "High")
             result.append(RequirementGap(gap_id=gap_id, title=title, description=desc, category=cat, severity=sev, evidence_source=ev, confidence=conf))
         return result or fallback
+
+    @staticmethod
+    def _looks_like_key_failure(payload: Any) -> bool:
+        """Detects auth rejections anywhere in nested routing diagnostics."""
+        auth_codes = {"provider_key_missing", "provider_auth_failed", "provider_key_rejected"}
+        if isinstance(payload, dict):
+            if str(payload.get("error_code") or "") in auth_codes:
+                return True
+            if payload.get("status_code") in (401, 403):
+                return True
+            return any(UnderstandingAgent._looks_like_key_failure(value) for value in payload.values())
+        if isinstance(payload, list):
+            return any(UnderstandingAgent._looks_like_key_failure(item) for item in payload)
+        return False
+
+    @staticmethod
+    def _safe_int(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _parse_api_inventory(self, raw: Any) -> APIInventory:
+        """AI-derived endpoints only; reports an empty inventory instead of sample endpoints."""
+        if not isinstance(raw, list):
+            return APIInventory(total_endpoints=0, endpoints=[])
+
+        endpoints: List[APIEndpointReference] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            path = str(item.get("path") or "").strip()
+            if not path:
+                continue
+            endpoints.append(APIEndpointReference(
+                endpoint_id=str(item.get("endpoint_id") or f"api_{index + 1:02d}"),
+                method=str(item.get("method") or "GET").strip().upper(),
+                path=path,
+                description=str(item.get("description") or "").strip(),
+                source_file=str(item.get("source_file") or "").strip(),
+                analysis_only=True,
+            ))
+        return APIInventory(total_endpoints=len(endpoints), endpoints=endpoints)
+
+    def _parse_validation_report(self, raw: Any) -> Optional[RequirementValidationReport]:
+        """Returns None when the model gave no assessment, so no fabricated score is displayed."""
+        if not isinstance(raw, list) or not raw:
+            return None
+
+        valid_statuses = {"Present", "Partial", "Missing", "Not Applicable"}
+        items: List[RequirementValidationItem] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            item_name = str(item.get("item_name") or "").strip()
+            status = str(item.get("status") or "").strip().title()
+            if not item_name or status not in valid_statuses:
+                continue
+            items.append(RequirementValidationItem(
+                item_id=self._safe_int(item.get("item_id"), index + 1),
+                item_name=item_name,
+                status=status,
+                evidence_source=str(item.get("evidence_source") or "").strip(),
+                confidence=str(item.get("confidence") or "Medium").strip(),
+                observations=str(item.get("observations") or "").strip(),
+            ))
+
+        if not items:
+            return None
+
+        present = sum(1 for i in items if i.status == "Present")
+        partial = sum(1 for i in items if i.status == "Partial")
+        missing = sum(1 for i in items if i.status == "Missing")
+        not_applicable = sum(1 for i in items if i.status == "Not Applicable")
+        scored = len(items) - not_applicable
+        quality_score = round(((present + 0.5 * partial) / scored) * 100.0, 1) if scored else 0.0
+
+        return RequirementValidationReport(
+            quality_score_percentage=quality_score,
+            evaluated_items_count=len(items),
+            present_count=present,
+            partial_count=partial,
+            missing_count=missing,
+            not_applicable_count=not_applicable,
+            items=items,
+        )
 
     def _build_ui_inventory_from_components(self, components: List[ApplicationComponent], fallback: UIInventory) -> UIInventory:
         controls: List[UIElementControl] = []
@@ -579,7 +630,7 @@ class UnderstandingAgent(BaseAgent):
     def _save_artifacts(
         self,
         understanding: ApplicationUnderstanding,
-        validation: RequirementValidationReport,
+        validation: Optional[RequirementValidationReport],
         gaps: List[RequirementGap],
         components: List[ApplicationComponent],
         ui: UIInventory,
@@ -587,7 +638,7 @@ class UnderstandingAgent(BaseAgent):
     ) -> None:
         artifacts_map = {
             "application_understanding.json": understanding.model_dump(),
-            "requirements_validation.json": validation.model_dump(),
+            "requirements_validation.json": validation.model_dump() if validation else None,
             "requirements_gaps.json": [g.model_dump() for g in gaps],
             "module_inventory.json": [c.model_dump() for c in components],
             "ui_inventory.json": ui.model_dump(),
