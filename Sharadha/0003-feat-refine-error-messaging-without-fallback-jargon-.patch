@@ -1,0 +1,501 @@
+From a6dcbf29a289efb823c33aa2659df66c52a76247 Mon Sep 17 00:00:00 2001
+From: Akshat Kumar Sinha <shivuakshat@gmail.com>
+Date: Sat, 15 Aug 2026 17:56:56 +0530
+Subject: [PATCH 3/6] feat: refine error messaging without fallback jargon,
+ unify RightLogsPanel with collapsible drawer and design tokens
+
+---
+ src/App.tsx                          |  19 +-
+ src/components/RightLogsPanel.tsx    | 265 ++++++++++++++++++++++-----
+ src/components/UnderstandingPage.tsx |  15 +-
+ 3 files changed, 249 insertions(+), 50 deletions(-)
+
+diff --git a/src/App.tsx b/src/App.tsx
+index bc40f9b..a384d6e 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -495,11 +495,26 @@ export const App: React.FC = () => {
+                 <button
+                   onClick={handleCancelRun}
+                   title="Stop active pipeline execution"
+-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-xs"
++                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-xs cursor-pointer"
+                 >
+                   <Square className="h-3 w-3 fill-current" />
+                   <span>Stop Run</span>
+                 </button>
++
++                {/* Header Console Logs Toggle */}
++                <button
++                  onClick={() => setLogDrawerOpen(!logDrawerOpen)}
++                  title={logDrawerOpen ? "Collapse Console Logs" : "Expand Console Logs"}
++                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
++                  style={{
++                    backgroundColor: logDrawerOpen ? 'var(--qet-accent-subtle)' : 'var(--qet-surface-elevated)',
++                    color: logDrawerOpen ? 'var(--qet-accent)' : 'var(--qet-text-secondary)',
++                    border: '1px solid var(--qet-border)'
++                  }}
++                >
++                  <PanelRightOpen className="h-3.5 w-3.5" />
++                  <span className="hidden sm:inline">Logs</span>
++                </button>
+               </div>
+ 
+               <button
+@@ -589,6 +604,8 @@ export const App: React.FC = () => {
+                 onDownloadBackend={downloadBackendLogs}
+                 activeProvider={aiSettings?.active_provider || 'gemini'}
+                 activeModel={aiSettings?.runtime_state?.model || 'gemini-3.7-flash'}
++                isOpen={logDrawerOpen}
++                onToggle={() => setLogDrawerOpen(!logDrawerOpen)}
+               />
+             </div>
+           )}
+diff --git a/src/components/RightLogsPanel.tsx b/src/components/RightLogsPanel.tsx
+index f350d35..069b2fa 100644
+--- a/src/components/RightLogsPanel.tsx
++++ b/src/components/RightLogsPanel.tsx
+@@ -1,5 +1,17 @@
+ import React, { useState, useEffect, useRef } from 'react';
+-import { Terminal, Download, Trash2, AlertTriangle, AlertCircle, Info, Search, ShieldCheck } from 'lucide-react';
++import { 
++  Terminal, 
++  Download, 
++  Trash2, 
++  AlertTriangle, 
++  AlertCircle, 
++  Info, 
++  Search, 
++  ChevronRight, 
++  ChevronLeft,
++  X,
++  Maximize2
++} from 'lucide-react';
+ import { LogEntry } from './ConsoleLogDrawer';
+ 
+ interface RightLogsPanelProps {
+@@ -10,6 +22,8 @@ interface RightLogsPanelProps {
+   onDownloadBackend: () => void;
+   activeProvider: string;
+   activeModel: string;
++  isOpen?: boolean;
++  onToggle?: () => void;
+ }
+ 
+ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+@@ -20,6 +34,8 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+   onDownloadBackend,
+   activeProvider,
+   activeModel,
++  isOpen = true,
++  onToggle,
+ }) => {
+   const [logType, setLogType] = useState<'backend' | 'frontend'>('backend');
+   const [filter, setFilter] = useState<'all' | 'info' | 'status' | 'error'>('all');
+@@ -33,7 +49,7 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+       return 'error';
+     } else if (line.includes('[WARNING]') || line.includes('[WARN]') || line.includes('429') || line.includes('503')) {
+       return 'warn';
+-    } else if (line.includes('[STATUS]') || line.includes('[SYSTEM]') || line.includes('Initiating') || line.includes('completed') || line.includes('PASSED')) {
++    } else if (line.includes('[STATUS]') || line.includes('[SYSTEM]') || line.includes('Initiating') || line.includes('completed') || line.includes('PASSED') || line.includes('ready')) {
+       return 'status';
+     }
+     return 'info';
+@@ -45,7 +61,10 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+         if (filter === 'all') return true;
+         if (filter === 'error') return entry.type === 'error' || entry.type === 'warn';
+         if (filter === 'info') return entry.type === 'info';
+-        if (filter === 'status') return entry.message.toLowerCase().includes('status') || entry.message.toLowerCase().includes('ready');
++        if (filter === 'status') {
++          const lower = entry.message.toLowerCase();
++          return lower.includes('status') || lower.includes('ready') || lower.includes('completed') || lower.includes('start');
++        }
+         return true;
+       });
+     } else {
+@@ -70,7 +89,25 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+     if (autoScroll && logEndRef.current && searchTerm.trim() === '') {
+       logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+     }
+-  }, [frontendLogs, backendLogs, logType, autoScroll, filter, searchTerm]);
++  }, [frontendLogs, backendLogs, logType, autoScroll, filter, searchTerm, isOpen]);
++
++  const handleScroll = () => {
++    if (!logContainerRef.current) return;
++    const { scrollTop, scrollHeight, clientHeight } = logContainerRef.current;
++    const isAtBottom = scrollHeight - scrollTop - clientHeight < 40;
++    setAutoScroll(isAtBottom);
++  };
++
++  const getLogIcon = (type: 'info' | 'warn' | 'error') => {
++    switch (type) {
++      case 'error':
++        return <AlertCircle className="h-3.5 w-3.5 text-rose-500 shrink-0" />;
++      case 'warn':
++        return <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
++      default:
++        return <Info className="h-3.5 w-3.5 text-sky-500 shrink-0" />;
++    }
++  };
+ 
+   const highlightText = (text: string, search: string) => {
+     if (!search.trim()) return text;
+@@ -79,7 +116,7 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+       <>
+         {parts.map((part, i) =>
+           part.toLowerCase() === search.toLowerCase() ? (
+-            <mark key={i} className="bg-amber-300 text-slate-900 font-bold px-1 rounded-xs">
++            <mark key={i} className="bg-amber-300 dark:bg-amber-800 text-slate-900 dark:text-white font-bold px-0.5 rounded-xs">
+               {part}
+             </mark>
+           ) : (
+@@ -90,15 +127,78 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+     );
+   };
+ 
++  // If collapsed, render minimal vertical pill rail
++  if (!isOpen) {
++    return (
++      <aside 
++        onClick={onToggle}
++        title="Expand Console Logs"
++        aria-label="Collapsed Console Logs"
++        className="w-12 shrink-0 cursor-pointer rounded-2xl border shadow-sm transition-all duration-300 flex flex-col items-center py-4 gap-4 select-none hover:shadow-md hover:border-sky-500/50"
++        style={{
++          backgroundColor: 'var(--qet-surface)',
++          borderColor: 'var(--qet-border)',
++        }}
++      >
++        <button
++          type="button"
++          onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
++          className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
++          style={{ color: 'var(--qet-accent)' }}
++        >
++          <ChevronLeft className="h-4 w-4" />
++        </button>
++
++        <div className="p-2 rounded-xl" style={{ backgroundColor: 'var(--qet-surface-elevated)' }}>
++          <Terminal className="h-4 w-4" style={{ color: 'var(--qet-accent)' }} />
++        </div>
++
++        <div 
++          className="text-xs font-bold tracking-wider uppercase [writing-mode:vertical-rl] rotate-180 py-2"
++          style={{ color: 'var(--qet-text-muted)' }}
++        >
++          Console Logs
++        </div>
++
++        <span 
++          className="px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold"
++          style={{ backgroundColor: 'var(--qet-accent-subtle)', color: 'var(--qet-accent)' }}
++        >
++          {filteredLogs.length}
++        </span>
++      </aside>
++    );
++  }
++
+   return (
+-    <aside className="w-full shrink-0 lg:sticky lg:top-20 lg:w-96 flex flex-col h-[calc(100vh-140px)]" aria-label="Console Logs & Diagnostics">
+-      <div className="flex flex-col h-full rounded-2xl border border-slate-200 bg-slate-900 text-slate-100 shadow-md overflow-hidden dark:border-slate-800">
++    <aside 
++      className="w-full shrink-0 lg:sticky lg:top-20 lg:w-96 flex flex-col h-[calc(100vh-140px)] transition-all duration-300"
++      aria-label="Console Logs & Diagnostics"
++    >
++      <div 
++        className="flex flex-col h-full rounded-2xl border shadow-md overflow-hidden"
++        style={{
++          backgroundColor: 'var(--qet-surface)',
++          borderColor: 'var(--qet-border)',
++        }}
++      >
+         {/* Panel Top Header */}
+-        <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-950 border-b border-slate-800">
++        <div 
++          className="flex items-center justify-between px-3.5 py-2.5 border-b"
++          style={{
++            backgroundColor: 'var(--qet-surface-elevated)',
++            borderColor: 'var(--qet-border)',
++          }}
++        >
+           <div className="flex items-center gap-2 min-w-0">
+-            <Terminal className="h-4 w-4 text-blue-400" />
+-            <span className="text-xs font-bold text-white tracking-wide">Live Console Logs</span>
+-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-900/60 text-blue-300">
++            <Terminal className="h-4 w-4" style={{ color: 'var(--qet-accent)' }} />
++            <span className="text-xs font-bold tracking-wide" style={{ color: 'var(--qet-text-primary)' }}>
++              Live Console Logs
++            </span>
++            <span 
++              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
++              style={{ backgroundColor: 'var(--qet-accent-subtle)', color: 'var(--qet-accent)' }}
++            >
+               {activeProvider}
+             </span>
+           </div>
+@@ -108,7 +208,8 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+               type="button"
+               onClick={logType === 'backend' ? onDownloadBackend : onDownloadFrontend}
+               title="Download Logs as TXT"
+-              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
++              className="p-1 rounded transition-colors hover:bg-black/10 dark:hover:bg-white/10 cursor-pointer"
++              style={{ color: 'var(--qet-text-secondary)' }}
+             >
+               <Download className="h-3.5 w-3.5" />
+             </button>
+@@ -117,21 +218,39 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+                 type="button"
+                 onClick={onClearFrontend}
+                 title="Clear Logs"
+-                className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
++                className="p-1 rounded hover:text-rose-500 transition-colors hover:bg-black/10 dark:hover:bg-white/10 cursor-pointer"
++                style={{ color: 'var(--qet-text-secondary)' }}
+               >
+                 <Trash2 className="h-3.5 w-3.5" />
+               </button>
+             )}
++            {onToggle && (
++              <button
++                type="button"
++                onClick={onToggle}
++                title="Collapse Panel"
++                className="p-1 rounded transition-colors hover:bg-black/10 dark:hover:bg-white/10 cursor-pointer ml-1"
++                style={{ color: 'var(--qet-text-secondary)' }}
++              >
++                <ChevronRight className="h-4 w-4" />
++              </button>
++            )}
+           </div>
+         </div>
+ 
+         {/* Tab Switcher: Backend / Frontend */}
+-        <div className="flex items-center border-b border-slate-800 bg-slate-900/90 px-3 py-1.5 gap-2">
++        <div 
++          className="flex items-center border-b px-3 py-1.5 gap-2"
++          style={{
++            backgroundColor: 'var(--qet-surface)',
++            borderColor: 'var(--qet-border)',
++          }}
++        >
+           <button
+             type="button"
+             onClick={() => setLogType('backend')}
+-            className={`flex-1 rounded-md py-1 text-xs font-semibold transition-all ${
+-              logType === 'backend' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
++            className={`flex-1 rounded-md py-1 text-xs font-semibold transition-all cursor-pointer ${
++              logType === 'backend' ? 'qet-btn-primary shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+             }`}
+           >
+             Backend (Python)
+@@ -139,26 +258,32 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+           <button
+             type="button"
+             onClick={() => setLogType('frontend')}
+-            className={`flex-1 rounded-md py-1 text-xs font-semibold transition-all ${
+-              logType === 'frontend' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
++            className={`flex-1 rounded-md py-1 text-xs font-semibold transition-all cursor-pointer ${
++              logType === 'frontend' ? 'qet-btn-primary shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+             }`}
+           >
+             Frontend (UI)
+           </button>
+         </div>
+ 
+-        {/* Filter Pills & Search Box */}
+-        <div className="flex flex-col gap-2 p-2.5 bg-slate-950/60 border-b border-slate-800">
++        {/* Filter Buttons & Search Box */}
++        <div 
++          className="flex flex-col gap-2 p-2.5 border-b"
++          style={{
++            backgroundColor: 'var(--qet-surface-elevated)',
++            borderColor: 'var(--qet-border)',
++          }}
++        >
+           <div className="flex items-center gap-1">
+             {(['all', 'info', 'status', 'error'] as const).map((level) => (
+               <button
+                 key={level}
+                 type="button"
+                 onClick={() => setFilter(level)}
+-                className={`flex-1 rounded py-0.5 text-[10px] font-semibold capitalize transition-all ${
++                className={`flex-1 rounded py-0.5 text-[10px] font-semibold capitalize transition-all cursor-pointer ${
+                   filter === level
+-                    ? 'bg-slate-700 text-white font-bold'
+-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
++                    ? 'qet-badge-accent font-bold shadow-xs'
++                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5'
+                 }`}
+               >
+                 {level}
+@@ -167,53 +292,105 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
+           </div>
+ 
+           <div className="relative flex items-center">
+-            <Search className="absolute left-2 h-3 w-3 text-slate-500" />
++            <Search className="absolute left-2 h-3 w-3 text-slate-400" />
+             <input
+               type="text"
+               value={searchTerm}
+               onChange={(e) => setSearchTerm(e.target.value)}
+               placeholder="Search logs with highlighting..."
+-              className="w-full rounded-md bg-slate-900 border border-slate-800 pl-7 pr-2 py-1 text-[11px] text-slate-200 placeholder-slate-500 outline-none focus:border-blue-500"
++              className="w-full rounded-md border pl-7 pr-2 py-1 text-[11px] outline-none transition-all focus:border-sky-500"
++              style={{
++                backgroundColor: 'var(--qet-surface)',
++                borderColor: 'var(--qet-border)',
++                color: 'var(--qet-text-primary)',
++              }}
+             />
+           </div>
+         </div>
+ 
+-        {/* Monospace Log Content */}
+-        <div ref={logContainerRef} className="flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed space-y-1 bg-slate-950/80">
++        {/* Monospace Log Stream Body */}
++        <div 
++          ref={logContainerRef} 
++          onScroll={handleScroll}
++          className="flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed space-y-1 select-text"
++          style={{ backgroundColor: 'var(--qet-page-bg)' }}
++        >
+           {filteredLogs.length === 0 ? (
+-            <div className="flex flex-col items-center justify-center h-48 text-slate-500 text-xs">
++            <div className="flex flex-col items-center justify-center h-48 text-xs italic" style={{ color: 'var(--qet-text-muted)' }}>
+               <Terminal className="h-6 w-6 mb-2 opacity-40" />
+               <span>No logs found for selected filter.</span>
+             </div>
+           ) : (
+             filteredLogs.map((item, idx) => {
+-              const text = typeof item === 'string' ? item : `[${item.timestamp}] [${item.type.toUpperCase()}] ${item.message}`;
+-              const lineType = typeof item === 'string' ? getBackendLineType(item) : item.type;
+-
+-              let colorClass = 'text-slate-300';
+-              if (lineType === 'error') colorClass = 'text-rose-400 font-semibold';
+-              else if (lineType === 'warn') colorClass = 'text-amber-300';
+-              else if (lineType === 'status') colorClass = 'text-emerald-300';
+-
+-              return (
+-                <div key={idx} className={`break-words ${colorClass}`}>
+-                  {highlightText(text, searchTerm)}
+-                </div>
+-              );
++              if (logType === 'frontend') {
++                const entry = item as LogEntry;
++                return (
++                  <div
++                    key={idx}
++                    id={`log-line-${idx}`}
++                    className="flex items-start gap-2 py-0.5 border-b border-dashed"
++                    style={{ borderColor: 'var(--qet-border)' }}
++                  >
++                    <span className="text-slate-400 select-none">[{entry.timestamp}]</span>
++                    {getLogIcon(entry.type)}
++                    <span
++                      className={`whitespace-pre-wrap ${
++                        entry.type === 'error'
++                          ? 'text-rose-500 font-semibold'
++                          : entry.type === 'warn'
++                          ? 'text-amber-500'
++                          : 'text-emerald-600 dark:text-emerald-400'
++                      }`}
++                    >
++                      {highlightText(entry.message, searchTerm)}
++                    </span>
++                  </div>
++                );
++              } else {
++                const line = item as string;
++                const lineType = getBackendLineType(line);
++
++                let colorClass = 'text-slate-700 dark:text-slate-300';
++                if (lineType === 'error') {
++                  colorClass = 'text-rose-600 dark:text-rose-400 font-semibold';
++                } else if (lineType === 'warn') {
++                  colorClass = 'text-amber-600 dark:text-amber-400';
++                } else if (lineType === 'status') {
++                  colorClass = 'text-teal-600 dark:text-teal-400 font-semibold';
++                }
++
++                return (
++                  <div
++                    key={idx}
++                    id={`log-line-${idx}`}
++                    className={`whitespace-pre-wrap font-mono py-0.5 border-b border-dashed ${colorClass}`}
++                    style={{ borderColor: 'var(--qet-border)' }}
++                  >
++                    {highlightText(line, searchTerm)}
++                  </div>
++                );
++              }
+             })
+           )}
+           <div ref={logEndRef} />
+         </div>
+ 
+-        {/* Footer info bar */}
+-        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-950 border-t border-slate-800 text-[10px] text-slate-400">
++        {/* Footer Info Bar */}
++        <div 
++          className="flex items-center justify-between px-3 py-1.5 border-t text-[10px]"
++          style={{
++            backgroundColor: 'var(--qet-surface-elevated)',
++            borderColor: 'var(--qet-border)',
++            color: 'var(--qet-text-muted)',
++          }}
++        >
+           <span>{filteredLogs.length} lines</span>
+           <label className="flex items-center gap-1.5 cursor-pointer select-none">
+             <input
+               type="checkbox"
+               checked={autoScroll}
+               onChange={(e) => setAutoScroll(e.target.checked)}
+-              className="rounded accent-blue-600 h-3 w-3"
++              className="rounded accent-sky-600 h-3 w-3"
+             />
+             <span>Auto-Scroll</span>
+           </label>
+diff --git a/src/components/UnderstandingPage.tsx b/src/components/UnderstandingPage.tsx
+index 2e0f0f0..eac1ff5 100644
+--- a/src/components/UnderstandingPage.tsx
++++ b/src/components/UnderstandingPage.tsx
+@@ -97,9 +97,12 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
+       }, 1500);
+     } catch (err: any) {
+       setIsRunning(false);
++      const isFetchErr = err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError');
+       setErrorDetails({
+-        error_code: 'start_failed',
+-        error_message: err.message || 'Could not start AI analysis.',
++        error_code: isFetchErr ? 'backend_offline' : 'start_failed',
++        error_message: isFetchErr
++          ? 'FastAPI backend server is unreachable on http://127.0.0.1:8080. Please ensure the backend is running (run restart_fastapi_app.bat).'
++          : (err.message || 'Could not start AI analysis.'),
+         retryable: true
+       });
+     }
+@@ -213,16 +216,18 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
+         </div>
+       </div>
+ 
+-      {/* Error Diagnostics Surface (AI Fail-Fast Observability) */}
++      {/* Error Diagnostics Surface */}
+       {(errorDetails || currentStatus === 'error') && (
+         <div className="qet-badge-danger p-6 space-y-4 animate-file-item">
+           <div className="flex items-start justify-between">
+             <div className="flex items-center space-x-3">
+               <ShieldAlert className="w-6 h-6 shrink-0" />
+               <div>
+-                <h3 className="text-sm font-bold">AI Stage Execution Failure (Fail-Fast Diagnostics)</h3>
++                <h3 className="text-sm font-bold">Stage Execution Error</h3>
+                 <p className="text-xs mt-0.5 opacity-90">
+-                  AI-Required mode active. No fabricated or fake deterministic fallback content returned.
++                  {errorDetails?.error_code === 'backend_offline'
++                    ? 'FastAPI backend server is offline or unreachable on port 8080.'
++                    : 'An error occurred during stage execution. Review the details below.'}
+                 </p>
+               </div>
+             </div>
+-- 
+2.55.0.windows.3
+
