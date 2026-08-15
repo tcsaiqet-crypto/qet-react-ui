@@ -143,13 +143,60 @@ export interface ErrorPayload {
   retryable?: boolean;
 }
 
+export interface TestCase {
+  case_id: string;
+  title: string;
+  case_type: string;
+  feature_area: string;
+  priority: string;
+  description: string;
+  review_status: string;
+}
+
+export interface TestSuite {
+  suite_id: string;
+  name: string;
+  test_cases: TestCase[];
+}
+
+export interface ExecutionStepResult {
+  step_number: number;
+  description: string;
+  status: string;
+  error_message?: string;
+  screenshot_path?: string;
+}
+
+export interface ExecutionResult {
+  execution_id: string;
+  status: string;
+  duration_seconds: number;
+  passed_count: number;
+  failed_count: number;
+  blocked_count: number;
+  step_results: ExecutionStepResult[];
+  failure_summary?: string;
+}
+
+export interface ExecutionStatusResponse {
+  execution_id: string;
+  run_id: string;
+  status: 'queued' | 'running' | 'passed' | 'failed' | 'cancelled' | 'timed_out' | 'not_run';
+  selected_test_case_ids: string[];
+  current_test_case_id?: string;
+  current_step?: string;
+  logs: string[];
+  result?: ExecutionResult;
+}
+
 export interface AppState {
   run_id: string;
   project_name: string;
-  status: 'idle' | 'uploading' | 'processing_zip' | 'indexing' | 'ai_understanding_running' | 'understanding_ready' | 'error';
+  status: 'idle' | 'uploading' | 'processing_zip' | 'indexing' | 'ai_understanding_running' | 'understanding_ready' | 'generation_running' | 'pipeline_complete' | 'error';
   progress: number;
   intake_manifest?: IntakeManifest;
   understanding?: ApplicationUnderstanding;
+  test_suite?: TestSuite;
   last_error?: ErrorPayload;
   stage_timestamps?: Record<string, string>;
   agent_timeline?: AgentTimelineItem[];
@@ -188,6 +235,11 @@ export interface StatusResponse {
   intake_manifest?: IntakeManifest;
   stage_timestamps?: Record<string, string>;
   launcher_state?: AppState['launcher_state'];
+  agent_timeline?: AgentTimelineItem[];
+  subagent_timeline?: SubagentTimelineItem[];
+  active_agent?: string;
+  upcoming_agent?: string;
+  reset_generation?: number;
 }
 
 export interface AIProviderConfig {
@@ -247,12 +299,17 @@ export interface RunListResponse {
 
 
 // ── Spec-Kit 011 Agent Choreography Contracts ───────────────────────
-export type AgentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'invalidated';
+export type AgentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'invalidated' | 'blocked';
 
 export interface AgentTimelineItem {
+  event_id?: string;
+  event_type?: string;
   agent_id: string;
-  label: string;
+  label?: string;
   status: AgentStatus;
+  message?: string;
+  timestamp?: string;
+  source?: string;
   started_at?: string;
   completed_at?: string;
   generation: number;

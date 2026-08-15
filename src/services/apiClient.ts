@@ -9,6 +9,7 @@
   ApplicationUnderstanding,
   ErrorPayload,
   RetryRunResponse
+  , ExecutionStatusResponse
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '/api/v1';
@@ -125,6 +126,16 @@ export async function getUnderstanding(runId: string): Promise<{
   return res.json();
 }
 
+export async function startPipeline(runId: string): Promise<{ status: string; run_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/pipeline/start`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to start downstream agents');
+  }
+  return res.json();
+}
+
 export async function getAISettings(): Promise<AISettingsResponse> {
   const res = await fetch(`${API_BASE_URL}/ai/settings`);
   if (!res.ok) {
@@ -170,6 +181,31 @@ export async function retryRun(runId: string, targetAgentId: string): Promise<Re
   if (!res.ok) {
     await throwApiError(res, 'Failed to retry run step');
   }
+  return res.json();
+}
+
+export async function launchExecution(runId: string, payload: {
+  test_case_ids: string[];
+  explicit_user_approval: boolean;
+  is_non_production_confirmed: boolean;
+  is_script_reviewed: boolean;
+}): Promise<ExecutionStatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to launch execution');
+  return res.json();
+}
+
+export async function getExecutionStatus(runId: string, executionId: string): Promise<ExecutionStatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions/${executionId}`);
+  if (!res.ok) await throwApiError(res, 'Failed to retrieve execution status');
+  return res.json();
+}
+
+export async function cancelExecution(runId: string, executionId: string): Promise<ExecutionStatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions/${executionId}/cancel`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to cancel execution');
   return res.json();
 }
 

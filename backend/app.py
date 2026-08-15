@@ -360,11 +360,12 @@ if selected_nav == "Dashboard":
         if st.button("📦 Load Synthetic Demo Project", use_container_width=True):
             sample_zip = Path("cfa_digital_journey_sample.zip")
             if sample_zip.exists():
-                st.session_state.app_state.intake_manifest = zip_service.process_zip_upload(
+                manifest, _ = zip_service.process_zip_upload(
                     upload_id="demo_sample",
                     zip_path=sample_zip,
                     filename="cfa_digital_journey_sample.zip"
                 )
+                st.session_state.app_state.intake_manifest = manifest
                 _sync_stage_statuses()
                 _persist_state()
                 st.success("Loaded synthetic demo ZIP.")
@@ -426,7 +427,7 @@ elif selected_nav == "Upload Sources":
                 with open(temp_zip_path, "wb") as f:
                     f.write(uploaded_zip.getbuffer())
                     
-                manifest = zip_service.process_zip_upload(
+                manifest, _ = zip_service.process_zip_upload(
                     upload_id=f"upl_{int(uploaded_zip.size)}",
                     zip_path=temp_zip_path,
                     filename=uploaded_zip.name

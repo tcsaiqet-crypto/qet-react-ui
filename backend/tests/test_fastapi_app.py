@@ -1,16 +1,26 @@
 ﻿"""Tests for FastAPI Runtime Layer, state persistence, and failfast AI understanding."""
 
 import io
+import json
 from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
 from src.api.fastapi_app import app
+from src.services import ai_settings_store
 from src.services.run_state_service import load_run_state
 from src.agents.understanding_agent import AIRequiredFailureException, UnderstandingAgent
 from schemas.contracts import AppState
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolate_ai_settings(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory):
+    """Keep every test off the real workspace settings file so test keys can never leak into it."""
+    settings_path = tmp_path_factory.mktemp("ai_settings") / "ai_settings.json"
+    monkeypatch.setattr(ai_settings_store, "_settings_path", lambda: settings_path)
+    yield
 
 
 def test_read_root():
@@ -82,11 +92,174 @@ def test_understanding_ai_failfast_when_no_key(monkeypatch: pytest.MonkeyPatch):
     assert exc_info.value.diagnostics is not None
 
 
-def test_ai_settings_round_trip():
+AI_UNDERSTANDING_PAYLOAD = json.dumps({
+    "summary": "Analyzed uploaded application",
+    "architecture_notes": "React frontend with service layer",
+    "testability_observations": ["Stable test ids on login form"],
+    "entry_points": ["/login"],
+    "components": [{
+        "component_id": "c1",
+        "name": "Login View",
+        "type": "View",
+        "file_path": "src/Login.tsx",
+        "description": "Credential entry",
+        "selectors": ["[data-testid='login-button']"],
+    }],
+    "flows": [{
+        "flow_id": "f1",
+        "name": "Sign in",
+        "start_point": "/login",
+        "end_point": "/home",
+        "steps": ["Enter credentials", "Submit"],
+        "description": "Successful authentication",
+    }],
+    "gaps": [],
+})
+
+
+def test_understanding_prefers_selected_provider(monkeypatch: pytest.MonkeyPatch):
+    from src.config import config
+    from src.services.llm_service import LLMService
+
+    monkeypatch.setattr(type(config), "get_active_provider", lambda self: "gemini")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: ["gemini-key"] if provider == "gemini" else ["gpt-key"])
+
+    agent = UnderstandingAgent(run_id="RUN-TEST-PROVIDER")
+    state = AppState(run_id="RUN-TEST-PROVIDER", project_name="Provider Test", status="idle", progress=0.0)
+
+    calls: list[str] = []
+
+    def fake_generate_text(prompt: str, profile: str = "default"):
+        calls.append("gemini")
+        return AI_UNDERSTANDING_PAYLOAD
+
+    monkeypatch.setattr(agent.llm, "generate_text", fake_generate_text)
+
+    agent.run_ai_required(state)
+
+    assert calls == ["gemini"]
+
+
+def test_understanding_emits_subagent_progress_events(monkeypatch: pytest.MonkeyPatch):
+    from src.config import config
+
+    monkeypatch.setattr(type(config), "get_active_provider", lambda self: "gemini")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: ["gemini-key"] if provider == "gemini" else [])
+
+    persisted: list = []
+    agent = UnderstandingAgent(run_id="RUN-TEST-SUBAGENTS", event_sink=lambda current: persisted.append(len(current.subagent_timeline)))
+    state = AppState(run_id="RUN-TEST-SUBAGENTS", project_name="Subagent Test", status="idle", progress=0.0)
+
+    monkeypatch.setattr(
+        agent.llm,
+        "generate_text",
+        lambda prompt, profile="default": AI_UNDERSTANDING_PAYLOAD,
+    )
+
+    agent.run_ai_required(state)
+
+    emitted = {(item["subagent_id"], item["status"]) for item in state.subagent_timeline}
+    assert ("source_snapshot", "completed") in emitted
+    assert ("journey_synthesizer", "completed") in emitted
+    assert ("gap_analyzer", "completed") in emitted
+    assert all(item["parent_agent_id"] == "application_understanding" for item in state.subagent_timeline)
+    assert persisted, "event sink should persist progress during the run"
+
+
+def test_understanding_never_substitutes_sample_data(monkeypatch: pytest.MonkeyPatch):
+    from src.config import config
+
+    monkeypatch.setattr(type(config), "get_active_provider", lambda self: "gemini")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: ["gemini-key"] if provider == "gemini" else [])
+
+    agent = UnderstandingAgent(run_id="RUN-TEST-NO-SAMPLES")
+    state = AppState(run_id="RUN-TEST-NO-SAMPLES", project_name="No Samples", status="idle", progress=0.0)
+    monkeypatch.setattr(agent.llm, "generate_text", lambda prompt, profile="default": AI_UNDERSTANDING_PAYLOAD)
+
+    updated, _ = agent.run_ai_required(state)
+    understanding = updated.understanding
+
+    assert [c.file_path for c in understanding.components] == ["src/Login.tsx"]
+    assert [f.flow_id for f in understanding.flows] == ["f1"]
+
+    # The model returned no endpoints or checklist, so nothing may be invented for them.
+    assert understanding.api_inventory.total_endpoints == 0
+    assert understanding.validation_report is None
+    assert understanding.quality_score_percentage == 0.0
+    assert understanding.provenance["sample_data_used"] is False
+
+    serialized = understanding.model_dump_json()
+    for sample_marker in ("CFA_Requirements_Specification.md", "ApplicantInfo.tsx", "ssn-input", "/api/v1/cfa/"):
+        assert sample_marker not in serialized, f"sample data leaked: {sample_marker}"
+
+
+def test_understanding_reports_key_rejection_with_retry_guidance(monkeypatch: pytest.MonkeyPatch):
+    from src.config import config
+
+    monkeypatch.setattr(type(config), "get_active_provider", lambda self: "gemini")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: ["gemini-key"] if provider == "gemini" else [])
+
+    agent = UnderstandingAgent(run_id="RUN-TEST-KEY-REJECTED")
+    state = AppState(run_id="RUN-TEST-KEY-REJECTED", project_name="Key Rejected", status="idle", progress=0.0)
+
+    monkeypatch.setattr(agent.llm, "generate_text", lambda prompt, profile="default": None)
+    agent.llm.last_error = {
+        "error_code": "provider_disabled",
+        "error_message": "Gemini returned status 401.",
+        "diagnostics": {"status_code": 401},
+    }
+
+    with pytest.raises(AIRequiredFailureException) as exc_info:
+        agent.run_ai_required(state)
+
+    assert exc_info.value.error_code == "provider_key_rejected"
+    assert "key" in exc_info.value.error_message.lower()
+    assert "Tools > AI Settings" in exc_info.value.diagnostics["remediation"]
+
+
+def test_understanding_emits_failed_subagent_on_bad_json(monkeypatch: pytest.MonkeyPatch):
+    from src.config import config
+
+    monkeypatch.setattr(type(config), "get_active_provider", lambda self: "gemini")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: ["gemini-key"] if provider == "gemini" else [])
+
+    agent = UnderstandingAgent(run_id="RUN-TEST-SUBAGENT-FAIL")
+    state = AppState(run_id="RUN-TEST-SUBAGENT-FAIL", project_name="Subagent Fail", status="idle", progress=0.0)
+
+    monkeypatch.setattr(agent.llm, "generate_text", lambda prompt, profile="default": "I cannot help with that.")
+
+    with pytest.raises(AIRequiredFailureException):
+        agent.run_ai_required(state)
+
+    assert ("gap_analyzer", "failed") in {(item["subagent_id"], item["status"]) for item in state.subagent_timeline}
+
+
+def test_start_pipeline_requires_completed_understanding():
+    run_resp = client.post("/api/v1/runs", json={"project_name": "Pipeline Gate"})
+    run_id = run_resp.json()["run_id"]
+
+    resp = client.post(f"/api/v1/runs/{run_id}/pipeline/start")
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error_code"] == "understanding_not_ready"
+
+
+def test_start_understanding_requires_upload_ready_state():
+    run_resp = client.post("/api/v1/runs", json={"project_name": "Gate Test"})
+    run_id = run_resp.json()["run_id"]
+
+    resp = client.post(f"/api/v1/runs/{run_id}/understanding/start")
+    assert resp.status_code == 400
+    payload = resp.json()
+    assert payload["detail"]["error_code"] == "intake_not_ready"
+
+
+def test_ai_settings_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    monkeypatch.setattr(ai_settings_store, "_settings_path", lambda: tmp_path / "ai_settings.json")
+
     get_resp = client.get("/api/v1/ai/settings")
     assert get_resp.status_code == 200
     initial = get_resp.json()
-    assert initial["active_provider"] in ["gemini", "gpt"]
+    assert initial["active_provider"] == "gemini"
     assert "providers" in initial
     assert "model" in initial["runtime_state"]
 
@@ -95,8 +268,8 @@ def test_ai_settings_round_trip():
         json={
             "active_provider": "gpt",
             "provider_keys": {
-                "gpt": "sk-live-abc123456789",
-                "gemini": "AIzaSyD-valid-looking-gemini-key",
+                "gpt": "sk-" + "t" * 44,
+                "gemini": "AIza" + "T" * 35,
             },
         },
     )
@@ -129,7 +302,7 @@ def test_gemini_candidate_key_fallback(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(service, "list_gemini_candidates", lambda api_key: [] if api_key == "bad-key" else ["gemini-2.5-flash"])
 
-    def fake_call(model: str, api_key: str, prompt: str):
+    def fake_call(model: str, api_key: str, prompt: str, policy=None):
         calls.append(api_key)
         return None if api_key == "bad-key" else "{\"summary\": \"ok\", \"architecture_notes\": \"ok\"}"
 

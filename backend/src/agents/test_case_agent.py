@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional
 from schemas.contracts import AppState, TestCase, TestSuite, RequirementType
 from src.agents.base_agent import BaseAgent
 from src.services.llm_service import LLMService
+from src.prompts.test_cases_v2 import PROMPT_VERSION, build_prompt
 from src.config import config
 from src.utils.errors import AIRequiredFailureException
 from src.utils.logger import logger
@@ -50,6 +51,9 @@ class TestCaseAgent(BaseAgent):
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "mode": "ai-first",
             "provider": self.llm._active_provider(),
+            "model": (self.llm.last_generation or {}).get("model"),
+            "prompt_version": PROMPT_VERSION,
+            "fallback_used": bool((self.llm.last_generation or {}).get("fallback_used")),
         }
 
         suite = TestSuite(
@@ -59,7 +63,7 @@ class TestCaseAgent(BaseAgent):
             test_cases=test_cases,
             provenance=provenance,
             validation_status="VALIDATED",
-            fallback_used=False,
+            fallback_used=bool((self.llm.last_generation or {}).get("fallback_used")),
         )
 
         state.test_suite = suite
@@ -75,29 +79,15 @@ class TestCaseAgent(BaseAgent):
         # Check if requirement categorization is active
         if config.features.enable_requirement_categorization and state.understanding and state.understanding.requirements:
             req_details = [{"id": r.requirement_id, "title": r.title, "type": r.type, "category_id": r.category_id} for r in state.understanding.requirements]
-            prompt = (
-                "Return strict JSON object with key 'test_cases' as an array with 10 to 14 items. "
-                "For the following categorized requirements, generate corresponding test cases covering Positive, Negative, Boundary, Validation, and Error-Handling permutations. "
-                "Each item requires: case_id, title, case_type, feature_area, requirement_id, requirement_category_id, requirement_type, description, priority, risk_level, automation_candidate, preconditions, steps, expected_result, evidence_source, confidence, review_status, synthetic_data_keys. "
-                "Use case_id format like TC-POS-001, etc. "
-                "Return only JSON.\n"
-                f"Categorized Requirements: {req_details}\n"
-            )
+            prompt = build_prompt("Categorized requirements", req_details, self.llm.JSON_OUTPUT_INSTRUCTION)
         else:
             understanding_text = state.understanding.summary if state.understanding else "CFA Digital Journey"
             feature_areas = []
             if state.understanding and state.understanding.components:
                 feature_areas = [component.name for component in state.understanding.components[:5]]
-            prompt = (
-                "Return strict JSON object with key 'test_cases' as an array with 10 to 14 items covering Positive, Negative, Boundary, Validation, and Error-Handling cases. "
-                "Each item requires: case_id, title, case_type, feature_area, requirement_id, description, priority, risk_level, automation_candidate, preconditions, steps, expected_result, evidence_source, confidence, review_status, synthetic_data_keys. "
-                "Use case_id format like TC-POS-001, TC-NEG-002, TC-BND-001, TC-VAL-001, TC-ERR-001. "
-                "Return only JSON.\n"
-                f"Application summary: {understanding_text}\n"
-                f"Feature areas: {feature_areas}\n"
-            )
+            prompt = build_prompt("Application evidence", {"summary": understanding_text, "feature_areas": feature_areas}, self.llm.JSON_OUTPUT_INSTRUCTION)
             
-        llm_text = self.llm.generate_text(prompt)
+        llm_text = self.llm.generate_text(prompt, profile="test_cases")
         llm_data = self.llm.parse_json_payload(llm_text)
         if not llm_data:
             return []
@@ -239,11 +229,8 @@ class TestCaseAgent(BaseAgent):
                 )
             return features
 
-        return [
-            {"name": "Authentication", "area": "Authentication", "selectors": ["[data-testid='username-input']", "[data-testid='login-button']"], "description": "User authentication flow.", "component_id": "comp_auth"},
-            {"name": "Applicant Information", "area": "Applicant Info", "selectors": ["[data-testid='fullname-input']", "[data-testid='ssn-input']", "[data-testid='submit-app-button']"], "description": "Applicant information capture flow.", "component_id": "comp_info"},
-            {"name": "Document Upload", "area": "Document Upload", "selectors": ["[data-testid='document-upload-input']", "[data-testid='documents-table']"], "description": "Document attachment flow.", "component_id": "comp_docs"},
-        ]
+        # No upstream components means no evidence; sample features must never be invented.
+        return []
 
     def _build_case(
         self,

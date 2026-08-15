@@ -8,7 +8,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-export type TabId = 'home' | 'runs' | 'tools';
+export type TabId = 'home' | 'execution' | 'runs' | 'tools';
 
 interface NavigationHeaderProps {
   activeTab: TabId;

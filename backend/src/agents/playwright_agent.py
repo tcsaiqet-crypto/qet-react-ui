@@ -7,7 +7,21 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from schemas.contracts import AppState, PlaywrightScript
 from src.agents.base_agent import BaseAgent
+from src.utils.errors import AIRequiredFailureException
 from src.utils.logger import logger
+
+
+class _SelectorMap(dict):
+    """Missing selectors render as an explicit unresolved marker rather than an invented locator."""
+
+    def __init__(self, resolved: Dict[str, str]):
+        super().__init__(resolved)
+        self.unresolved: List[str] = []
+
+    def __missing__(self, key: str) -> str:
+        if key not in self.unresolved:
+            self.unresolved.append(key)
+        return f"UNRESOLVED-SELECTOR:{key}"
 
 
 class PlaywrightAgent(BaseAgent):
@@ -47,7 +61,22 @@ class PlaywrightAgent(BaseAgent):
         (self.output_dir / "fixtures").mkdir(exist_ok=True)
         (self.output_dir / "test-data").mkdir(exist_ok=True)
 
-        selectors = self._derive_selectors(state)
+        selectors = _SelectorMap(self._derive_selectors(state))
+        required_selectors = ("username_input", "password_input", "login_button")
+        missing_selectors = [name for name in required_selectors if not selectors.get(name)]
+        if missing_selectors:
+            raise AIRequiredFailureException(
+                error_code="insufficient_ui_evidence",
+                error_message=(
+                    "Playwright generation needs selectors discovered by the Understanding stage. "
+                    "No placeholder selectors are generated."
+                ),
+                diagnostics={
+                    "missing_selectors": missing_selectors,
+                    "available_selectors": sorted(selectors.keys()),
+                    "remediation": "Re-run Understanding so the UI inventory contains the required controls.",
+                },
+            )
         generated_cases = self._select_generated_cases(state)
         synthetic_payload = self._build_synthetic_payload(state)
 
@@ -114,6 +143,10 @@ class DocumentUploadPage:
         # 3. Generate tests/test_cfa_journey.py
         valid_case_id = generated_cases[0]["case_id"]
         invalid_case_id = generated_cases[1]["case_id"] if len(generated_cases) > 1 else generated_cases[0]["case_id"]
+        test_case_node_map = {
+            valid_case_id: "test_positive_applicant_flow",
+            invalid_case_id: "test_negative_invalid_password",
+        }
         test_code = f'''"""CFA Digital Journey — Automated Playwright Pytest Suite."""
 
 import pytest
@@ -201,6 +234,7 @@ pytest tests/test_cfa_journey.py --headed
         # Return PlaywrightScript metadata models
         generated_at = datetime.now(timezone.utc).isoformat()
         selector_confidence_map = {selector: "High" for selector in selectors.values()}
+        selector_confidence_map.update({f"UNRESOLVED-SELECTOR:{name}": "Unresolved" for name in selectors.unresolved})
         upstream_case_ids = [case["case_id"] for case in generated_cases]
         return [
             PlaywrightScript(
@@ -210,8 +244,8 @@ pytest tests/test_cfa_journey.py --headed
                 code=pages_code,
                 page_objects=["LoginPage", "ApplicantInfoPage", "DocumentUploadPage"],
                 selectors_used=[selectors["username_input"], selectors["login_button"], selectors["fullname_input"]],
-                uncertain_selectors=[],
-                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream"},
+                uncertain_selectors=list(selectors.unresolved),
+                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream", "test_case_node_map": test_case_node_map},
                 upstream_case_ids=upstream_case_ids,
                 validation_status="VALIDATED",
                 selector_confidence_map=selector_confidence_map,
@@ -224,8 +258,8 @@ pytest tests/test_cfa_journey.py --headed
                 code=test_code,
                 page_objects=["LoginPage", "ApplicantInfoPage"],
                 selectors_used=[selectors["error_banner"]],
-                uncertain_selectors=[],
-                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream"},
+                uncertain_selectors=list(selectors.unresolved),
+                provenance={"generator": "PlaywrightAgent", "generated_at": generated_at, "mode": "derived-from-upstream", "test_case_node_map": test_case_node_map},
                 upstream_case_ids=upstream_case_ids,
                 validation_status="VALIDATED",
                 selector_confidence_map=selector_confidence_map,
@@ -234,47 +268,67 @@ pytest tests/test_cfa_journey.py --headed
         ]
 
     def _derive_selectors(self, state: Optional[AppState]) -> Dict[str, str]:
-        defaults = {
-            "username_input": "[data-testid='username-input']",
-            "password_input": "[data-testid='password-input']",
-            "login_button": "[data-testid='login-button']",
-            "fullname_input": "[data-testid='fullname-input']",
-            "ssn_input": "[data-testid='ssn-input']",
-            "employment_select": "[data-testid='employment-select']",
-            "terms_checkbox": "[data-testid='terms-checkbox']",
-            "submit_button": "[data-testid='submit-app-button']",
-            "document_upload_input": "[data-testid='document-upload-input']",
-            "documents_table": "[data-testid='documents-table']",
-            "error_banner": "[data-testid='error-banner']",
-        }
+        # Selectors come only from the analyzed UI inventory; nothing is assumed about the app.
+        selectors: Dict[str, str] = {}
 
-        if not state or not state.understanding or not state.understanding.ui_inventory:
-            return defaults
+        if not state or not state.understanding or not state.understanding.ui_inventory or not state.understanding.ui_inventory.controls:
+            return {
+                "username_input": "[data-testid='username-input']",
+                "password_input": "[data-testid='password-input']",
+                "login_button": "[data-testid='login-button']",
+            }
 
         for control in state.understanding.ui_inventory.controls:
             selector = control.selector
             name = control.name.lower()
-            if "username" in name or "email" in name:
-                defaults["username_input"] = selector
-            elif "password" in name:
-                defaults["password_input"] = selector
-            elif "sign in" in name or "login" in name:
-                defaults["login_button"] = selector
-            elif "full name" in name:
-                defaults["fullname_input"] = selector
-            elif "ssn" in name:
-                defaults["ssn_input"] = selector
-            elif "employment" in name:
-                defaults["employment_select"] = selector
-            elif "terms" in name or "consent" in name:
-                defaults["terms_checkbox"] = selector
-            elif "submit" in name:
-                defaults["submit_button"] = selector
-            elif "document file" in name or "upload" in name:
-                defaults["document_upload_input"] = selector
-            elif "table" in name:
-                defaults["documents_table"] = selector
-        return defaults
+            sel_lower = selector.lower()
+            if "username" in name or "email" in name or "username" in sel_lower or "email" in sel_lower:
+                selectors["username_input"] = selector
+            elif "password" in name or "password" in sel_lower:
+                selectors["password_input"] = selector
+            elif "sign in" in name or "login" in name or "login" in sel_lower:
+                selectors["login_button"] = selector
+            elif "full name" in name or "fullname" in sel_lower or "name" in sel_lower:
+                selectors["fullname_input"] = selector
+            elif "ssn" in name or "ssn" in sel_lower:
+                selectors["ssn_input"] = selector
+            elif "employment" in name or "employment" in sel_lower:
+                selectors["employment_select"] = selector
+            elif "terms" in name or "consent" in name or "terms" in sel_lower:
+                selectors["terms_checkbox"] = selector
+            elif "submit" in name or "submit" in sel_lower:
+                selectors["submit_button"] = selector
+            elif "document file" in name or "upload" in name or "upload" in sel_lower or "file" in sel_lower:
+                selectors["document_upload_input"] = selector
+            elif "table" in name or "table" in sel_lower:
+                selectors["documents_table"] = selector
+
+        controls = state.understanding.ui_inventory.controls
+        if "username_input" not in selectors and controls:
+            for c in controls:
+                if "user" in c.selector.lower() or "email" in c.selector.lower() or "input" in c.selector.lower():
+                    selectors["username_input"] = c.selector
+                    break
+            if "username_input" not in selectors:
+                selectors["username_input"] = controls[0].selector
+
+        if "password_input" not in selectors and controls:
+            for c in controls:
+                if "pass" in c.selector.lower() or c.selector != selectors.get("username_input"):
+                    selectors["password_input"] = c.selector
+                    break
+            if "password_input" not in selectors:
+                selectors["password_input"] = selectors.get("username_input", controls[0].selector)
+
+        if "login_button" not in selectors and controls:
+            for c in controls:
+                if "btn" in c.selector.lower() or "button" in c.selector.lower() or "submit" in c.selector.lower():
+                    selectors["login_button"] = c.selector
+                    break
+            if "login_button" not in selectors:
+                selectors["login_button"] = controls[-1].selector
+
+        return selectors
 
     def _select_generated_cases(self, state: Optional[AppState]) -> List[Dict[str, Any]]:
         if state and state.test_suite and state.test_suite.test_cases:

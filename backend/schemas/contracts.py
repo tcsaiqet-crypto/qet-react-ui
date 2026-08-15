@@ -16,9 +16,12 @@ class ExecutionMode(str, Enum):
 
 class ExecutionStatus(str, Enum):
     IDLE = "idle"
+    QUEUED = "queued"
     RUNNING = "running"
     PASSED = "passed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
+    TIMED_OUT = "timed_out"
     BLOCKED = "blocked"
     NOT_RUN = "not_run"
     NOT_CONFIGURED = "not_configured"
@@ -255,11 +258,63 @@ class PlaywrightScript(BaseModel):
     fallback_used: bool = False
 
 
+class AccessibilityFinding(BaseModel):
+    rule_id: str
+    wcag_sc: str
+    wcag_name: str
+    impact: str
+    description: str
+    file_path: str
+    line_number: int = 0
+    snippet: str = ""
+
+
+class AccessibilityRuleResult(BaseModel):
+    rule_id: str
+    wcag_sc: str
+    wcag_name: str
+    wcag_level: str
+    impact: str
+    passed: bool
+    violation_count: int = 0
+
+
+class AccessibilityReport(BaseModel):
+    files_scanned: int = 0
+    rules_total: int = 13
+    rules_passed: int = 0
+    rating: str = "Below A"
+    total_violations: int = 0
+    critical_count: int = 0
+    serious_count: int = 0
+    moderate_count: int = 0
+    minor_count: int = 0
+    rule_results: List[AccessibilityRuleResult] = Field(default_factory=list)
+    findings: List[AccessibilityFinding] = Field(default_factory=list)
+    engine: str = "static-rule-engine"
+    generated_at: str = ""
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+
+
 class ExecutionRequest(BaseModel):
     execution_id: str
     mode: ExecutionMode
     target_script_ids: List[str] = Field(default_factory=list)
+    test_case_ids: List[str] = Field(default_factory=list)
     explicit_user_approval: bool = False
+    is_non_production_confirmed: bool = False
+    is_script_reviewed: bool = False
+
+
+class ExecutionStatusResponse(BaseModel):
+    execution_id: str
+    run_id: str
+    status: ExecutionStatus
+    selected_test_case_ids: List[str] = Field(default_factory=list)
+    current_test_case_id: Optional[str] = None
+    current_step: Optional[str] = None
+    logs: List[str] = Field(default_factory=list)
+    result: Optional[ExecutionResult] = None
 
 
 class TestStepResult(BaseModel):
@@ -316,6 +371,7 @@ class AppState(BaseModel):
     synthetic_dataset: Optional[SyntheticDataset] = None
     playwright_scripts: List[PlaywrightScript] = Field(default_factory=list)
     last_execution_result: Optional[ExecutionResult] = None
+    accessibility_report: Optional[AccessibilityReport] = None
     latest_report: Optional[QualityReport] = None
     errors: List[str] = Field(default_factory=list)
     stage_timestamps: Dict[str, str] = Field(default_factory=dict)

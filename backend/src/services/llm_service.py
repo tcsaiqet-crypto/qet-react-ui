@@ -8,6 +8,7 @@ from the caller's own key via the ListModels endpoint and cached in-process.
 import json
 import os
 import re
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 import requests
@@ -29,16 +30,61 @@ _GEMINI_EXCLUDE_KEYWORDS = (
     "lyria", "deep-research", "antigravity", "nano-banana", "customtools", "gemma",
 )
 
+# Preferred model, verified working against the current keys. Ranking places it
+# first when discovery reports it; discovery still supplies the fallback order.
+_GEMINI_PINNED_MODEL = "gemini-3.5-flash"
+
+
+@dataclass(frozen=True)
+class AgentModelPolicy:
+    """Non-secret routing policy for one AI task shape."""
+
+    preferred_tier: str
+    escalation_tier: Optional[str]
+    temperature: float
+    max_output_tokens: int
+
+
+AGENT_MODEL_POLICIES = {
+    "default": AgentModelPolicy("flash", None, 0.2, 2500),
+    "understanding": AgentModelPolicy("flash", "pro", 0.2, 4000),
+    "categorization": AgentModelPolicy("flash_lite", "flash", 0.1, 2200),
+    "test_cases": AgentModelPolicy("flash", "pro", 0.15, 3000),
+}
+
+
+def _classify_provider_status(status_code: int) -> str:
+    """Map an HTTP status from a provider onto an actionable error code."""
+    if status_code in (401, 403):
+        return "provider_auth_failed"
+    if status_code == 404:
+        return "model_not_available"
+    if status_code == 429:
+        return "provider_rate_limited"
+    if status_code >= 500:
+        return "provider_unavailable"
+    return "provider_request_failed"
+
 
 class LLMService:
     """Provider wrapper. Callers must treat a None return as a real failure -
     inspect `last_error` for diagnostics rather than substituting sample data."""
 
+    # Models routinely wrap JSON in markdown fences; stating the constraint cuts parse failures at the source.
+    JSON_OUTPUT_INSTRUCTION = (
+        "\nRespond with ONLY a valid JSON object. "
+        "Do not wrap the response in markdown code fences. "
+        "Do not add any text before or after the JSON. "
+        "The first character must be { and the last character must be }. "
+        "Return a complete object; do not stop mid-structure."
+    )
+
     def __init__(self) -> None:
-        self.gemini_model = "gemini-3.7-flash"
+        self.gemini_model = _GEMINI_PINNED_MODEL
         self.gpt_model = "gpt-4o-mini"
         self.timeout_seconds = 30
         self.last_error: Optional[Dict[str, Any]] = None
+        self.last_generation: Optional[Dict[str, Any]] = None
 
     @staticmethod
     def _active_provider() -> str:
@@ -124,39 +170,66 @@ class LLMService:
             state = "Misconfigured"
         return {"provider": provider, "enabled": enabled, "has_key": has_key, "state": state, "model": model}
 
-    def generate_text(self, prompt: str) -> Optional[str]:
+    def generate_text(self, prompt: str, profile: str = "default") -> Optional[str]:
         """Return model text when available; otherwise return None (see `last_error`)."""
         self.last_error = None
+        self.last_generation = None
         if not self.is_enabled():
             self.last_error = {"error_code": "provider_disabled", "error_message": "LLM provider disabled or missing API key."}
             return None
 
-        provider = self._active_provider()
-        if provider == "gpt":
-            for api_key in self._provider_keys("gpt"):
-                text = self._generate_with_gpt(prompt, api_key)
+        selected_provider = self._active_provider()
+        provider_order = [selected_provider, "gpt" if selected_provider == "gemini" else "gemini"]
+        failures = []
+        for provider in provider_order:
+            api_keys = self._provider_keys(provider)
+            if not api_keys:
+                failures.append({"provider": provider, "error_code": "provider_key_missing"})
+                continue
+            if provider == "gemini":
+                text, attempts = self.generate_with_gemini(prompt, api_keys, profile=profile)
                 if text is not None:
                     return text
-            # Fall back to Gemini multi-key rotation pool if GPT fails or is unauthorized
-            gemini_keys = self._provider_keys("gemini")
-            if gemini_keys:
-                logger.info("GPT provider call failed; falling back to Gemini multi-key rotation pool.")
-                text, attempts = self.generate_with_gemini(prompt, gemini_keys)
+                failures.extend({"provider": "gemini", **attempt} for attempt in attempts)
+                continue
+            for key_index, api_key in enumerate(api_keys):
+                text = self._generate_with_gpt(prompt, api_key, policy=AGENT_MODEL_POLICIES.get(profile, AGENT_MODEL_POLICIES["default"]))
                 if text is not None:
+                    self.last_generation = {"provider": "gpt", "model": self.gpt_model, "key_index": key_index, "profile": profile, "fallback_used": provider != selected_provider}
                     return text
-                if attempts:
-                    self.last_error = attempts[-1]
-                return None
-            return None
+                failures.append({"provider": "gpt", "key_index": key_index, **(self.last_error or {})})
+        self.last_error = self._summarize_failures(failures)
+        return None
 
-        api_keys = self._provider_keys("gemini")
-        if not api_keys:
-            self.last_error = {"error_code": "provider_key_missing", "error_message": "Gemini API key not configured."}
-            return None
-        text, attempts = self.generate_with_gemini(prompt, api_keys)
-        if text is None and attempts:
-            self.last_error = attempts[-1]
-        return text
+    @staticmethod
+    def _summarize_failures(failures: list) -> Dict[str, Any]:
+        """Build one actionable error from every provider/key attempt."""
+        if not failures:
+            return {"error_code": "provider_disabled", "error_message": "No provider could serve the request."}
+
+        codes = {failure.get("error_code") for failure in failures}
+        if codes and codes <= {"provider_auth_failed", "provider_key_missing"}:
+            return {
+                "error_code": "provider_auth_failed",
+                "error_message": (
+                    "Every configured API key was rejected by its provider. "
+                    "Add a valid key and retry - no sample or placeholder output is substituted."
+                ),
+                "diagnostics": {"attempts": failures},
+            }
+        if codes == {"provider_rate_limited"}:
+            return {
+                "error_code": "provider_rate_limited",
+                "error_message": "Every configured API key is rate limited. Retry shortly or add another key.",
+                "diagnostics": {"attempts": failures},
+            }
+
+        last = failures[-1]
+        return {
+            "error_code": last.get("error_code", "provider_request_failed"),
+            "error_message": last.get("error_message", "All provider attempts failed."),
+            "diagnostics": {"attempts": failures},
+        }
 
     def get_gemini_model(self, api_key: str) -> Optional[str]:
         """Return the best-known working Gemini model for this key (for display/provenance)."""
@@ -178,7 +251,7 @@ class LLMService:
             is_flash_lite = "flash" in name and "lite" in name
             is_pro = "pro" in name
             tier = 0 if is_flash else (1 if is_flash_lite else (2 if is_pro else 3))
-            return (0 if is_latest else 1, tier, name)
+            return (0 if name == _GEMINI_PINNED_MODEL else 1, 0 if is_latest else 1, tier, name)
 
         return sorted(filtered, key=score)
 
@@ -195,8 +268,12 @@ class LLMService:
             )
             if response.status_code != 200:
                 self.last_error = {
-                    "error_code": "model_discovery_failed",
-                    "error_message": f"Gemini ListModels returned status {response.status_code}.",
+                    "error_code": _classify_provider_status(response.status_code),
+                    "error_message": (
+                        "Gemini rejected this API key."
+                        if response.status_code in (400, 401, 403)
+                        else f"Gemini ListModels returned status {response.status_code}."
+                    ),
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300]},
                 }
                 return []
@@ -227,11 +304,12 @@ class LLMService:
             }
             return []
 
-    def _call_gemini_model(self, model: str, api_key: str, prompt: str) -> Optional[str]:
+    def _call_gemini_model(self, model: str, api_key: str, prompt: str, policy: Optional[AgentModelPolicy] = None) -> Optional[str]:
         """Single-attempt raw call to one Gemini model. Sets `last_error` and returns None on failure."""
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        active_policy = policy or AGENT_MODEL_POLICIES["default"]
         payload = {
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2500},
+            "generationConfig": {"temperature": active_policy.temperature, "maxOutputTokens": active_policy.max_output_tokens},
             "contents": [{"parts": [{"text": prompt}]}],
         }
         try:
@@ -240,7 +318,7 @@ class LLMService:
             )
             if response.status_code != 200:
                 self.last_error = {
-                    "error_code": "provider_disabled" if response.status_code == 404 else "invalid_model_json",
+                    "error_code": _classify_provider_status(response.status_code),
                     "error_message": f"Gemini model '{model}' returned status {response.status_code}.",
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300], "model": model},
                 }
@@ -248,10 +326,20 @@ class LLMService:
 
             body = response.json()
             candidates = body.get("candidates") or []
+            finish_reason = candidates[0].get("finishReason") if candidates else None
             parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-            text = parts[0].get("text") if parts else None
-            if not isinstance(text, str) or not text.strip():
-                self.last_error = {"error_code": "invalid_model_json", "error_message": f"Gemini model '{model}' returned no usable content.", "diagnostics": {"model": model}}
+            # Gemini 3.x emits thought parts before the answer, so every text part is joined.
+            text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
+            if not text.strip():
+                self.last_error = {
+                    "error_code": "model_output_truncated" if finish_reason == "MAX_TOKENS" else "invalid_model_json",
+                    "error_message": (
+                        f"Gemini model '{model}' hit the output token limit before producing an answer."
+                        if finish_reason == "MAX_TOKENS"
+                        else f"Gemini model '{model}' returned no usable content."
+                    ),
+                    "diagnostics": {"model": model, "finish_reason": finish_reason, "usage": body.get("usageMetadata")},
+                }
                 return None
             return text.strip()
         except requests.exceptions.Timeout:
@@ -261,7 +349,7 @@ class LLMService:
             self.last_error = {"error_code": "invalid_model_json", "error_message": f"Gemini connection error: {exc}", "diagnostics": {"model": model, "exception": str(exc)}}
             return None
 
-    def generate_with_gemini(self, prompt: str, api_keys: str | list[str]) -> Tuple[Optional[str], list]:
+    def generate_with_gemini(self, prompt: str, api_keys: str | list[str], profile: str = "default") -> Tuple[Optional[str], list]:
         """Try candidate Gemini models in priority order until one actually succeeds.
 
         Returns (text, attempts). `text` is None only if every candidate failed;
@@ -270,34 +358,48 @@ class LLMService:
         candidate_keys = [api_keys] if isinstance(api_keys, str) else list(api_keys)
         candidate_keys = [str(key).strip() for key in candidate_keys if str(key).strip()]
         attempts = []
+        policy = AGENT_MODEL_POLICIES.get(profile, AGENT_MODEL_POLICIES["default"])
 
-        for key_index, api_key in enumerate(candidate_keys):
+        def tier_candidates(api_key: str, tier: str) -> list[str]:
             candidates = self.list_gemini_candidates(api_key)
-            if not candidates:
-                attempts.append({"key_index": key_index, "provider_key": True, "error_code": "model_discovery_failed", **(self.last_error or {})})
+            if tier == "flash_lite":
+                return [model for model in candidates if "flash" in model and "lite" in model]
+            if tier == "flash":
+                return [model for model in candidates if "flash" in model and "lite" not in model]
+            if tier == "pro":
+                return [model for model in candidates if "pro" in model]
+            return candidates
+
+        for tier, key_order in ((policy.preferred_tier, candidate_keys), (policy.escalation_tier, candidate_keys[1:] + candidate_keys[:1])):
+            if not tier:
                 continue
-
-            working = _GEMINI_WORKING_MODEL_CACHE.get(api_key)
-            order = ([working] if working else []) + [c for c in candidates if c != working]
-
-            for model in order:
-                text = self._call_gemini_model(model, api_key, prompt)
-                if text:
-                    _GEMINI_WORKING_MODEL_CACHE[api_key] = model
-                    return text, attempts
-                attempts.append({"key_index": key_index, "model": model, **(self.last_error or {})})
+            for key_index, api_key in enumerate(key_order):
+                candidates = tier_candidates(api_key, tier)
+                if not candidates:
+                    attempts.append({"key_index": key_index, "tier": tier, "error_code": "model_discovery_failed", **(self.last_error or {})})
+                    continue
+                working = _GEMINI_WORKING_MODEL_CACHE.get(api_key)
+                order = ([working] if working in candidates else []) + [candidate for candidate in candidates if candidate != working]
+                for model in order:
+                    text = self._call_gemini_model(model, api_key, prompt, policy)
+                    if text:
+                        _GEMINI_WORKING_MODEL_CACHE[api_key] = model
+                        self.last_generation = {"provider": "gemini", "model": model, "key_index": key_index, "profile": profile, "tier": tier, "fallback_used": tier != policy.preferred_tier}
+                        return text, attempts
+                    attempts.append({"key_index": key_index, "model": model, "tier": tier, **(self.last_error or {})})
         return None, attempts
 
-    def _generate_with_gpt(self, prompt: str, api_key: Optional[str] = None) -> Optional[str]:
+    def _generate_with_gpt(self, prompt: str, api_key: Optional[str] = None, policy: Optional[AgentModelPolicy] = None) -> Optional[str]:
         api_key = api_key or config.get_provider_api_key("gpt")
         if not api_key:
             return None
 
         url = "https://api.openai.com/v1/chat/completions"
+        active_policy = policy or AGENT_MODEL_POLICIES["default"]
         payload = {
             "model": self.gpt_model,
-            "temperature": 0.2,
-            "max_tokens": 2500,
+            "temperature": active_policy.temperature,
+            "max_tokens": active_policy.max_output_tokens,
             "messages": [
                 {"role": "system", "content": "You are a QA automation engineering assistant."},
                 {"role": "user", "content": prompt},
@@ -317,7 +419,7 @@ class LLMService:
             if response.status_code != 200:
                 logger.warning("GPT call failed with status %s.", response.status_code)
                 self.last_error = {
-                    "error_code": "provider_disabled",
+                    "error_code": _classify_provider_status(response.status_code),
                     "error_message": f"OpenAI API returned status {response.status_code}.",
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300]},
                 }
@@ -358,6 +460,8 @@ class LLMService:
                 "parser_stage": "input",
                 "issue": "Empty model response",
                 "recovery_attempted": False,
+                "truncated": False,
+                "retry_guidance": "The provider returned no content. Verify the provider key and model availability, then retry.",
             }
 
         cleaned = text.strip()
@@ -418,6 +522,13 @@ class LLMService:
                 "parser_stage": "json_decode",
                 "issue": "Likely truncated JSON output." if likely_truncated else "JSON syntax decode failed.",
                 "recovery_attempted": recovery_attempted,
+                "truncated": likely_truncated,
+                "retry_guidance": (
+                    "Output stopped before the JSON closed, usually an output-token limit. "
+                    "Retry with a larger-output model or a smaller source snapshot."
+                    if likely_truncated
+                    else "Model returned non-JSON content. Retry, or switch model if it repeats."
+                ),
                 "line": first_error.lineno,
                 "column": first_error.colno,
                 "raw_preview": cleaned[:350],
