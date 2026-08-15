@@ -58,8 +58,6 @@ except Exception as e:
 
 # 3. Test Function for Gemini Models and Thinking Budgets
 def test_gemini_generation(model_name: str, thinking_budget: int = None, tier_label: str = "Standard"):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={primary_gemini_key}"
-    
     prompt_text = "Generate a JSON object containing a test plan for user login with fields 'scenario', 'steps' (array of strings), and 'expected_result'. Answer with JSON only."
     
     payload = {
@@ -80,38 +78,46 @@ def test_gemini_generation(model_name: str, thinking_budget: int = None, tier_la
         }
 
     print(f"\n--- Testing: {model_name} [{tier_label}] (thinkingBudget={thinking_budget}) ---")
-    start_time = time.time()
-    try:
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
-        elapsed = time.time() - start_time
-        print(f"  HTTP Status: {res.status_code} | Latency: {elapsed:.2f}s")
-        
-        if res.status_code == 200:
-            data = res.json()
-            candidates = data.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                full_text = "".join(p.get("text", "") for p in parts if "text" in p)
-                thought_parts = [p.get("thought", "") for p in parts if "thought" in p]
-                
-                print(f"  Status: SUCCESS")
-                if thought_parts:
-                    print(f"  Thoughts Captured: {len(thought_parts)} thinking parts")
-                print(f"  Response Preview ({len(full_text)} chars):")
-                preview = full_text.strip().replace("\n", " ")[:160]
-                print(f"    >> {preview}...")
-                return True, elapsed, full_text
+    
+    for key_idx, key in enumerate(gemini_keys):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
+        start_time = time.time()
+        try:
+            res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+            elapsed = time.time() - start_time
+            
+            if res.status_code == 200:
+                data = res.json()
+                candidates = data.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    full_text = "".join(p.get("text", "") for p in parts if "text" in p)
+                    thought_parts = [p.get("thought", "") for p in parts if "thought" in p]
+                    
+                    print(f"  Status: SUCCESS on Key #{key_idx+1} | Latency: {elapsed:.2f}s")
+                    if thought_parts:
+                        print(f"  Thoughts Captured: {len(thought_parts)} reasoning parts")
+                    print(f"  Response Preview ({len(full_text)} chars):")
+                    preview = full_text.strip().replace("\n", " ")[:160]
+                    print(f"    >> {preview}...")
+                    return True, elapsed, full_text
+            elif res.status_code in (429, 503) and key_idx + 1 < len(gemini_keys):
+                print(f"  Key #{key_idx+1} returned HTTP {res.status_code} (Rate Limit / High Demand). Rotating to Key #{key_idx+2}...")
+                time.sleep(0.5)
+                continue
             else:
-                print(f"  Status: FAILED - No candidates in response")
+                elapsed = time.time() - start_time
+                print(f"  Status: FAILED on Key #{key_idx+1} - HTTP {res.status_code} ({elapsed:.2f}s)")
+                print(f"  Detail: {res.text[:200]}")
                 return False, elapsed, None
-        else:
-            print(f"  Status: FAILED - {res.status_code}")
-            print(f"  Detail: {res.text[:300]}")
+        except Exception as exc:
+            elapsed = time.time() - start_time
+            if key_idx + 1 < len(gemini_keys):
+                print(f"  Key #{key_idx+1} exception: {exc}. Rotating to Key #{key_idx+2}...")
+                continue
+            print(f"  Status: EXCEPTION - {exc} ({elapsed:.2f}s)")
             return False, elapsed, None
-    except Exception as exc:
-        elapsed = time.time() - start_time
-        print(f"  Status: EXCEPTION - {exc} (elapsed: {elapsed:.2f}s)")
-        return False, elapsed, None
+    return False, 0.0, None
 
 # 4. Run Tests on Gemini 3.7 Flash & Different Thinking Tiers
 print("\n" + "=" * 60)
