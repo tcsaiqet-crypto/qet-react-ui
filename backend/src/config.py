@@ -1,5 +1,7 @@
-﻿"""Central Configuration for QET Agent Accelerator (V1)."""
+"""Central Configuration for QET Agent Accelerator (V1)."""
 
+import base64
+import json
 import os
 import re
 from pathlib import Path
@@ -87,8 +89,8 @@ class AppConfig(BaseModel):
         return p
 
     def get_keys_dir(self) -> Path:
-        """Return optional local keys directory for developer environments."""
-        return Path(__file__).parent.parent / "keys"
+        """Return the primary project keys directory."""
+        return Path(__file__).resolve().parents[2] / "keys"
 
     def _read_candidate_keys_from_files(self, file_paths: Iterable[Path], provider: str = "") -> List[str]:
         keys: List[str] = []
@@ -96,12 +98,64 @@ class AppConfig(BaseModel):
             if not file_path.exists():
                 continue
             try:
-                raw_value = file_path.read_text(encoding="utf-8").strip()
+                raw_bytes = file_path.read_bytes()
             except Exception:
                 continue
-            sanitized = self._sanitize_provider_key(raw_value)
-            if sanitized and self._is_well_formed_key(sanitized, provider) and sanitized not in keys:
-                keys.append(sanitized)
+
+            candidates: List[str] = []
+            # 1. Try decoding as base64 first
+            try:
+                decoded_str = base64.b64decode(raw_bytes).decode("utf-8", errors="ignore").strip()
+                if decoded_str:
+                    candidates.append(decoded_str)
+            except Exception:
+                pass
+
+            # 2. Also try direct UTF-8
+            try:
+                direct_str = raw_bytes.decode("utf-8", errors="ignore").strip()
+                if direct_str:
+                    candidates.append(direct_str)
+            except Exception:
+                pass
+
+            for text_block in candidates:
+                # Check if it is JSON format
+                try:
+                    data = json.loads(text_block)
+                    if isinstance(data, dict):
+                        for p_key, p_val in data.items():
+                            if not provider or p_key.lower() == provider.lower() or (provider == "gemini" and "gem" in p_key.lower()) or (provider == "gpt" and "gpt" in p_key.lower() or "open" in p_key.lower()):
+                                if isinstance(p_val, list):
+                                    for item in p_val:
+                                        sanitized = self._sanitize_provider_key(str(item))
+                                        if sanitized and self._is_well_formed_key(sanitized, provider) and sanitized not in keys:
+                                            keys.append(sanitized)
+                                elif isinstance(p_val, str):
+                                    sanitized = self._sanitize_provider_key(p_val)
+                                    if sanitized and self._is_well_formed_key(sanitized, provider) and sanitized not in keys:
+                                        keys.append(sanitized)
+                        continue
+                except Exception:
+                    pass
+
+                # Scan lines / tokens using regex
+                if provider == "gemini":
+                    for match in re.finditer(r"(?:AQ\.[0-9A-Za-z_\-]{40,}|AIza[0-9A-Za-z_\-]{35})", text_block):
+                        k = match.group(0).strip()
+                        if self._is_well_formed_key(k, "gemini") and k not in keys:
+                            keys.append(k)
+                elif provider == "gpt":
+                    for match in re.finditer(r"sk-[0-9A-Za-z_\-]{37,}", text_block):
+                        k = match.group(0).strip()
+                        if self._is_well_formed_key(k, "gpt") and k not in keys:
+                            keys.append(k)
+                else:
+                    for line in text_block.splitlines():
+                        sanitized = self._sanitize_provider_key(line)
+                        if sanitized and sanitized not in keys:
+                            keys.append(sanitized)
+
         return keys
 
     def get_provider_api_keys(self, provider: Literal["gemini", "gpt"]) -> List[str]:
@@ -121,24 +175,30 @@ class AppConfig(BaseModel):
         if isinstance(runtime_keys, dict):
             add_candidate(runtime_keys.get(provider, ""))
 
+        keys_dir = self.get_keys_dir()
+        candidate_paths = [
+            keys_dir / "ai_credentials.b64",
+            keys_dir / "ai_keys.b64",
+            keys_dir / "credentials.b64",
+            keys_dir / "gemini_keys.b64",
+            keys_dir / "openai_keys.b64",
+            keys_dir / "ai_settings.json",
+        ]
+
         if provider == "gemini":
             add_candidate(os.getenv("GEMINI_API_KEY"))
             add_candidate(os.getenv("GOOGLE_API_KEY"))
-            keys_dir = self.get_keys_dir()
-            project_keys_dir = Path(__file__).resolve().parents[2] / "keys"
+            candidate_paths.extend([
+                keys_dir / "gemini keys.txt",
+                keys_dir / "gemini keys 2.txt",
+                keys_dir / "gemini keys 3.txt",
+                keys_dir / "gemapikey1.txt",
+                keys_dir / "gemapikey2.txt",
+            ])
             keys.extend(
                 [
                     key for key in self._read_candidate_keys_from_files(
-                        [
-                            project_keys_dir / "gemini keys.txt",
-                            project_keys_dir / "gemini keys 2.txt",
-                            project_keys_dir / "gemini keys 3.txt",
-                            project_keys_dir / "gemapikey1.txt",
-                            project_keys_dir / "gemapikey2.txt",
-                            keys_dir / "gemini keys 2.txt",
-                            keys_dir / "gemini keys 3.txt",
-                            keys_dir / "gemapikey2.txt",
-                        ],
+                        candidate_paths,
                         provider="gemini",
                     )
                     if key not in keys
@@ -146,17 +206,14 @@ class AppConfig(BaseModel):
             )
         else:
             add_candidate(os.getenv("OPENAI_API_KEY"))
-            keys_dir = self.get_keys_dir()
-            project_keys_dir = Path(__file__).resolve().parents[2] / "keys"
+            candidate_paths.extend([
+                keys_dir / "openai keys.txt",
+                keys_dir / "openai_api_key.txt",
+            ])
             keys.extend(
                 [
                     key for key in self._read_candidate_keys_from_files(
-                        [
-                            keys_dir / "openai keys.txt",
-                            keys_dir / "openai_api_key.txt",
-                            project_keys_dir / "openai keys.txt",
-                            project_keys_dir / "openai_api_key.txt",
-                        ],
+                        candidate_paths,
                         provider="gpt",
                     )
                     if key not in keys

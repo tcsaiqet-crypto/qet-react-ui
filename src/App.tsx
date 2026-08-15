@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, ZoomIn, ZoomOut, Sparkles, Copy, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Moon, Sun, ZoomIn, ZoomOut, Sparkles, Copy, Check, PanelRightOpen, PanelRightClose, SlidersHorizontal } from 'lucide-react';
 import { AISettingsPanel } from './components/AISettingsPanel';
 import { RunsDashboard } from './components/RunsDashboard';
 import { TabId } from './components/NavigationHeader';
@@ -8,8 +8,9 @@ import { AgentPipelineRail } from './components/AgentPipelineRail';
 import { ActiveProcessBar } from './components/ActiveProcessBar';
 import { UnderstandingPage } from './components/UnderstandingPage';
 import { ExecutionPage } from './components/ExecutionPage';
-import { AISettingsResponse, AppState } from './types';
-import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings } from './services/apiClient';
+import { AgentDetailDrawer } from './components/AgentDetailDrawer';
+import { AISettingsResponse, AppState, RailViewMode, DrawerTabId } from './types';
+import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings, retryRun } from './services/apiClient';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -18,6 +19,10 @@ export const App: React.FC = () => {
   const [aiSettings, setAISettings] = useState<AISettingsResponse | null>(null);
   const [switchingProvider, setSwitchingProvider] = useState(false);
   const [copiedRunId, setCopiedRunId] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>('requirement_understanding');
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(true);
+  const [railViewMode, setRailViewMode] = useState<RailViewMode>('understanding_focus');
+  const [drawerTab, setDrawerTab] = useState<DrawerTabId>('overview');
   const scrolledEventsRef = useRef<Set<string>>(new Set());
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const stored = window.localStorage.getItem('qet-ui-theme');
@@ -364,32 +369,47 @@ export const App: React.FC = () => {
               className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5"
               style={{ borderColor: 'var(--qet-border)' }}
             >
-              <div
-                className="flex items-center gap-2 px-3 py-1 rounded-lg"
-                style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
-              >
-                <span className="text-xs font-semibold" style={{ color: 'var(--qet-text-muted)' }}>
-                  Active Run:
-                </span>
-                <code
-                  className="text-xs font-mono font-bold px-2 py-0.5 rounded"
-                  style={{
-                    color: 'var(--qet-accent)',
-                    backgroundColor: 'var(--qet-surface)',
-                    border: '1px solid var(--qet-border)',
-                  }}
+              <div className="flex items-center gap-2">
+                <div
+                  className="flex items-center gap-2 px-3 py-1 rounded-lg"
+                  style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
                 >
-                  {appState.run_id}
-                </code>
+                  <span className="text-xs font-semibold" style={{ color: 'var(--qet-text-muted)' }}>
+                    Active Run:
+                  </span>
+                  <code
+                    className="text-xs font-mono font-bold px-2 py-0.5 rounded"
+                    style={{
+                      color: 'var(--qet-accent)',
+                      backgroundColor: 'var(--qet-surface)',
+                      border: '1px solid var(--qet-border)',
+                    }}
+                  >
+                    {appState.run_id}
+                  </code>
+                  <button
+                    onClick={copyRunId}
+                    title="Copy Run ID"
+                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+                    style={{ color: 'var(--qet-text-muted)' }}
+                  >
+                    {copiedRunId ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                  </button>
+                </div>
+
+                {/* Right Drawer Toggle Button */}
                 <button
-                  onClick={copyRunId}
-                  title="Copy Run ID"
-                  className="p-1 rounded hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
-                  style={{ color: 'var(--qet-text-muted)' }}
+                  onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+                  title={isDrawerOpen ? 'Close Agent Inspector Drawer' : 'Open Agent Inspector Drawer'}
+                  className={`qet-btn-secondary inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg cursor-pointer ${
+                    isDrawerOpen ? 'qet-badge-accent' : ''
+                  }`}
                 >
-                  {copiedRunId ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                  {isDrawerOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">{isDrawerOpen ? 'Hide Drawer' : 'Inspect Agent'}</span>
                 </button>
               </div>
+
               <button
                 onClick={initRun}
                 className="text-xs font-semibold transition-colors hover:underline"
@@ -401,7 +421,7 @@ export const App: React.FC = () => {
           )}
         </header>
 
-        {/* Main Body */}
+        {/* Main Body with 3-Pane Layout */}
         <main className="flex-1 w-full px-4 py-6 sm:px-6 lg:px-8">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 space-y-4">
@@ -415,7 +435,19 @@ export const App: React.FC = () => {
             </div>
           ) : (
             <div className="mx-auto flex max-w-7xl flex-col items-start gap-6 lg:flex-row">
-              <AgentPipelineRail appState={appState} />
+              {/* 1. Left Vertical Rail */}
+              <AgentPipelineRail
+                appState={appState}
+                selectedAgentId={selectedAgentId}
+                onSelectAgent={(agentId) => {
+                  setSelectedAgentId(agentId);
+                  setIsDrawerOpen(true);
+                }}
+                viewMode={railViewMode}
+                onToggleViewMode={setRailViewMode}
+              />
+
+              {/* 2. Center Main Workspace */}
               <div className="min-w-0 w-full flex-1">
                 {activeTab === 'home' && (
                   <div key={activeTab} className="animate-fade-in-up space-y-6">
@@ -428,6 +460,10 @@ export const App: React.FC = () => {
                       onRefreshStatus={() => refreshStatus()}
                       onProceedToUnderstanding={scrollToUnderstanding}
                       onCreateNewRun={initRun}
+                      onInspectAgent={(agentId) => {
+                        setSelectedAgentId(agentId);
+                        setIsDrawerOpen(true);
+                      }}
                     />
 
                     {isIntakeReady && (
@@ -454,6 +490,22 @@ export const App: React.FC = () => {
                   <AISettingsPanel onSaved={setAISettings} />
                 )}
               </div>
+
+              {/* 3. Right-Side Collapsible Inspector Drawer */}
+              <AgentDetailDrawer
+                isOpen={isDrawerOpen}
+                onClose={() => setIsDrawerOpen(false)}
+                selectedAgentId={selectedAgentId}
+                appState={appState}
+                activeTab={drawerTab}
+                onTabChange={setDrawerTab}
+                onRetryAgent={async (agentId) => {
+                  if (appState?.run_id) {
+                    await retryRun(appState.run_id, agentId as any);
+                    await refreshStatus();
+                  }
+                }}
+              />
             </div>
           )}
         </main>

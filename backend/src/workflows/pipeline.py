@@ -72,11 +72,87 @@ class SequentialQETPipeline:
             )
             return state
 
+        state.pipeline_control_state = "running"
         for stage in self.STAGES[self.STAGES.index(start_stage):]:
+            # Check for pause / stop control state
+            if getattr(state, "pipeline_control_state", "running") == "paused":
+                state.paused_stage = stage
+                logger.info(f"Pipeline paused by user before stage: {stage}")
+                self._record_lifecycle_event(
+                    state,
+                    event_type="pipeline_paused",
+                    stage=stage,
+                    status="paused",
+                    message=f"Pipeline paused at {self.STAGE_LABELS.get(stage, stage)}",
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                )
+                return state
+            if getattr(state, "pipeline_control_state", "running") == "stopped":
+                logger.info(f"Pipeline stopped by user before stage: {stage}")
+                state.paused_stage = None
+                self._record_lifecycle_event(
+                    state,
+                    event_type="pipeline_stopped",
+                    stage=stage,
+                    status="stopped",
+                    message=f"Pipeline stopped by user",
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                )
+                return state
+
             state = self._execute_stage(stage, state)
             if state.errors:
                 logger.error("Pipeline stopped at %s: %s", stage, state.errors)
                 return state
+        state.pipeline_control_state = "completed"
+        state.paused_stage = None
+        return state
+
+    def pause_pipeline(self, state: AppState) -> AppState:
+        """Pause pipeline execution cleanly and save the stage to resume from."""
+        state.pipeline_control_state = "paused"
+        active = getattr(state, "active_agent", None) or "Understanding"
+        state.paused_stage = active
+        self._record_lifecycle_event(
+            state,
+            event_type="pipeline_paused",
+            stage=active,
+            status="paused",
+            message=f"Pipeline execution paused by user at {self.STAGE_LABELS.get(active, active)}",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+        return state
+
+    def resume_pipeline(self, state: AppState) -> AppState:
+        """Resume pipeline execution from the paused stage without resetting upstream data."""
+        state.pipeline_control_state = "running"
+        resume_stage = getattr(state, "paused_stage", None) or getattr(state, "active_agent", None) or "Test Cases"
+        if resume_stage not in self.STAGES:
+            resume_stage = "Test Cases"
+        state.paused_stage = None
+        self._record_lifecycle_event(
+            state,
+            event_type="pipeline_resumed",
+            stage=resume_stage,
+            status="running",
+            message=f"Pipeline resumed at {self.STAGE_LABELS.get(resume_stage, resume_stage)}",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
+        return self.run_from(state, resume_stage)
+
+    def stop_pipeline(self, state: AppState) -> AppState:
+        """Stop pipeline execution cleanly."""
+        state.pipeline_control_state = "stopped"
+        active = getattr(state, "active_agent", None) or "Understanding"
+        state.paused_stage = None
+        self._record_lifecycle_event(
+            state,
+            event_type="pipeline_stopped",
+            stage=active,
+            status="stopped",
+            message="Pipeline execution stopped by user",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+        )
         return state
 
     def retry_stage(self, state: AppState, stage: str) -> AppState:

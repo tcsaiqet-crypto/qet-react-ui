@@ -27,20 +27,22 @@ import {
   BarChart3
 } from 'lucide-react';
 import { AppState, AgentStatus } from '../types';
-import { uploadDocuments, uploadCodebase, retryRun, ApiError } from '../services/apiClient';
+import { uploadDocuments, uploadCodebase, retryRun, createRun, ApiError } from '../services/apiClient';
 
 interface HomeUploadPageProps {
   appState: AppState | null;
   onRefreshStatus: () => void;
   onProceedToUnderstanding: () => void;
   onCreateNewRun: () => void;
+  onInspectAgent?: (agentId: string) => void;
 }
 
 export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   appState,
   onRefreshStatus,
   onProceedToUnderstanding,
-  onCreateNewRun
+  onCreateNewRun,
+  onInspectAgent
 }) => {
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const [zipFile, setZipFile] = useState<File | null>(null);
@@ -170,12 +172,22 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   };
 
   const performDocUpload = async (files: File[]) => {
-    if (!runId) return;
+    let targetRunId = runId;
+    if (!targetRunId) {
+      try {
+        const newRun = await createRun('CFA Digital Journey');
+        targetRunId = newRun.run_id;
+        onRefreshStatus();
+      } catch {
+        setDocError(new Error('Failed to create run session. Please ensure backend is running.'));
+        return;
+      }
+    }
     setUploadingDocs(true);
     setDocError(null);
     setDocSuccess(null);
     try {
-      const res = await uploadDocuments(runId, files);
+      const res = await uploadDocuments(targetRunId, files);
       setDocSuccess(`Successfully indexed ${res.uploaded_count} requirement document(s).`);
       setForceExpandDocs(false);
       onRefreshStatus();
@@ -207,12 +219,22 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
   };
 
   const performZipUpload = async (file: File) => {
-    if (!runId) return;
+    let targetRunId = runId;
+    if (!targetRunId) {
+      try {
+        const newRun = await createRun('CFA Digital Journey');
+        targetRunId = newRun.run_id;
+        onRefreshStatus();
+      } catch {
+        setZipError(new Error('Failed to create run session. Please ensure backend is running.'));
+        return;
+      }
+    }
     setUploadingZip(true);
     setZipError(null);
     setZipSuccess(null);
     try {
-      const res = await uploadCodebase(runId, file);
+      const res = await uploadCodebase(targetRunId, file);
       setZipSuccess(`Archive unpacked: ${res.intake_manifest.total_files} files indexed.`);
       setForceExpandZip(false);
       onRefreshStatus();
@@ -238,14 +260,24 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
 
   const renderUploadError = (err: Error) => {
     const apiErr = err instanceof ApiError ? err : null;
+    const isFetchFailure = err.message === 'Failed to fetch' || err.message.includes('fetch');
+    const displayMessage = isFetchFailure
+      ? 'Backend connection failed (Failed to fetch). Please ensure the backend server is running on http://127.0.0.1:8080.'
+      : err.message;
+
     return (
       <div className="qet-badge-danger p-3 text-xs space-y-1.5 animate-file-item rounded-lg mt-2">
         <div className="flex items-start gap-2">
           <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
           <div className="flex-1">
-            <span className="font-semibold">{err.message}</span>
+            <span className="font-semibold">{displayMessage}</span>
             {apiErr?.error_code && (
               <div className="font-mono text-[10px] mt-0.5 opacity-85">error_code: {apiErr.error_code}</div>
+            )}
+            {isFetchFailure && (
+              <div className="text-[11px] mt-1 opacity-90">
+                Tip: Run <code className="px-1.5 py-0.5 rounded bg-black/20 font-mono text-[10px]">restart_fastapi_app.bat</code> in the terminal to start the backend server.
+              </div>
             )}
           </div>
         </div>
@@ -415,9 +447,17 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
               </div>
             </div>
 
-            {/* Tiny Re-upload button in corner when uploaded */}
+            {/* Inspect and Re-upload buttons when uploaded */}
             {hasDocsUploaded && !forceExpandDocs && (
               <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => onInspectAgent?.('requirement_understanding')}
+                  title="Inspect Agent Details & Manifest in Drawer"
+                  className="qet-btn-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold cursor-pointer rounded-md text-blue-400 hover:text-blue-300"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span>Inspect</span>
+                </button>
                 <button
                   onClick={() => setForceExpandDocs(true)}
                   title="Replace uploaded documents"
@@ -595,9 +635,17 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
               </div>
             </div>
 
-            {/* Tiny Re-upload button in corner when uploaded */}
+            {/* Inspect and Re-upload buttons when uploaded */}
             {hasZipUploaded && !forceExpandZip && (
               <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => onInspectAgent?.('document_intake')}
+                  title="Inspect Codebase AST & Files in Drawer"
+                  className="qet-btn-secondary inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold cursor-pointer rounded-md text-cyan-400 hover:text-cyan-300"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span>Inspect</span>
+                </button>
                 <button
                   onClick={() => setForceExpandZip(true)}
                   title="Replace uploaded codebase ZIP"

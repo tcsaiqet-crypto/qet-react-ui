@@ -27,14 +27,16 @@ def is_safe_path(base_dir: Path, target_path: Path) -> bool:
 
 def is_junk_member(filename: str) -> bool:
     """True if any path segment matches a known dependency/build/VCS noise folder."""
-    parts = {part.lower() for part in Path(filename).parts}
+    normalized = filename.replace("\\", "/").lower()
+    parts = set(normalized.split("/"))
     return bool(parts & config.junk_dir_patterns)
 
 
 def is_excluded_member(filename: str) -> bool:
     """True if the file should be ignored for safe analysis intake instead of extracted."""
-    path = Path(filename)
-    ext = path.suffix.lower()
+    normalized = filename.replace("\\", "/").lower()
+    basename = normalized.rsplit("/", 1)[-1]
+    ext = ("." + basename.rsplit(".", 1)[-1].lower()) if "." in basename else ""
     return is_junk_member(filename) or ext in config.forbidden_extensions
 
 

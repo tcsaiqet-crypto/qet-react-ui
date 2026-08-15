@@ -1,4 +1,4 @@
-﻿export interface FileMetadata {
+export interface FileMetadata {
   rel_path: string;
   size_bytes: number;
   extension: string;
@@ -120,6 +120,12 @@ export interface ProvenanceMetadata {
 }
 
 export interface ApplicationUnderstanding {
+  status?: string;
+  error_code?: string;
+  error_message?: string;
+  diagnostics?: Record<string, any>;
+  retryable?: boolean;
+  understanding?: ApplicationUnderstanding;
   summary: string;
   architecture_notes: string;
   quality_score_percentage: number;
@@ -159,34 +165,66 @@ export interface TestSuite {
   test_cases: TestCase[];
 }
 
-export interface ExecutionStepResult {
+export interface PlaywrightScript {
+  script_id: string;
+  test_case_id: string;
+  filename: string;
+  code: string;
+  page_objects: string[];
+  selectors_used: string[];
+  uncertain_selectors?: string[];
+  provenance: Record<string, any>;
+  upstream_case_ids?: string[];
+  validation_status: string;
+  selector_confidence_map?: Record<string, string>;
+  fallback_used: boolean;
+}
+
+export type ExecutionStatus = 'idle' | 'queued' | 'running' | 'paused' | 'stopped' | 'passed' | 'failed' | 'cancelled' | 'timed_out' | 'not_run';
+
+export interface TestStepResult {
   step_number: number;
   description: string;
-  status: string;
-  error_message?: string;
-  screenshot_path?: string;
+  status: ExecutionStatus | string;
+  error_message?: string | null;
+  screenshot_path?: string | null;
 }
+
+export type ExecutionStepResult = TestStepResult;
 
 export interface ExecutionResult {
   execution_id: string;
-  status: string;
+  mode?: string;
+  status: ExecutionStatus | string;
   duration_seconds: number;
   passed_count: number;
   failed_count: number;
   blocked_count: number;
-  step_results: ExecutionStepResult[];
-  failure_summary?: string;
+  step_results: TestStepResult[];
+  failure_summary?: string | null;
+  failure_classification?: string | null;
+  execution_logs?: string[];
+  evidence_paths?: string[];
+  base_url?: string;
+  provenance?: Record<string, any>;
+}
+
+export interface ExecutionLaunchRequest {
+  test_case_ids?: string[];
+  explicit_user_approval: boolean;
+  is_non_production_confirmed: boolean;
+  is_script_reviewed: boolean;
 }
 
 export interface ExecutionStatusResponse {
   execution_id: string;
   run_id: string;
-  status: 'queued' | 'running' | 'passed' | 'failed' | 'cancelled' | 'timed_out' | 'not_run';
+  status: ExecutionStatus;
   selected_test_case_ids: string[];
-  current_test_case_id?: string;
-  current_step?: string;
+  current_test_case_id?: string | null;
+  current_step?: string | null;
   logs: string[];
-  result?: ExecutionResult;
+  result?: ExecutionResult | null;
 }
 
 export interface AppState {
@@ -197,6 +235,12 @@ export interface AppState {
   intake_manifest?: IntakeManifest;
   understanding?: ApplicationUnderstanding;
   test_suite?: TestSuite;
+  playwright_scripts?: PlaywrightScript[];
+  last_execution_result?: ExecutionResult;
+  latest_multi_level_results?: Record<string, any>;
+  ai_test_analysis?: AITestAnalysisResult | Record<string, any>;
+  pipeline_control_state?: string;
+  paused_stage?: string;
   last_error?: ErrorPayload;
   stage_timestamps?: Record<string, string>;
   agent_timeline?: AgentTimelineItem[];
@@ -251,6 +295,7 @@ export interface AISettingsResponse {
   active_provider: 'gemini' | 'gpt';
   llm_enabled: boolean;
   providers: Record<'gemini' | 'gpt', AIProviderConfig>;
+  provider_keys?: Record<string, string>;
   runtime_state: {
     provider: string;
     enabled: boolean;
@@ -259,7 +304,9 @@ export interface AISettingsResponse {
     model?: string | null;
   };
   gemini_candidate_models: string[];
+  [key: string]: any;
 }
+
 
 export interface AIProviderVerificationResult {
   provider: 'gemini' | 'gpt' | string;
@@ -296,9 +343,6 @@ export interface RunListResponse {
   runs: RunSummary[];
 }
 
-
-
-// ── Spec-Kit 011 Agent Choreography Contracts ───────────────────────
 export type AgentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'invalidated' | 'blocked';
 
 export interface AgentTimelineItem {
@@ -366,3 +410,160 @@ export interface RetryRunResponse {
   reset_generation: number;
   state: AppState;
 }
+
+export interface ScreenshotEvidence {
+  filename: string;
+  url: string;
+  test_case_id: string;
+  case_type: string;
+  caption: string;
+  timestamp: string;
+  is_failure: boolean;
+}
+
+export interface TestStepExecutionDetail {
+  step_number: number;
+  description: string;
+  status: string;
+  duration_ms: number;
+  screenshot_path?: string | null;
+  error_message?: string | null;
+}
+
+export interface ScriptExecutionDetail {
+  script_id: string;
+  filename: string;
+  test_case_id: string;
+  title: string;
+  case_type: string;
+  feature_area: string;
+  status: string;
+  duration_ms: number;
+  why_passed?: string | null;
+  why_failed?: string | null;
+  failure_classification?: string | null;
+  root_cause_analysis?: string | null;
+  steps: TestStepExecutionDetail[];
+  screenshots: ScreenshotEvidence[];
+  execution_logs: string[];
+  code_snippet?: string | null;
+}
+
+export interface MultiLevelExecutionReport {
+  run_id: string;
+  execution_id: string;
+  timestamp: string;
+  summary: {
+    total_scripts: number;
+    total_test_cases: number;
+    passed_count: number;
+    failed_count: number;
+    pass_rate_percentage: number;
+    duration_seconds: number;
+    execution_mode: string;
+    target_host: string;
+    [key: string]: any;
+  };
+  breakdown_by_case_type: Record<string, { total: number; passed: number; failed: number; pass_rate_percentage: number }>;
+  breakdown_by_feature_area: Record<string, { total: number; passed: number; failed: number; pass_rate_percentage: number }>;
+  scripts: ScriptExecutionDetail[];
+  screenshots_gallery: ScreenshotEvidence[];
+  overall_pass_rate_percentage: number;
+  total_scripts_count: number;
+}
+
+export interface AITestCaseInsight {
+  test_case_id: string;
+  title: string;
+  case_type: string;
+  status: string;
+  explanation: string;
+  root_cause?: string | null;
+  defect_category?: string | null;
+  recommended_fix?: string | null;
+}
+
+export interface AITestAnalysisResult {
+  analysis_id: string;
+  run_id: string;
+  timestamp: string;
+  overall_health_score: number;
+  test_success_rate: number;
+  executive_summary: string;
+  risk_level: string;
+  defect_distribution: Record<string, number>;
+  test_case_insights: AITestCaseInsight[];
+  key_recommendations: string[];
+}
+
+export interface AIScriptModificationRequest {
+  script_filename: string;
+  test_case_id: string;
+  current_code: string;
+  failure_log?: string | null;
+  instruction?: string | null;
+}
+
+export interface AIScriptModificationResponse {
+  script_filename: string;
+  test_case_id: string;
+  original_code: string;
+  modified_code: string;
+  explanation: string;
+  diff_summary: string;
+}
+
+// ── Spec-Kit 014 Interactive Rail & Right Drawer Contracts ────────────
+export type RailViewMode = 'understanding_focus' | 'full_pipeline';
+
+export type DrawerTabId = 'overview' | 'subagents' | 'artifacts' | 'actions';
+
+export type StagedHeroStep =
+  | 'requirement_understanding'
+  | 'document_intake'
+  | 'application_understanding';
+
+export interface SelectedAgentContext {
+  agent_id: string;
+  label: string;
+  phase: string;
+  step_number: number;
+  status: AgentStatus;
+  description: string;
+  subagents: Array<{
+    subagent_id: string;
+    label: string;
+    status: AgentStatus | string;
+    message?: string;
+    elapsed_seconds?: number;
+  }>;
+  inputs_summary: {
+    files?: Array<{ name: string; size_bytes?: number; extension?: string }>;
+    parameters?: Record<string, any>;
+    prompt_tokens?: number;
+  };
+  artifacts_summary: {
+    total_artifacts: number;
+    manifest_available: boolean;
+    data_payload?: Record<string, any>;
+    checklist_evaluation?: Array<{
+      check_id: string;
+      title: string;
+      status: 'pass' | 'fail' | 'partial' | string;
+      score: number;
+      findings: string;
+    }>;
+  };
+  execution_logs: string[];
+  retryable: boolean;
+  can_clear_cache: boolean;
+}
+
+export interface DrawerState {
+  isOpen: boolean;
+  activeTab: DrawerTabId;
+  selectedAgentId: string | null;
+  isDocked: boolean;
+  width: number;
+}
+

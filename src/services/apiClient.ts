@@ -1,4 +1,4 @@
-﻿import { 
+import { 
   AISettingsResponse,
   VerifyAISettingsResponse,
   CreateRunResponse, 
@@ -8,8 +8,12 @@
   StatusResponse, 
   ApplicationUnderstanding,
   ErrorPayload,
-  RetryRunResponse
-  , ExecutionStatusResponse
+  RetryRunResponse,
+  ExecutionStatusResponse,
+  MultiLevelExecutionReport,
+  AITestAnalysisResult,
+  AIScriptModificationRequest,
+  AIScriptModificationResponse,
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '/api/v1';
@@ -28,128 +32,41 @@ export class ApiError extends Error {
 }
 
 async function throwApiError(res: Response, fallbackMessage: string): Promise<never> {
-  const errorData = await res.json().catch(() => ({ detail: res.statusText }));
-  const detail = errorData?.detail;
-  if (detail && typeof detail === 'object') {
-    throw new ApiError(detail.error_message || fallbackMessage, detail.error_code, detail.diagnostics);
+  const errorText = await res.text();
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(errorText);
+  } catch {
+    // not JSON
   }
-  throw new ApiError((typeof detail === 'string' && detail) || fallbackMessage);
-}
-
-export async function createRun(projectName = 'CFA Digital Journey'): Promise<CreateRunResponse> {
-  const res = await fetch(`${API_BASE_URL}/runs`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project_name: projectName }),
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to create run: ${res.statusText}`);
+  const detail = parsed?.detail;
+  if (Array.isArray(detail)) {
+    const errorMsg = detail
+      .map((d) => (typeof d === 'string' ? d : d.msg ? `${d.loc ? d.loc.join('.') + ': ' : ''}${d.msg}` : JSON.stringify(d)))
+      .join('; ');
+    throw new ApiError(errorMsg || fallbackMessage, 'validation_error', { validation_errors: detail });
   }
-  return res.json();
-}
-
-export async function uploadDocuments(runId: string, files: File[]): Promise<DocumentUploadResponse> {
-  const formData = new FormData();
-  files.forEach((file) => formData.append('files', file));
-
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/documents`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!res.ok) {
-    await throwApiError(res, 'Document upload failed');
+  if (typeof detail === 'object' && detail !== null) {
+    throw new ApiError(
+      detail.error_message || detail.message || fallbackMessage,
+      detail.error_code,
+      detail.diagnostics
+    );
   }
-  return res.json();
-}
-
-export async function uploadCodebase(runId: string, file: File): Promise<CodebaseUploadResponse> {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/codebase`, {
-    method: 'POST',
-    body: formData,
-  });
-  if (!res.ok) {
-    await throwApiError(res, 'Codebase ZIP upload failed');
-  }
-  return res.json();
-}
-
-export async function getRunStatus(runId: string): Promise<StatusResponse> {
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/status`);
-  if (!res.ok) {
-    throw new Error(`Failed to query run status: ${res.statusText}`);
-  }
-  return res.json();
-}
-
-export async function getRunFullState(runId: string): Promise<CreateRunResponse> {
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}`);
-  if (!res.ok) {
-    await throwApiError(res, `Failed to load run ${runId}`);
-  }
-  return res.json();
-}
-
-export async function listRuns(): Promise<RunListResponse> {
-  const res = await fetch(`${API_BASE_URL}/runs`);
-  if (!res.ok) {
-    await throwApiError(res, 'Failed to load previous runs');
-  }
-  return res.json();
-}
-
-export async function startUnderstanding(runId: string): Promise<{ status: string; run_id: string }> {
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/understanding/start`, {
-    method: 'POST',
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to start understanding analysis: ${res.statusText}`);
-  }
-  return res.json();
-}
-
-export async function getUnderstanding(runId: string): Promise<{
-  status: 'ready' | 'failed' | 'running' | string;
-  understanding?: ApplicationUnderstanding;
-  error_code?: string;
-  error_message?: string;
-  diagnostics?: Record<string, any>;
-  retryable?: boolean;
-  progress?: number;
-}> {
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/understanding`);
-  if (!res.ok) {
-    throw new Error(`Failed to retrieve understanding result: ${res.statusText}`);
-  }
-  return res.json();
-}
-
-export async function startPipeline(runId: string): Promise<{ status: string; run_id: string }> {
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/pipeline/start`, {
-    method: 'POST',
-  });
-  if (!res.ok) {
-    await throwApiError(res, 'Failed to start downstream agents');
-  }
-  return res.json();
+  const msg = (typeof detail === 'string' ? detail : null) || parsed?.error_message || parsed?.message || (errorText ? `${fallbackMessage} (${res.status}): ${errorText}` : `${fallbackMessage} (${res.status})`);
+  throw new ApiError(msg);
 }
 
 export async function getAISettings(): Promise<AISettingsResponse> {
-  const res = await fetch(`${API_BASE_URL}/ai/settings`);
+  const res = await fetch(`${API_BASE_URL}/settings/ai`);
   if (!res.ok) {
-    await throwApiError(res, 'Failed to load AI settings');
+    await throwApiError(res, 'Failed to fetch AI settings');
   }
   return res.json();
 }
 
-export async function updateAISettings(payload: {
-  active_provider: 'gemini' | 'gpt';
-  provider_keys: Partial<Record<'gemini' | 'gpt', string>>;
-  clear_provider_keys?: Array<'gemini' | 'gpt'>;
-}): Promise<AISettingsResponse> {
-  const res = await fetch(`${API_BASE_URL}/ai/settings`, {
+export async function saveAISettings(payload: Partial<AISettingsResponse> | any): Promise<AISettingsResponse> {
+  const res = await fetch(`${API_BASE_URL}/settings/ai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -160,17 +77,147 @@ export async function updateAISettings(payload: {
   return res.json();
 }
 
-export async function verifyAISettings(): Promise<VerifyAISettingsResponse> {
-  const res = await fetch(`${API_BASE_URL}/ai/settings/verify`, {
+export const updateAISettings = saveAISettings;
+
+export async function verifyAISettings(payload?: AISettingsResponse): Promise<VerifyAISettingsResponse> {
+  const res = await fetch(`${API_BASE_URL}/settings/ai/verify`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {}),
   });
   if (!res.ok) {
-    await throwApiError(res, 'Failed to verify provider keys');
+    await throwApiError(res, 'Failed to verify AI connection');
   }
   return res.json();
 }
 
 
+export async function createRun(projectName = 'CFA Digital Journey'): Promise<CreateRunResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_name: projectName }),
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to create run');
+  }
+  return res.json();
+}
+
+export async function listRuns(): Promise<RunListResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs`);
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to list runs');
+  }
+  return res.json();
+}
+
+export async function uploadDocuments(runId: string, files: File[]): Promise<DocumentUploadResponse> {
+  const formData = new FormData();
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/upload/documents`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to upload documents');
+  }
+  return res.json();
+}
+
+export async function uploadCodebase(runId: string, zipFile: File): Promise<CodebaseUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', zipFile);
+
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/upload/codebase`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to upload codebase');
+  }
+  return res.json();
+}
+
+export async function startUnderstanding(runId: string): Promise<{ status: string; run_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/understanding/start`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to start understanding');
+  }
+  return res.json();
+}
+
+export async function getStatus(runId: string): Promise<StatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/status`);
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to fetch run status');
+  }
+  return res.json();
+}
+
+export const getRunStatus = getStatus;
+
+export async function getRunFullState(runId: string): Promise<any> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/status`);
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to fetch run full state');
+  }
+  return res.json();
+}
+
+
+export async function getUnderstanding(runId: string): Promise<ApplicationUnderstanding> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/understanding`);
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to fetch application understanding');
+  }
+  return res.json();
+}
+
+export async function startPipeline(runId: string): Promise<{ status: string; run_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/pipeline/start`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to start downstream pipeline');
+  }
+  return res.json();
+}
+
+export async function pausePipeline(runId: string): Promise<{ status: string; run_id: string; paused_stage?: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/pipeline/pause`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to pause pipeline');
+  }
+  return res.json();
+}
+
+export async function resumePipeline(runId: string): Promise<{ status: string; run_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/pipeline/resume`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to resume pipeline');
+  }
+  return res.json();
+}
+
+export async function stopPipeline(runId: string): Promise<{ status: string; run_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/pipeline/stop`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    await throwApiError(res, 'Failed to stop pipeline');
+  }
+  return res.json();
+}
 
 export async function retryRun(runId: string, targetAgentId: string): Promise<RetryRunResponse> {
   const res = await fetch(`${API_BASE_URL}/runs/${runId}/retry`, {
@@ -185,13 +232,15 @@ export async function retryRun(runId: string, targetAgentId: string): Promise<Re
 }
 
 export async function launchExecution(runId: string, payload: {
-  test_case_ids: string[];
+  test_case_ids?: string[];
   explicit_user_approval: boolean;
   is_non_production_confirmed: boolean;
   is_script_reviewed: boolean;
 }): Promise<ExecutionStatusResponse> {
   const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
   if (!res.ok) await throwApiError(res, 'Failed to launch execution');
   return res.json();
@@ -203,9 +252,70 @@ export async function getExecutionStatus(runId: string, executionId: string): Pr
   return res.json();
 }
 
-export async function cancelExecution(runId: string, executionId: string): Promise<ExecutionStatusResponse> {
-  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions/${executionId}/cancel`, { method: 'POST' });
-  if (!res.ok) await throwApiError(res, 'Failed to cancel execution');
+export async function pauseExecution(runId: string, executionId: string): Promise<ExecutionStatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions/${executionId}/pause`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to pause execution');
   return res.json();
 }
 
+export async function resumeExecution(runId: string, executionId: string): Promise<ExecutionStatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions/${executionId}/resume`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to resume execution');
+  return res.json();
+}
+
+export async function stopExecution(runId: string, executionId: string): Promise<ExecutionStatusResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions/${executionId}/stop`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to stop execution');
+  return res.json();
+}
+
+export async function cancelExecution(runId: string, executionId: string): Promise<ExecutionStatusResponse> {
+  return stopExecution(runId, executionId);
+}
+
+export async function getMultiLevelResults(runId: string, executionId: string): Promise<MultiLevelExecutionReport> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/executions/${executionId}/multi-level-results`);
+  if (!res.ok) await throwApiError(res, 'Failed to fetch multi-level results');
+  return res.json();
+}
+
+export async function getLatestExecutionResults(runId: string): Promise<MultiLevelExecutionReport> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/execution-results`);
+  if (!res.ok) await throwApiError(res, 'Failed to fetch latest execution results');
+  return res.json();
+}
+
+export async function runAITestAnalysis(runId: string): Promise<AITestAnalysisResult> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/ai-analysis`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to run AI test analysis');
+  return res.json();
+}
+
+export async function requestAIScriptModification(
+  runId: string,
+  payload: AIScriptModificationRequest
+): Promise<AIScriptModificationResponse> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/ai-modify-script`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to request AI script modification');
+  return res.json();
+}
+
+export async function applyAIScriptFix(
+  runId: string,
+  payload: { script_filename: string; test_case_id: string; modified_code: string }
+): Promise<{ status: string; script_filename: string; test_case_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/apply-script-fix`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to apply AI script fix');
+  return res.json();
+}

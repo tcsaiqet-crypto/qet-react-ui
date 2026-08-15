@@ -200,23 +200,31 @@ class UnderstandingAgent(BaseAgent):
                 "failed",
                 "No usable response from the selected AI provider",
             )
-            raise AIRequiredFailureException(
-                error_code="provider_key_rejected" if self._looks_like_key_failure(attempt_failures) else "all_providers_failed",
-                error_message=(
-                    "Every configured AI key was rejected by the provider (authentication failed). "
-                    "Replace it with a valid key, or add a different key, and run the analysis again."
+            err_info = self.llm.last_error or {}
+            is_key_fail = self._looks_like_key_failure(attempt_failures or [err_info] or err_info)
+            err_code = "provider_key_rejected" if is_key_fail else (err_info.get("error_code") or "all_gemini_keys_exhausted")
+            err_msg = (
+                "Every configured AI key was rejected by the provider (authentication failed). "
+                "Replace it with a valid key, or add a different key, and run the analysis again."
+                if is_key_fail
+                else (err_info.get("error_message") or "All configured Gemini API keys failed. Please provide a valid Gemini key and retry.")
+            )
+            remediation = err_info.get("diagnostics", {}).get("remediation") if isinstance(err_info.get("diagnostics"), dict) else None
+            if not remediation:
+                remediation = (
+                    "Open Tools > AI Settings or update keys/gemini keys.txt with a valid Gemini key, then click Retry Analysis."
                     if self._looks_like_key_failure(attempt_failures)
-                    else "All configured AI providers, models, and keys failed to produce a response."
-                ),
+                    else "Provide a new active Gemini API key and retry the analysis."
+                )
+
+            raise AIRequiredFailureException(
+                error_code=err_code,
+                error_message=err_msg,
                 diagnostics={
-                    "attempts": attempt_failures,
+                    "attempts": attempt_failures or [err_info],
                     "selected_provider": preferred_provider,
                     "keys_tried": {name: len(keys) for name, keys in provider_keys.items()},
-                    "remediation": (
-                        "Open Tools > AI Settings, clear the rejected key, paste a different valid key, then retry."
-                        if self._looks_like_key_failure(attempt_failures)
-                        else "Retry the analysis; if it repeats, switch provider or supply an additional key."
-                    ),
+                    "remediation": remediation,
                 }
             )
 

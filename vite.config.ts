@@ -5,9 +5,18 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    watch: {
+      ignored: [
+        '**/backend/uploads/**',
+        '**/backend/workspace/**',
+        '**/uploads/**',
+        '**/sample data upload/**',
+        '**/webappdocumentation/**',
+      ],
+    },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },

@@ -1,4 +1,4 @@
-﻿"""Typed Pydantic Contracts and Schemas for QET Agent Accelerator MVP."""
+"""Typed Pydantic Contracts and Schemas for QET Agent Accelerator MVP."""
 
 from enum import Enum
 from typing import Dict, List, Optional, Any
@@ -18,6 +18,8 @@ class ExecutionStatus(str, Enum):
     IDLE = "idle"
     QUEUED = "queued"
     RUNNING = "running"
+    PAUSED = "paused"
+    STOPPED = "stopped"
     PASSED = "passed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -361,6 +363,100 @@ class QualityReport(BaseModel):
     provenance: Dict[str, Any] = Field(default_factory=dict)
 
 
+class ScreenshotEvidence(BaseModel):
+    filename: str
+    url: str
+    test_case_id: str
+    case_type: str = "Positive"  # Positive, Negative, Boundary, Validation
+    caption: str
+    timestamp: str
+    is_failure: bool = False
+
+
+class TestStepExecutionDetail(BaseModel):
+    __test__ = False
+    step_number: int
+    description: str
+    status: str
+    duration_ms: float = 0.0
+    screenshot_path: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class ScriptExecutionDetail(BaseModel):
+    __test__ = False
+    script_id: str
+    filename: str
+    test_case_id: str
+    title: str
+    case_type: str = "Positive"
+    feature_area: str = "General"
+    status: str = "PASSED"
+    duration_ms: float = 0.0
+    why_passed: Optional[str] = None
+    why_failed: Optional[str] = None
+    failure_classification: Optional[str] = None
+    root_cause_analysis: Optional[str] = None
+    steps: List[TestStepExecutionDetail] = Field(default_factory=list)
+    screenshots: List[ScreenshotEvidence] = Field(default_factory=list)
+    execution_logs: List[str] = Field(default_factory=list)
+    code_snippet: Optional[str] = None
+
+
+class MultiLevelExecutionReport(BaseModel):
+    run_id: str
+    execution_id: str
+    timestamp: str
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    breakdown_by_case_type: Dict[str, Any] = Field(default_factory=dict)
+    breakdown_by_feature_area: Dict[str, Any] = Field(default_factory=dict)
+    scripts: List[ScriptExecutionDetail] = Field(default_factory=list)
+    screenshots_gallery: List[ScreenshotEvidence] = Field(default_factory=list)
+    overall_pass_rate_percentage: float = 0.0
+    total_scripts_count: int = 0
+
+
+class AITestCaseInsight(BaseModel):
+    test_case_id: str
+    title: str
+    case_type: str
+    status: str
+    explanation: str
+    root_cause: Optional[str] = None
+    defect_category: Optional[str] = None
+    recommended_fix: Optional[str] = None
+
+
+class AITestAnalysisResult(BaseModel):
+    analysis_id: str
+    run_id: str
+    timestamp: str
+    overall_health_score: float
+    test_success_rate: float
+    executive_summary: str
+    risk_level: str
+    defect_distribution: Dict[str, int] = Field(default_factory=dict)
+    test_case_insights: List[AITestCaseInsight] = Field(default_factory=list)
+    key_recommendations: List[str] = Field(default_factory=list)
+
+
+class AIScriptModificationRequest(BaseModel):
+    script_filename: str
+    test_case_id: str
+    current_code: str
+    failure_log: Optional[str] = None
+    instruction: Optional[str] = None
+
+
+class AIScriptModificationResponse(BaseModel):
+    script_filename: str
+    test_case_id: str
+    original_code: str
+    modified_code: str
+    explanation: str
+    diff_summary: str
+
+
 class AppState(BaseModel):
     """Workflow state structure for one demo run."""
     run_id: str = "RUN-20260813-001"
@@ -389,4 +485,9 @@ class AppState(BaseModel):
     reset_generation: int = 1
     upload_summary_left: Optional[Dict[str, Any]] = None
     upload_summary_right: Optional[Dict[str, Any]] = None
+    pipeline_control_state: str = "idle"
+    paused_stage: Optional[str] = None
+    latest_multi_level_results: Optional[Dict[str, Any]] = None
+    ai_test_analysis: Optional[Dict[str, Any]] = None
+
 

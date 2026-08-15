@@ -88,8 +88,10 @@ class TestCaseAgent(BaseAgent):
             prompt = build_prompt("Application evidence", {"summary": understanding_text, "feature_areas": feature_areas}, self.llm.JSON_OUTPUT_INSTRUCTION)
             
         llm_text = self.llm.generate_text(prompt, profile="test_cases")
-        llm_data = self.llm.parse_json_payload(llm_text)
+        llm_data, parse_diag = self.llm.parse_json_payload_with_diagnostics(llm_text)
         if not llm_data:
+            if parse_diag:
+                logger.warning("TestCaseAgent JSON parsing error: %s", parse_diag)
             return []
 
         raw_cases = llm_data.get("test_cases")

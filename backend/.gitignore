@@ -1,8 +1,6 @@
 # Environment and Keys
 .env
 .env.local
-keys/
-api/gemapikey*.txt
 
 # Virtual Environment
 .venv/

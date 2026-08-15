@@ -1,10 +1,14 @@
 import React from 'react';
-import { CheckCircle2, Clock, Layers, Loader2, ShieldAlert } from 'lucide-react';
-import { AppState, AgentStatus } from '../types';
-import { resolveAgentFlow } from '../services/agentFlow';
+import { CheckCircle2, Clock, Layers, Loader2, ShieldAlert, ChevronRight, Eye, Sparkles } from 'lucide-react';
+import { AppState, AgentStatus, RailViewMode } from '../types';
+import { resolveAgentFlow, RailStage } from '../services/agentFlow';
 
 interface AgentPipelineRailProps {
   appState: AppState | null;
+  selectedAgentId?: string | null;
+  onSelectAgent?: (agentId: string) => void;
+  viewMode?: RailViewMode;
+  onToggleViewMode?: (mode: RailViewMode) => void;
 }
 
 const statusIcon = (status: AgentStatus) => {
@@ -46,8 +50,14 @@ const SubagentList: React.FC<{ names: string[]; status: AgentStatus }> = ({ name
   </div>
 );
 
-export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({ appState }) => {
-  const flow = resolveAgentFlow(appState);
+export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
+  appState,
+  selectedAgentId,
+  onSelectAgent,
+  viewMode = 'full_pipeline',
+  onToggleViewMode,
+}) => {
+  const flow = resolveAgentFlow(appState, viewMode);
   const {
     stages,
     statuses,
@@ -58,8 +68,17 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({ appState }
     activeSubagent,
     completedStages,
     upcomingStages,
+    understandingCompletedCount,
   } = flow;
   const fallbackSubagent = activeStage.subagents[0];
+
+  const handleStageClick = (stage: RailStage) => {
+    if (onSelectAgent) {
+      onSelectAgent(stage.id);
+    }
+  };
+
+  const isSelected = (stageId: string) => selectedAgentId === stageId;
 
   return (
     <aside className="w-full shrink-0 lg:sticky lg:top-24 lg:w-72" aria-label="QET agent execution rail">
@@ -67,111 +86,154 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({ appState }
         className="rounded-2xl border p-4 shadow-sm transition-colors"
         style={{ backgroundColor: 'var(--qet-surface)', borderColor: 'var(--qet-border)' }}
       >
-        <div className="mb-4 flex items-center gap-2 border-b pb-3" style={{ borderColor: 'var(--qet-border)' }}>
-          <div
-            className="flex h-8 w-8 items-center justify-center rounded-lg"
-            style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
-          >
-            <Layers className="h-4 w-4" style={{ color: 'var(--qet-accent)' }} />
+        {/* Rail Header */}
+        <div className="mb-3 flex items-center justify-between border-b pb-3" style={{ borderColor: 'var(--qet-border)' }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
+              style={{ backgroundColor: 'var(--qet-accent-subtle)', border: '1px solid var(--qet-accent-border)' }}
+            >
+              <Layers className="h-4 w-4" style={{ color: 'var(--qet-accent)' }} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold truncate" style={{ color: 'var(--qet-text-primary)' }}>QET Agent Flow</h2>
+              <p className="text-[10px]" style={{ color: 'var(--qet-text-muted)' }}>
+                {viewMode === 'understanding_focus'
+                  ? `${understandingCompletedCount} of 3 understanding done`
+                  : `${flow.completedCount} of ${flow.totalCount} complete`}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>QET Agent Flow</h2>
-            <p className="text-[10px]" style={{ color: 'var(--qet-text-muted)' }}>
-              {flow.completedCount} of {flow.totalCount} complete
-            </p>
-          </div>
+
+          {/* Quick Inspector Cue Badge */}
+          {selectedAgentId && (
+            <span className="qet-badge-accent text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">
+              Inspecting
+            </span>
+          )}
         </div>
 
-        <div className="space-y-1.5" data-testid="agent-pipeline-rail">
-          {completedStages.map((stage, order) => {
-            const stageIndex = stages.indexOf(stage);
-            return (
-              <div
-                key={stage.id}
-                className="animate-rail-item rounded-lg border px-2.5 py-2"
-                style={{
-                  backgroundColor: 'var(--qet-success-subtle)',
-                  borderColor: 'var(--qet-success-border)',
-                  animationDelay: `${order * 40}ms`,
-                }}
-              >
-                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--qet-text-secondary)' }}>
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--qet-success)' }} />
-                  <span className="min-w-0 flex-1 truncate">{stage.label}</span>
-                  <span className="text-[9px] uppercase" style={{ color: 'var(--qet-text-muted)' }}>{stageIndex + 1}</span>
-                </div>
-                <SubagentList names={stage.subagents} status="completed" />
-              </div>
-            );
-          })}
-
-          <div
-            className="animate-hero-enter my-2 rounded-xl border p-3 shadow-sm"
-            style={{ backgroundColor: 'var(--qet-accent-subtle)', borderColor: 'var(--qet-accent-border)' }}
-            data-testid="agent-pipeline-active"
+        {/* View Mode Toggle Switcher */}
+        <div
+          className="mb-3 flex items-center rounded-lg p-0.5"
+          style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
+        >
+          <button
+            type="button"
+            onClick={() => onToggleViewMode?.('understanding_focus')}
+            className={`flex-1 rounded-md py-1 text-[10px] font-semibold transition-all ${
+              viewMode === 'understanding_focus'
+                ? 'qet-badge-accent shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
           >
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.16em]" style={{ color: 'var(--qet-accent-text)' }}>{activeStage.phase}</span>
-              {statusIcon(activeStatus)}
-            </div>
-            <div
-              className="flex items-center gap-1.5 rounded px-2 py-1.5 text-sm font-bold leading-tight"
-              style={{ backgroundColor: 'var(--qet-surface)', color: 'var(--qet-text-primary)' }}
-            >
-              {activeStatus === 'running' && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" style={{ color: 'var(--qet-accent)' }} />}
-              <span className="min-w-0 truncate">{activeStage.label}</span>
-            </div>
-            <div
-              className="mt-2 border-l-2 pl-2 text-[11px] italic leading-tight"
-              style={{ color: 'var(--qet-accent-text)', borderColor: 'var(--qet-accent-border)' }}
-            >
-              <span className="font-semibold not-italic" style={{ color: 'var(--qet-text-secondary)' }}>Subagent:</span>{' '}
-              {activeSubagent?.label || fallbackSubagent || activeStage.description}
-            </div>
-            <div className="mt-2 text-[10px] leading-tight" style={{ color: 'var(--qet-text-secondary)' }}>{activeSubagent?.message || activeStage.description}</div>
+            3 Understanding
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggleViewMode?.('full_pipeline')}
+            className={`flex-1 rounded-md py-1 text-[10px] font-semibold transition-all ${
+              viewMode === 'full_pipeline'
+                ? 'qet-badge-accent shadow-xs'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            All 11 Stages
+          </button>
+        </div>
 
-            {activeSubagentTimeline.length > 0 && (
-              <div className="mt-3 space-y-1 border-t pt-2" style={{ borderColor: 'var(--qet-accent-border)' }}>
-                <div className="mb-1.5 text-[9px] font-semibold uppercase" style={{ color: 'var(--qet-text-muted)' }}>Subagents Status:</div>
-                {activeSubagentTimeline.map((subagent, order) => (
-                  <div
-                    key={subagent.subagent_id}
-                    className="animate-rail-item flex items-center gap-1.5 pl-1 text-[10px]"
-                    style={{ color: 'var(--qet-text-secondary)', animationDelay: `${order * 60}ms` }}
-                  >
-                    {subagentDot(subagent.status)}
-                    <span className="font-medium italic">{subagent.label}</span>
-                    <span className="ml-auto text-[9px]" style={{ color: 'var(--qet-text-muted)' }}>{subagent.status}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* Stage List with Interactive Selection */}
+        <div className="space-y-1.5" data-testid="agent-pipeline-rail">
+          {stages.map((stage, order) => {
+            const status = statuses[order] || 'pending';
+            const isActiveHero = order === activeIndex;
+            const selected = isSelected(stage.id);
 
-          {upcomingStages.map((stage, index) => {
-            const stageIndex = stages.indexOf(stage);
-            if (stageIndex === activeIndex) return null;
+            // Dynamic card style
+            let cardBg = 'var(--qet-surface-elevated)';
+            let borderColor = 'var(--qet-border)';
+            let textColor = 'var(--qet-text-muted)';
+
+            if (selected) {
+              borderColor = 'var(--qet-accent)';
+              cardBg = 'var(--qet-surface-elevated)';
+            } else if (status === 'completed') {
+              cardBg = 'var(--qet-success-subtle)';
+              borderColor = 'var(--qet-success-border)';
+              textColor = 'var(--qet-text-secondary)';
+            } else if (isActiveHero) {
+              cardBg = 'var(--qet-accent-subtle)';
+              borderColor = 'var(--qet-accent-border)';
+              textColor = 'var(--qet-text-primary)';
+            }
+
             return (
               <div
                 key={stage.id}
-                className="animate-rail-item rounded-lg border px-2.5 py-2 transition-colors"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleStageClick(stage)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleStageClick(stage);
+                  }
+                }}
+                data-testid={isActiveHero ? 'agent-pipeline-active' : `agent-stage-${stage.id}`}
+                className={`animate-rail-item group relative rounded-xl border p-2.5 transition-all duration-200 cursor-pointer ${
+                  selected
+                    ? 'ring-2 ring-blue-500/50 shadow-md shadow-blue-500/10'
+                    : 'hover:border-blue-400/50 hover:shadow-xs'
+                }`}
                 style={{
-                  backgroundColor: 'var(--qet-surface-elevated)',
-                  borderColor: 'var(--qet-border)',
-                  animationDelay: `${index * 40}ms`,
+                  backgroundColor: cardBg,
+                  borderColor,
+                  animationDelay: `${order * 30}ms`,
                 }}
               >
-                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--qet-text-muted)' }}>
-                  <span
-                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px]"
-                    style={{ borderColor: 'var(--qet-border)' }}
-                  >
-                    {stageIndex + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{stage.label}</span>
-                  {index === 1 && <span className="text-[9px] uppercase" style={{ color: 'var(--qet-text-muted)' }}>Next</span>}
+                {/* Active / Selection Indicator Dot */}
+                {selected && (
+                  <div
+                    className="absolute -left-1 top-1/2 h-4 w-1 -translate-y-1/2 rounded-r-full"
+                    style={{ backgroundColor: 'var(--qet-accent)' }}
+                  />
+                )}
+
+                <div className="flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {statusIcon(status)}
+                    <span
+                      className={`text-xs truncate ${selected || isActiveHero ? 'font-bold' : 'font-medium'}`}
+                      style={{ color: selected ? 'var(--qet-accent)' : textColor }}
+                    >
+                      {stage.label}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-[9px] uppercase font-mono px-1 py-0.5 rounded" style={{ color: 'var(--qet-text-muted)' }}>
+                      {order + 1}
+                    </span>
+                    {isActiveHero && status === 'running' && (
+                      <span className="qet-badge-accent text-[8px] font-bold px-1 rounded uppercase">Live</span>
+                    )}
+                  </div>
                 </div>
-                <SubagentList names={stage.subagents} status="pending" />
+
+                {/* Subagents Preview */}
+                {stage.subagents.length > 0 && (
+                  <SubagentList names={stage.subagents} status={status} />
+                )}
+
+                {/* Active Activity Callout when this stage is active and running */}
+                {isActiveHero && activeSubagent && (
+                  <div
+                    className="mt-2 border-l-2 pl-2 text-[10px] italic leading-tight animate-hero-enter"
+                    style={{ color: 'var(--qet-accent-text)', borderColor: 'var(--qet-accent-border)' }}
+                  >
+                    <span className="font-semibold not-italic">Subagent:</span> {activeSubagent.label}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -180,3 +242,4 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({ appState }
     </aside>
   );
 };
+

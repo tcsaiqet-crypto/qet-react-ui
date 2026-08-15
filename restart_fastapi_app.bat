@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal
 
 echo ==============================================
@@ -22,6 +22,6 @@ set PYTHONPATH=.
 set QET_ENABLE_REQUIREMENT_CATEGORIZATION=true
 
 echo [3/3] Starting FastAPI app on http://127.0.0.1:8080 ...
-python -m uvicorn src.api.fastapi_app:app --host 127.0.0.1 --port 8080 --reload
+python -m uvicorn src.api.fastapi_app:app --host 127.0.0.1 --port 8080 --reload --reload-dir src
 
 endlocal

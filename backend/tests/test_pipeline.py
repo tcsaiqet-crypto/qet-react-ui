@@ -10,6 +10,8 @@ from src.workflows.pipeline import SequentialQETPipeline
 
 def test_end_to_end_mvp_pipeline(tmp_path: Path) -> None:
     sample_zip = Path("cfa_digital_journey_sample.zip")
+    if not sample_zip.exists():
+        sample_zip = Path(__file__).resolve().parent.parent / "cfa_digital_journey_sample.zip"
     assert sample_zip.exists(), "Sample ZIP archive must exist"
     
     zip_service = ZipService()

@@ -1,4 +1,4 @@
-﻿"""Lightweight LLM service wrapper for Gemini and GPT text generation.
+"""Lightweight LLM service wrapper for Gemini and GPT text generation.
 
 Gemini's model catalog changes over time and hardcoded model names can 404
 for a given API key/version, so the active Gemini model is auto-discovered
@@ -24,15 +24,16 @@ _GEMINI_CANDIDATES_CACHE: Dict[str, list] = {}
 _GEMINI_WORKING_MODEL_CACHE: Dict[str, str] = {}
 _GEMINI_KEY_INDEX = 0
 
-# Preview/specialized model families excluded from text-generation candidate ranking.
+# Preview/specialized/retired model families excluded from text-generation candidate ranking.
 _GEMINI_EXCLUDE_KEYWORDS = (
     "preview", "tts", "image", "computer-use", "robotics",
     "lyria", "deep-research", "antigravity", "nano-banana", "customtools", "gemma",
+    "video", "eap", "2.5", "2.0", "1.5", "1.0",
 )
 
 # Preferred model, verified working against the current keys. Ranking places it
 # first when discovery reports it; discovery still supplies the fallback order.
-_GEMINI_PINNED_MODEL = "gemini-3.5-flash"
+_GEMINI_PINNED_MODEL = "gemini-3.7-flash"
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ AGENT_MODEL_POLICIES = {
     "default": AgentModelPolicy("flash", None, 0.2, 2500),
     "understanding": AgentModelPolicy("flash", "pro", 0.2, 4000),
     "categorization": AgentModelPolicy("flash_lite", "flash", 0.1, 2200),
-    "test_cases": AgentModelPolicy("flash", "pro", 0.15, 3000),
+    "test_cases": AgentModelPolicy("flash", "pro", 0.15, 8000),
 }
 
 
@@ -212,22 +213,25 @@ class LLMService:
             return {
                 "error_code": "provider_auth_failed",
                 "error_message": (
-                    "Every configured API key was rejected by its provider. "
-                    "Add a valid key and retry - no sample or placeholder output is substituted."
+                    "All configured Gemini API keys were rejected (401/403 unauthorized). "
+                    "Please add or update your Gemini API key in keys/gemini keys.txt or in AI Settings, then retry."
                 ),
-                "diagnostics": {"attempts": failures},
+                "diagnostics": {"attempts": failures, "remediation": "Configure a valid Gemini API key to retry."},
             }
-        if codes == {"provider_rate_limited"}:
+        if codes and codes <= {"provider_rate_limited", "provider_auth_failed", "provider_unavailable", "model_discovery_failed"}:
             return {
-                "error_code": "provider_rate_limited",
-                "error_message": "Every configured API key is rate limited. Retry shortly or add another key.",
-                "diagnostics": {"attempts": failures},
+                "error_code": "all_gemini_keys_exhausted",
+                "error_message": (
+                    "All configured Gemini API keys were exhausted or unavailable (rate limited, quota exceeded, or rejected). "
+                    "Please add a new Gemini API key in keys/ or via AI Settings and click Retry Analysis."
+                ),
+                "diagnostics": {"attempts": failures, "remediation": "Provide a new active Gemini key and retry."},
             }
 
         last = failures[-1]
         return {
             "error_code": last.get("error_code", "provider_request_failed"),
-            "error_message": last.get("error_message", "All provider attempts failed."),
+            "error_message": last.get("error_message", "All provider attempts failed. Please supply a valid key and retry."),
             "diagnostics": {"attempts": failures},
         }
 
@@ -241,17 +245,28 @@ class LLMService:
     @staticmethod
     def _rank_gemini_candidates(names: list) -> list:
         def excluded(name: str) -> bool:
-            return any(keyword in name for keyword in _GEMINI_EXCLUDE_KEYWORDS)
+            return any(keyword in name.lower() for keyword in _GEMINI_EXCLUDE_KEYWORDS)
 
         filtered = [n for n in names if n and not excluded(n)] or [n for n in names if n]
 
+        def _extract_version(name: str) -> float:
+            match = re.search(r"(\d+(?:\.\d+)?)", name)
+            if match:
+                try:
+                    return float(match.group(1))
+                except ValueError:
+                    return 0.0
+            return 0.0
+
         def score(name: str) -> tuple:
-            is_latest = name.endswith("-latest")
+            is_pinned = 0 if name == _GEMINI_PINNED_MODEL else 1
+            is_latest = 0 if name.endswith("-latest") else 1
             is_flash = "flash" in name and "lite" not in name
             is_flash_lite = "flash" in name and "lite" in name
             is_pro = "pro" in name
             tier = 0 if is_flash else (1 if is_flash_lite else (2 if is_pro else 3))
-            return (0 if name == _GEMINI_PINNED_MODEL else 1, 0 if is_latest else 1, tier, name)
+            version = _extract_version(name)
+            return (is_pinned, tier, -version, is_latest, name)
 
         return sorted(filtered, key=score)
 

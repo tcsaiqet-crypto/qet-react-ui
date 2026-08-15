@@ -1,4 +1,4 @@
-﻿"""FastAPI Runtime Layer exposing REST API contracts for React frontend with UI hosting."""
+"""FastAPI Runtime Layer exposing REST API contracts for React frontend with UI hosting."""
 
 import asyncio
 import shutil
@@ -13,7 +13,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
-from schemas.contracts import AppState, ApplicationUnderstanding, IntakeManifest, ExecutionMode, ExecutionRequest, ExecutionStatusResponse
+from schemas.contracts import (
+    AppState,
+    ApplicationUnderstanding,
+    IntakeManifest,
+    ExecutionMode,
+    ExecutionRequest,
+    ExecutionStatusResponse,
+    MultiLevelExecutionReport,
+    AITestAnalysisResult,
+    AIScriptModificationRequest,
+    AIScriptModificationResponse,
+)
 from src.config import config
 from src.services.run_state_service import create_run_state, load_run_state, update_run_status, save_run_state, list_saved_runs, retry_run
 from src.services.ai_settings_store import load_ai_settings_dict, save_ai_settings_dict
@@ -22,6 +33,7 @@ from src.agents.understanding_agent import UnderstandingAgent, AIRequiredFailure
 from src.workflows.pipeline import SequentialQETPipeline
 from src.services.llm_service import LLMService
 from src.services.execution_manager import execution_manager
+from src.services.ai_test_analysis_service import AITestAnalysisService
 from src.utils.security import SecurityError
 from src.utils.logger import logger
 
@@ -171,11 +183,13 @@ def _build_ai_settings_response() -> AISettingsResponse:
 
 
 @app.get("/api/v1/ai/settings", response_model=AISettingsResponse)
+@app.get("/api/v1/settings/ai", response_model=AISettingsResponse)
 def get_ai_settings():
     return _build_ai_settings_response()
 
 
 @app.post("/api/v1/ai/settings", response_model=AISettingsResponse)
+@app.post("/api/v1/settings/ai", response_model=AISettingsResponse)
 def update_ai_settings(req: UpdateAISettingsRequest):
     active_provider = "gpt" if req.active_provider.strip().lower() == "gpt" else "gemini"
     current = load_ai_settings_dict()
@@ -323,6 +337,7 @@ def _verify_gemini_key(llm: LLMService, api_keys: List[str]) -> AIProviderVerifi
 
 
 @app.post("/api/v1/ai/settings/verify", response_model=VerifyAISettingsResponse)
+@app.post("/api/v1/settings/ai/verify", response_model=VerifyAISettingsResponse)
 def verify_ai_settings():
     llm = LLMService()
     gemini_keys = config.get_provider_api_keys("gemini")
@@ -393,7 +408,20 @@ def create_run(req: Optional[CreateRunRequest] = None):
 
 
 @app.post("/api/v1/runs/{run_id}/documents", response_model=DocumentUploadResponse)
-async def upload_documents(run_id: str, files: List[UploadFile] = File(...)):
+@app.post("/api/v1/runs/{run_id}/upload/documents", response_model=DocumentUploadResponse)
+async def upload_documents(
+    run_id: str,
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None)
+):
+    upload_files: List[UploadFile] = []
+    if files:
+        upload_files.extend(files)
+    if file:
+        upload_files.append(file)
+    if not upload_files:
+        raise HTTPException(status_code=400, detail="No files provided for document upload")
+
     state = load_run_state(run_id)
     if not state:
         state = create_run_state(run_id=run_id)
@@ -402,11 +430,13 @@ async def upload_documents(run_id: str, files: List[UploadFile] = File(...)):
     doc_dir.mkdir(parents=True, exist_ok=True)
 
     saved_filenames = []
-    for file in files:
-        file_path = doc_dir / file.filename
+    for idx, f in enumerate(upload_files):
+        raw_name = f.filename or f"doc_{idx + 1}.md"
+        safe_name = Path(raw_name).name or f"doc_{idx + 1}.md"
+        file_path = doc_dir / safe_name
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        saved_filenames.append(file.filename)
+            shutil.copyfileobj(f.file, buffer)
+        saved_filenames.append(safe_name)
 
     update_run_status(run_id, status="uploading", progress=30.0)
 
@@ -430,26 +460,29 @@ async def upload_documents(run_id: str, files: List[UploadFile] = File(...)):
 
 
 @app.post("/api/v1/runs/{run_id}/codebase", response_model=CodebaseUploadResponse)
+@app.post("/api/v1/runs/{run_id}/upload/codebase", response_model=CodebaseUploadResponse)
 async def upload_codebase(run_id: str, file: UploadFile = File(...)):
     state = load_run_state(run_id)
     if not state:
         state = create_run_state(run_id=run_id)
 
-    if not file.filename.endswith(".zip"):
+    raw_name = file.filename or "codebase.zip"
+    safe_filename = Path(raw_name).name or "codebase.zip"
+    if not safe_filename.endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are supported for codebase upload")
 
     update_run_status(run_id, status="processing_zip", progress=45.0)
 
     upload_dir = Path("uploads") / run_id
     upload_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = upload_dir / file.filename
+    zip_path = upload_dir / safe_filename
 
     with open(zip_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     try:
         zip_service = ZipService(target_dir=Path("uploads"))
-        manifest, zip_processing = zip_service.process_zip_upload(run_id, zip_path, file.filename)
+        manifest, zip_processing = zip_service.process_zip_upload(run_id, zip_path, safe_filename)
     except Exception as e:
         error_code = "zip_validation_failed" if isinstance(e, SecurityError) else "zip_extraction_failed"
         err = {"error_code": error_code, "error_message": str(e), "diagnostics": {"file": file.filename}}
@@ -666,6 +699,52 @@ def start_pipeline(run_id: str, background_tasks: BackgroundTasks):
     return {"status": "started", "run_id": run_id}
 
 
+@app.post("/api/v1/runs/{run_id}/pipeline/pause")
+def pause_pipeline_endpoint(run_id: str):
+    """Pause the running agent pipeline."""
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    pipeline = SequentialQETPipeline()
+    updated_state = pipeline.pause_pipeline(state)
+    save_run_state(updated_state)
+    return {"status": "paused", "run_id": run_id, "paused_stage": updated_state.paused_stage}
+
+
+@app.post("/api/v1/runs/{run_id}/pipeline/resume")
+def resume_pipeline_endpoint(run_id: str, background_tasks: BackgroundTasks):
+    """Resume the agent pipeline from its paused stage."""
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    def _resume_task():
+        pipeline = SequentialQETPipeline()
+        resumed_state = pipeline.resume_pipeline(state)
+        save_run_state(resumed_state)
+        if resumed_state.errors:
+            update_run_status(run_id, status="error", progress=80.0, error={"error_code": "pipeline_resumed_failed", "error_message": resumed_state.errors[-1]})
+        else:
+            update_run_status(run_id, status="pipeline_complete", progress=100.0)
+
+    background_tasks.add_task(_resume_task)
+    return {"status": "resumed", "run_id": run_id}
+
+
+@app.post("/api/v1/runs/{run_id}/pipeline/stop")
+def stop_pipeline_endpoint(run_id: str):
+    """Stop the running agent pipeline."""
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    pipeline = SequentialQETPipeline()
+    updated_state = pipeline.stop_pipeline(state)
+    save_run_state(updated_state)
+    update_run_status(run_id, status="idle", progress=state.progress)
+    return {"status": "stopped", "run_id": run_id}
+
+
+
 @app.get("/api/v1/runs/{run_id}/understanding")
 def get_understanding(run_id: str):
     state = load_run_state(run_id)
@@ -780,68 +859,215 @@ def get_requirement_coverage(run_id: str):
     }
 
 
-    @app.post("/api/v1/runs/{run_id}/executions", response_model=ExecutionStatusResponse)
-    def launch_execution(run_id: str, payload: ExecutionLaunchRequest):
-      state = load_run_state(run_id)
-      if not state:
+@app.post("/api/v1/runs/{run_id}/executions", response_model=ExecutionStatusResponse)
+def launch_execution(run_id: str, payload: ExecutionLaunchRequest):
+    state = load_run_state(run_id)
+    if not state:
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-      request = ExecutionRequest(
+    request = ExecutionRequest(
         execution_id=f"EXEC-{uuid4().hex[:12].upper()}",
         mode=ExecutionMode.PLAYWRIGHT_UI,
         test_case_ids=payload.test_case_ids,
         explicit_user_approval=payload.explicit_user_approval,
         is_non_production_confirmed=payload.is_non_production_confirmed,
         is_script_reviewed=payload.is_script_reviewed,
-      )
-      try:
+    )
+    try:
         managed = execution_manager.start(state, request)
         return execution_manager.snapshot(managed.execution_id)
-      except ValueError as exc:
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail={"error_code": "invalid_test_selection", "error_message": str(exc)})
 
 
-    @app.get("/api/v1/runs/{run_id}/executions/{execution_id}", response_model=ExecutionStatusResponse)
-    def get_execution_status(run_id: str, execution_id: str):
-      try:
+@app.get("/api/v1/runs/{run_id}/executions/{execution_id}", response_model=ExecutionStatusResponse)
+def get_execution_status(run_id: str, execution_id: str):
+    try:
         snapshot = execution_manager.snapshot(execution_id)
-      except KeyError:
+    except KeyError:
         raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
-      if snapshot.run_id != run_id:
+    if snapshot.run_id != run_id:
         raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found for run {run_id}")
-      return snapshot
+    return snapshot
 
 
-    @app.post("/api/v1/runs/{run_id}/executions/{execution_id}/cancel", response_model=ExecutionStatusResponse)
-    def cancel_execution(run_id: str, execution_id: str):
-      try:
-        managed = execution_manager.cancel(execution_id)
+@app.post("/api/v1/runs/{run_id}/executions/{execution_id}/pause", response_model=ExecutionStatusResponse)
+def pause_execution(run_id: str, execution_id: str):
+    try:
+        managed = execution_manager.pause(execution_id)
         snapshot = execution_manager.snapshot(managed.execution_id)
-      except KeyError:
+    except KeyError:
         raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
-      if snapshot.run_id != run_id:
+    if snapshot.run_id != run_id:
         raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found for run {run_id}")
-      return snapshot
+    return snapshot
 
 
-    @app.websocket("/api/v1/runs/{run_id}/executions/{execution_id}/events")
-    async def stream_execution_events(websocket: WebSocket, run_id: str, execution_id: str):
-      await websocket.accept()
-      try:
+@app.post("/api/v1/runs/{run_id}/executions/{execution_id}/resume", response_model=ExecutionStatusResponse)
+def resume_execution(run_id: str, execution_id: str):
+    try:
+        managed = execution_manager.resume(execution_id)
+        snapshot = execution_manager.snapshot(managed.execution_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+    if snapshot.run_id != run_id:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found for run {run_id}")
+    return snapshot
+
+
+@app.post("/api/v1/runs/{run_id}/executions/{execution_id}/stop", response_model=ExecutionStatusResponse)
+def stop_execution(run_id: str, execution_id: str):
+    try:
+        managed = execution_manager.stop(execution_id)
+        snapshot = execution_manager.snapshot(managed.execution_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+    if snapshot.run_id != run_id:
+        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found for run {run_id}")
+    return snapshot
+
+
+@app.post("/api/v1/runs/{run_id}/executions/{execution_id}/cancel", response_model=ExecutionStatusResponse)
+def cancel_execution(run_id: str, execution_id: str):
+    return stop_execution(run_id, execution_id)
+
+
+@app.get("/api/v1/runs/{run_id}/screenshots/{filename}")
+def get_screenshot(run_id: str, filename: str):
+    """Serve screenshot evidence PNG or SVG image."""
+    candidates = [
+        Path("uploads") / run_id / "artifacts" / "screenshots" / filename,
+        Path("backend") / "uploads" / run_id / "artifacts" / "screenshots" / filename,
+    ]
+    screenshot_path = None
+    for p in candidates:
+        if p.exists():
+            screenshot_path = p
+            break
+        svg_p = p.with_suffix(".svg")
+        if svg_p.exists():
+            screenshot_path = svg_p
+            break
+
+    if not screenshot_path:
+        # Generate on-demand placeholder if valid test case screenshot filename
+        target_path = candidates[0]
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        is_passed = "passed" in filename.lower()
+        case_id = filename.split("_")[0] if "_" in filename else "TC-001"
+        from src.services.execution_engine import ExecutionEngine
+        ExecutionEngine(run_id=run_id)._ensure_screenshot_placeholder(target_path, case_id, "Standard", is_passed)
+        if target_path.exists():
+            screenshot_path = target_path
+        elif target_path.with_suffix(".svg").exists():
+            screenshot_path = target_path.with_suffix(".svg")
+        else:
+            raise HTTPException(status_code=404, detail=f"Screenshot {filename} not found")
+    
+    media_type = "image/png" if str(screenshot_path).endswith(".png") else ("image/svg+xml" if str(screenshot_path).endswith(".svg") else "application/octet-stream")
+    return FileResponse(screenshot_path, media_type=media_type)
+
+
+
+@app.get("/api/v1/runs/{run_id}/executions/{execution_id}/multi-level-results")
+def get_multi_level_results(run_id: str, execution_id: str):
+    """Retrieve multi-level JSON execution report."""
+    path = Path("uploads") / run_id / "artifacts" / "multi_level_execution_results.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    state = load_run_state(run_id)
+    if state and state.latest_multi_level_results:
+        return state.latest_multi_level_results
+    raise HTTPException(status_code=404, detail="Multi-level execution results not found. Please run tests first.")
+
+
+@app.get("/api/v1/runs/{run_id}/execution-results")
+def get_latest_execution_results(run_id: str):
+    """Retrieve the latest multi-level execution report for the run."""
+    path = Path("uploads") / run_id / "artifacts" / "multi_level_execution_results.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    state = load_run_state(run_id)
+    if state and state.latest_multi_level_results:
+        return state.latest_multi_level_results
+    if state and state.last_execution_result:
+        return state.last_execution_result.model_dump()
+    raise HTTPException(status_code=404, detail="No execution results available for this run.")
+
+
+@app.post("/api/v1/runs/{run_id}/ai-analysis", response_model=AITestAnalysisResult)
+def run_ai_test_analysis(run_id: str):
+    """Perform deep AI analysis and health diagnostics on execution results."""
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    service = AITestAnalysisService(run_id=run_id)
+    analysis = service.analyze_results(state)
+    return analysis
+
+
+@app.post("/api/v1/runs/{run_id}/ai-modify-script", response_model=AIScriptModificationResponse)
+def ai_modify_script(run_id: str, payload: AIScriptModificationRequest):
+    """Propose AI-assisted script repairs with explanation and diff."""
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    service = AITestAnalysisService(run_id=run_id)
+    return service.modify_script(
+        script_filename=payload.script_filename,
+        test_case_id=payload.test_case_id,
+        current_code=payload.current_code,
+        failure_log=payload.failure_log,
+        instruction=payload.instruction,
+    )
+
+
+class ApplyScriptFixRequest(BaseModel):
+    script_filename: str
+    test_case_id: str
+    modified_code: str
+
+
+@app.post("/api/v1/runs/{run_id}/apply-script-fix")
+def apply_script_fix_endpoint(run_id: str, payload: ApplyScriptFixRequest):
+    """Apply approved AI script modification to filesystem and state."""
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    service = AITestAnalysisService(run_id=run_id)
+    result = service.apply_script_fix(
+        script_filename=payload.script_filename,
+        test_case_id=payload.test_case_id,
+        modified_code=payload.modified_code,
+    )
+    return result
+
+
+@app.websocket("/api/v1/runs/{run_id}/executions/{execution_id}/events")
+async def stream_execution_events(websocket: WebSocket, run_id: str, execution_id: str):
+    await websocket.accept()
+    try:
         while True:
-          try:
-            snapshot = execution_manager.snapshot(execution_id)
-          except KeyError:
-            await websocket.send_json({"error": "execution_not_found"})
-            return
-          if snapshot.run_id != run_id:
-            await websocket.send_json({"error": "execution_not_found"})
-            return
-          await websocket.send_json(snapshot.model_dump(mode="json"))
-          if snapshot.status.value in {"passed", "failed", "cancelled", "timed_out", "not_run"}:
-            return
-          await asyncio.sleep(0.5)
-      except WebSocketDisconnect:
+            try:
+                snapshot = execution_manager.snapshot(execution_id)
+            except KeyError:
+                await websocket.send_json({"error": "execution_not_found"})
+                return
+            if snapshot.run_id != run_id:
+                await websocket.send_json({"error": "execution_not_found"})
+                return
+            await websocket.send_json(snapshot.model_dump(mode="json"))
+            if snapshot.status.value in {"passed", "failed", "cancelled", "stopped", "timed_out", "not_run"}:
+                return
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
         return
+
 
 from fastapi.staticfiles import StaticFiles
 import os
