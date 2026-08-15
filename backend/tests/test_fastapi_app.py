@@ -15,6 +15,14 @@ from schemas.contracts import AppState
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def isolate_ai_settings(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory):
+    """Keep every test off the real workspace settings file so test keys can never leak into it."""
+    settings_path = tmp_path_factory.mktemp("ai_settings") / "ai_settings.json"
+    monkeypatch.setattr(ai_settings_store, "_settings_path", lambda: settings_path)
+    yield
+
+
 def test_read_root():
     response = client.get("/")
     assert response.status_code == 200
@@ -260,8 +268,8 @@ def test_ai_settings_round_trip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
         json={
             "active_provider": "gpt",
             "provider_keys": {
-                "gpt": "sk-live-abc123456789",
-                "gemini": "AIzaSyD-valid-looking-gemini-key",
+                "gpt": "sk-" + "t" * 44,
+                "gemini": "AIza" + "T" * 35,
             },
         },
     )

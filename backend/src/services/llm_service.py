@@ -30,6 +30,10 @@ _GEMINI_EXCLUDE_KEYWORDS = (
     "lyria", "deep-research", "antigravity", "nano-banana", "customtools", "gemma",
 )
 
+# Preferred model, verified working against the current keys. Ranking places it
+# first when discovery reports it; discovery still supplies the fallback order.
+_GEMINI_PINNED_MODEL = "gemini-3.5-flash"
+
 
 @dataclass(frozen=True)
 class AgentModelPolicy:
@@ -49,6 +53,19 @@ AGENT_MODEL_POLICIES = {
 }
 
 
+def _classify_provider_status(status_code: int) -> str:
+    """Map an HTTP status from a provider onto an actionable error code."""
+    if status_code in (401, 403):
+        return "provider_auth_failed"
+    if status_code == 404:
+        return "model_not_available"
+    if status_code == 429:
+        return "provider_rate_limited"
+    if status_code >= 500:
+        return "provider_unavailable"
+    return "provider_request_failed"
+
+
 class LLMService:
     """Provider wrapper. Callers must treat a None return as a real failure -
     inspect `last_error` for diagnostics rather than substituting sample data."""
@@ -63,7 +80,7 @@ class LLMService:
     )
 
     def __init__(self) -> None:
-        self.gemini_model = "gemini-3.7-flash"
+        self.gemini_model = _GEMINI_PINNED_MODEL
         self.gpt_model = "gpt-4o-mini"
         self.timeout_seconds = 30
         self.last_error: Optional[Dict[str, Any]] = None
@@ -181,8 +198,38 @@ class LLMService:
                     self.last_generation = {"provider": "gpt", "model": self.gpt_model, "key_index": key_index, "profile": profile, "fallback_used": provider != selected_provider}
                     return text
                 failures.append({"provider": "gpt", "key_index": key_index, **(self.last_error or {})})
-        self.last_error = failures[-1] if failures else {"error_code": "provider_disabled", "error_message": "No provider could serve the request."}
+        self.last_error = self._summarize_failures(failures)
         return None
+
+    @staticmethod
+    def _summarize_failures(failures: list) -> Dict[str, Any]:
+        """Build one actionable error from every provider/key attempt."""
+        if not failures:
+            return {"error_code": "provider_disabled", "error_message": "No provider could serve the request."}
+
+        codes = {failure.get("error_code") for failure in failures}
+        if codes and codes <= {"provider_auth_failed", "provider_key_missing"}:
+            return {
+                "error_code": "provider_auth_failed",
+                "error_message": (
+                    "Every configured API key was rejected by its provider. "
+                    "Add a valid key and retry - no sample or placeholder output is substituted."
+                ),
+                "diagnostics": {"attempts": failures},
+            }
+        if codes == {"provider_rate_limited"}:
+            return {
+                "error_code": "provider_rate_limited",
+                "error_message": "Every configured API key is rate limited. Retry shortly or add another key.",
+                "diagnostics": {"attempts": failures},
+            }
+
+        last = failures[-1]
+        return {
+            "error_code": last.get("error_code", "provider_request_failed"),
+            "error_message": last.get("error_message", "All provider attempts failed."),
+            "diagnostics": {"attempts": failures},
+        }
 
     def get_gemini_model(self, api_key: str) -> Optional[str]:
         """Return the best-known working Gemini model for this key (for display/provenance)."""
@@ -204,7 +251,7 @@ class LLMService:
             is_flash_lite = "flash" in name and "lite" in name
             is_pro = "pro" in name
             tier = 0 if is_flash else (1 if is_flash_lite else (2 if is_pro else 3))
-            return (0 if is_latest else 1, tier, name)
+            return (0 if name == _GEMINI_PINNED_MODEL else 1, 0 if is_latest else 1, tier, name)
 
         return sorted(filtered, key=score)
 
@@ -221,8 +268,12 @@ class LLMService:
             )
             if response.status_code != 200:
                 self.last_error = {
-                    "error_code": "model_discovery_failed",
-                    "error_message": f"Gemini ListModels returned status {response.status_code}.",
+                    "error_code": _classify_provider_status(response.status_code),
+                    "error_message": (
+                        "Gemini rejected this API key."
+                        if response.status_code in (400, 401, 403)
+                        else f"Gemini ListModels returned status {response.status_code}."
+                    ),
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300]},
                 }
                 return []
@@ -267,7 +318,7 @@ class LLMService:
             )
             if response.status_code != 200:
                 self.last_error = {
-                    "error_code": "provider_disabled" if response.status_code == 404 else "invalid_model_json",
+                    "error_code": _classify_provider_status(response.status_code),
                     "error_message": f"Gemini model '{model}' returned status {response.status_code}.",
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300], "model": model},
                 }
@@ -275,10 +326,20 @@ class LLMService:
 
             body = response.json()
             candidates = body.get("candidates") or []
+            finish_reason = candidates[0].get("finishReason") if candidates else None
             parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-            text = parts[0].get("text") if parts else None
-            if not isinstance(text, str) or not text.strip():
-                self.last_error = {"error_code": "invalid_model_json", "error_message": f"Gemini model '{model}' returned no usable content.", "diagnostics": {"model": model}}
+            # Gemini 3.x emits thought parts before the answer, so every text part is joined.
+            text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
+            if not text.strip():
+                self.last_error = {
+                    "error_code": "model_output_truncated" if finish_reason == "MAX_TOKENS" else "invalid_model_json",
+                    "error_message": (
+                        f"Gemini model '{model}' hit the output token limit before producing an answer."
+                        if finish_reason == "MAX_TOKENS"
+                        else f"Gemini model '{model}' returned no usable content."
+                    ),
+                    "diagnostics": {"model": model, "finish_reason": finish_reason, "usage": body.get("usageMetadata")},
+                }
                 return None
             return text.strip()
         except requests.exceptions.Timeout:
@@ -358,7 +419,7 @@ class LLMService:
             if response.status_code != 200:
                 logger.warning("GPT call failed with status %s.", response.status_code)
                 self.last_error = {
-                    "error_code": "provider_disabled",
+                    "error_code": _classify_provider_status(response.status_code),
                     "error_message": f"OpenAI API returned status {response.status_code}.",
                     "diagnostics": {"status_code": response.status_code, "response": response.text[:300]},
                 }

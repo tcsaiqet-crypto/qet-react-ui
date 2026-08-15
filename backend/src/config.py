@@ -68,6 +68,14 @@ class AppConfig(BaseModel):
         re.compile(r"^dummy[-_].*", re.IGNORECASE),
     )
 
+    # Real credentials have fixed shapes; anything else is a fabricated/truncated
+    # value that would burn a network round-trip and surface a misleading error.
+    _gemini_key_patterns = (
+        re.compile(r"^AIza[0-9A-Za-z_\-]{35}$"),
+        re.compile(r"^AQ\.[0-9A-Za-z_\-]{40,}$"),
+    )
+    _gpt_key_pattern = re.compile(r"^sk-[0-9A-Za-z_\-]{37,}$")
+
     def get_extracted_source_dir(self) -> Path:
         p = self.workspace_dir / "extracted_source"
         p.mkdir(parents=True, exist_ok=True)
@@ -82,7 +90,7 @@ class AppConfig(BaseModel):
         """Return optional local keys directory for developer environments."""
         return Path(__file__).parent.parent / "keys"
 
-    def _read_candidate_keys_from_files(self, file_paths: Iterable[Path]) -> List[str]:
+    def _read_candidate_keys_from_files(self, file_paths: Iterable[Path], provider: str = "") -> List[str]:
         keys: List[str] = []
         for file_path in file_paths:
             if not file_path.exists():
@@ -92,7 +100,7 @@ class AppConfig(BaseModel):
             except Exception:
                 continue
             sanitized = self._sanitize_provider_key(raw_value)
-            if sanitized and sanitized not in keys:
+            if sanitized and self._is_well_formed_key(sanitized, provider) and sanitized not in keys:
                 keys.append(sanitized)
         return keys
 
@@ -107,7 +115,7 @@ class AppConfig(BaseModel):
                     add_candidate(item)
                 return
             sanitized = self._sanitize_provider_key(str(raw_value or ""))
-            if sanitized and sanitized not in keys:
+            if sanitized and self._is_well_formed_key(sanitized, provider) and sanitized not in keys:
                 keys.append(sanitized)
 
         if isinstance(runtime_keys, dict):
@@ -122,17 +130,16 @@ class AppConfig(BaseModel):
                 [
                     key for key in self._read_candidate_keys_from_files(
                         [
-                            keys_dir / "gemini keys.txt",
-                            keys_dir / "gemini keys 2.txt",
-                            keys_dir / "gemapikey1.txt",
-                            keys_dir / "gemapikey2.txt",
                             project_keys_dir / "gemini keys.txt",
                             project_keys_dir / "gemini keys 2.txt",
+                            project_keys_dir / "gemini keys 3.txt",
                             project_keys_dir / "gemapikey1.txt",
                             project_keys_dir / "gemapikey2.txt",
-                            Path(__file__).parent.parent / "api" / "gemapikey1.txt",
-                            Path(__file__).parent.parent / "api" / "gemapikey2.txt",
-                        ]
+                            keys_dir / "gemini keys 2.txt",
+                            keys_dir / "gemini keys 3.txt",
+                            keys_dir / "gemapikey2.txt",
+                        ],
+                        provider="gemini",
                     )
                     if key not in keys
                 ]
@@ -149,7 +156,8 @@ class AppConfig(BaseModel):
                             keys_dir / "openai_api_key.txt",
                             project_keys_dir / "openai keys.txt",
                             project_keys_dir / "openai_api_key.txt",
-                        ]
+                        ],
+                        provider="gpt",
                     )
                     if key not in keys
                 ]
@@ -175,6 +183,14 @@ class AppConfig(BaseModel):
             if pattern.match(key):
                 return ""
         return key
+
+    def _is_well_formed_key(self, key: str, provider: str) -> bool:
+        """Reject values that cannot be real credentials before any network call."""
+        if provider == "gemini":
+            return any(pattern.match(key) for pattern in self._gemini_key_patterns)
+        if provider == "gpt":
+            return bool(self._gpt_key_pattern.match(key))
+        return True
 
     def is_llm_enabled(self) -> bool:
         """LLM calls are enabled by default when provider credentials are present."""
