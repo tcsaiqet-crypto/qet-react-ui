@@ -9,8 +9,9 @@ import { ActiveProcessBar } from './components/ActiveProcessBar';
 import { UnderstandingPage } from './components/UnderstandingPage';
 import { ExecutionPage } from './components/ExecutionPage';
 import { AgentDetailDrawer } from './components/AgentDetailDrawer';
+import { ConsoleLogDrawer, LogEntry } from './components/ConsoleLogDrawer';
 import { AISettingsResponse, AppState, RailViewMode, DrawerTabId } from './types';
-import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings, retryRun } from './services/apiClient';
+import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings, retryRun, getRunLogs, getBackendLogsDownloadUrl, cancelRun } from './services/apiClient';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -24,6 +25,12 @@ export const App: React.FC = () => {
   const [railViewMode, setRailViewMode] = useState<RailViewMode>('understanding_focus');
   const [drawerTab, setDrawerTab] = useState<DrawerTabId>('overview');
   const scrolledEventsRef = useRef<Set<string>>(new Set());
+
+  // Console logging state variables
+  const [logDrawerOpen, setLogDrawerOpen] = useState<boolean>(true);
+  const [uiLogs, setUiLogs] = useState<LogEntry[]>([]);
+  const [backendLogs, setBackendLogs] = useState<string>('');
+
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const stored = window.localStorage.getItem('qet-ui-theme');
     return stored === 'dark' ? 'dark' : 'light';
@@ -33,6 +40,65 @@ export const App: React.FC = () => {
     const parsed = stored ? Number(stored) : 100;
     return Number.isFinite(parsed) && parsed >= 50 && parsed <= 160 ? parsed : 100;
   });
+
+  // UI Event Logging helper
+  const logUiEvent = (message: string, type: 'info' | 'warn' | 'error' = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setUiLogs((prev) => [...prev.slice(-199), { timestamp, message, type }]);
+  };
+
+  const clearFrontendLogs = () => setUiLogs([]);
+
+  const downloadFrontendLogs = () => {
+    const text = uiLogs.map((l) => `[${l.timestamp}] [${l.type.toUpperCase()}] ${l.message}`).join('\n');
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `frontend_logs_${appState?.run_id || 'active'}.txt`;
+    a.click();
+  };
+
+  const downloadBackendLogs = () => {
+    const blob = new Blob([backendLogs], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backend_logs_${appState?.run_id || 'active'}.txt`;
+    a.click();
+  };
+
+  const handleCancelRun = async () => {
+    if (!appState?.run_id) return;
+    try {
+      logUiEvent(`Sending cancel request for run ${appState.run_id}...`, 'info');
+      await cancelRun(appState.run_id);
+      logUiEvent(`Run ${appState.run_id} stopped successfully.`, 'info');
+      await refreshStatus(appState.run_id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logUiEvent(`Failed to stop process run: ${msg}`, 'error');
+    }
+  };
+
+  // Poll backend execution logs when drawer is open and run ID is active
+  useEffect(() => {
+    const runId = appState?.run_id;
+    if (!runId || !logDrawerOpen) return;
+
+    const fetchLogs = async () => {
+      try {
+        const res = await getRunLogs(runId);
+        setBackendLogs(res.backend_logs);
+      } catch (err) {
+        // silent fail
+      }
+    };
+
+    void fetchLogs();
+    const interval = setInterval(fetchLogs, 3000);
+    return () => clearInterval(interval);
+  }, [appState?.run_id, logDrawerOpen]);
 
   useEffect(() => {
     initRun();
@@ -452,7 +518,7 @@ export const App: React.FC = () => {
                 {activeTab === 'home' && (
                   <div key={activeTab} className="animate-fade-in-up space-y-6">
                     <div className="animate-slide-down">
-                      <ActiveProcessBar appState={appState} />
+                      <ActiveProcessBar appState={appState} onCancelRun={handleCancelRun} />
                     </div>
 
                     <HomeUploadPage
@@ -471,6 +537,7 @@ export const App: React.FC = () => {
                         <UnderstandingPage
                           appState={appState}
                           onRefreshStatus={() => refreshStatus()}
+                          onCancelRun={handleCancelRun}
                         />
                       </section>
                     )}
@@ -489,6 +556,18 @@ export const App: React.FC = () => {
                 {activeTab === 'tools' && (
                   <AISettingsPanel onSaved={setAISettings} />
                 )}
+
+                <ConsoleLogDrawer
+                  isOpen={logDrawerOpen}
+                  onToggle={() => setLogDrawerOpen(!logDrawerOpen)}
+                  frontendLogs={uiLogs}
+                  backendLogs={backendLogs}
+                  onClearFrontend={clearFrontendLogs}
+                  onDownloadFrontend={downloadFrontendLogs}
+                  onDownloadBackend={downloadBackendLogs}
+                  activeProvider={aiSettings?.active_provider || 'Unknown'}
+                  activeModel={aiSettings?.runtime_state?.model || 'Auto'}
+                />
               </div>
 
               {/* 3. Right-Side Collapsible Inspector Drawer */}

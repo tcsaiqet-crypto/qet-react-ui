@@ -502,6 +502,39 @@ async def upload_codebase(run_id: str, file: UploadFile = File(...)):
     return CodebaseUploadResponse(intake_manifest=manifest, state=state)
 
 
+@app.get("/api/v1/runs/{run_id}/logs")
+def get_run_logs(run_id: str):
+    """Retrieve backend execution logs for a specific run."""
+    log_file = Path("temp") / f"run_{run_id}.log"
+    if not log_file.exists():
+        settings = load_ai_settings_dict()
+        provider = settings.get("active_provider", "Unknown")
+        model = settings.get("runtime_state", {}).get("model", "Auto")
+        return {
+            "run_id": run_id,
+            "backend_logs": f"[SYSTEM] Log session initialized for run {run_id}.\n[SYSTEM] Active Provider: {provider}\n[SYSTEM] Current Model: {model}\n"
+        }
+
+    try:
+        content = log_file.read_text(encoding="utf-8", errors="replace")
+        return {"run_id": run_id, "backend_logs": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read log file: {str(e)}")
+
+
+@app.get("/api/v1/runs/{run_id}/logs/download")
+def download_run_logs(run_id: str):
+    """Download backend execution log file for a specific run."""
+    log_file = Path("temp") / f"run_{run_id}.log"
+    if not log_file.exists():
+        raise HTTPException(status_code=404, detail="No log file generated for this run yet.")
+    return FileResponse(
+        str(log_file),
+        media_type="text/plain",
+        filename=f"backend_logs_{run_id}.txt"
+    )
+
+
 @app.get("/api/v1/runs/{run_id}/status", response_model=StatusResponse)
 def get_run_status(run_id: str):
     state = load_run_state(run_id)
@@ -742,6 +775,12 @@ def stop_pipeline_endpoint(run_id: str):
     save_run_state(updated_state)
     update_run_status(run_id, status="idle", progress=state.progress)
     return {"status": "stopped", "run_id": run_id}
+
+
+@app.post("/api/v1/runs/{run_id}/cancel")
+def cancel_pipeline_endpoint(run_id: str):
+    """Cancel/Stop the active agent pipeline run."""
+    return stop_pipeline_endpoint(run_id)
 
 
 
