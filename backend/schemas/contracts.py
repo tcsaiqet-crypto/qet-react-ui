@@ -1,5 +1,6 @@
 """Typed Pydantic Contracts and Schemas for QET Agent Accelerator MVP."""
 
+from __future__ import annotations
 from enum import Enum
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
