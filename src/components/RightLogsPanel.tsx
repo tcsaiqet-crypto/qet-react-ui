@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Terminal, 
   Download, 
@@ -10,7 +10,8 @@ import {
   ChevronRight, 
   ChevronLeft,
   X,
-  Maximize2
+  Maximize2,
+  GripVertical
 } from 'lucide-react';
 import { LogEntry } from './ConsoleLogDrawer';
 
@@ -41,8 +42,39 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
   const [filter, setFilter] = useState<'all' | 'info' | 'status' | 'error'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
+  const [panelWidth, setPanelWidth] = useState(384); // default w-96 = 384px
   const logEndRef = useRef<HTMLDivElement>(null);
   const logContainerRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(384);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    isDragging.current = true;
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = panelWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = dragStartX.current - ev.clientX; // drag left = wider
+      const newWidth = Math.max(280, Math.min(700, dragStartWidth.current + delta));
+      setPanelWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isDragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    e.preventDefault();
+  }, [panelWidth]);
 
   const getBackendLineType = (line: string): 'info' | 'status' | 'error' | 'warn' => {
     if (line.includes('[ERROR]') || line.includes('Traceback') || line.includes('Exception:') || line.includes('401') || line.includes('404')) {
@@ -172,11 +204,20 @@ export const RightLogsPanel: React.FC<RightLogsPanelProps> = ({
 
   return (
     <aside 
-      className="w-full shrink-0 lg:sticky lg:top-20 lg:w-96 flex flex-col h-[calc(100vh-140px)] transition-all duration-300"
+      className="shrink-0 lg:sticky lg:top-20 flex flex-col h-[calc(100vh-140px)] relative"
+      style={{ width: panelWidth }}
       aria-label="Console Logs & Diagnostics"
     >
+      {/* Drag resize handle on left edge */}
+      <div
+        onMouseDown={handleDragStart}
+        className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize z-10 hover:bg-sky-500/40 transition-colors rounded-l-sm group flex items-center justify-center"
+        title="Drag to resize panel"
+      >
+        <GripVertical className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: 'var(--qet-accent)' }} />
+      </div>
       <div 
-        className="flex flex-col h-full rounded-2xl border shadow-md overflow-hidden"
+        className="flex flex-col h-full rounded-2xl border shadow-md overflow-hidden ml-1.5"
         style={{
           backgroundColor: 'var(--qet-surface)',
           borderColor: 'var(--qet-border)',

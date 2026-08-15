@@ -14,7 +14,12 @@ import {
   Layers,
   ChevronRight,
   Info,
-  Square
+  Square,
+  MonitorSmartphone,
+  Globe,
+  Gauge,
+  Accessibility,
+  PlayCircle
 } from 'lucide-react';
 import { AppState, ApplicationUnderstanding } from '../types';
 import { startUnderstanding, getUnderstanding, startPipeline } from '../services/apiClient';
@@ -146,8 +151,39 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
     })
     .filter(Boolean);
 
+  const [activeTestingTab, setActiveTestingTab] = useState<'ui' | 'api' | 'performance' | 'accessibility'>('ui');
+
   return (
     <div className="space-y-6 pb-12">
+      {/* Testing Type Tab Switcher */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {[
+          { key: 'ui', label: 'UI Testing', icon: MonitorSmartphone, available: true },
+          { key: 'api', label: 'API Testing', icon: Globe, available: false },
+          { key: 'performance', label: 'Performance Testing', icon: Gauge, available: false },
+          { key: 'accessibility', label: 'Accessibility Testing', icon: Accessibility, available: false },
+        ].map(({ key, label, icon: Icon, available }) => (
+          <button
+            key={key}
+            onClick={() => available && setActiveTestingTab(key as typeof activeTestingTab)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+              activeTestingTab === key
+                ? 'border-sky-500/60 bg-sky-500/10 text-sky-400 shadow-sm'
+                : available
+                ? 'border-transparent qet-btn-secondary text-slate-400 hover:text-slate-200'
+                : 'border-transparent opacity-50 cursor-not-allowed'
+            }`}
+            disabled={!available}
+            title={!available ? 'Coming Soon' : label}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span>{label}</span>
+            {!available && (
+              <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-amber-500/20 text-amber-400 uppercase tracking-wider">Soon</span>
+            )}
+          </button>
+        ))}
+      </div>
       {/* Header Banner */}
       <div className="qet-panel p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -419,6 +455,43 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Run Test Generation Agent – bottom CTA after understanding output */}
+      {understanding && activeTestingTab === 'ui' && (
+        <div className="qet-panel p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-emerald-500/20 bg-emerald-950/10">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+              <PlayCircle className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>Run Test Generation Agent</h3>
+                <span className="qet-badge-success text-[10px] uppercase font-bold px-2 py-0.5">Next Step</span>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
+                Generate positive, negative, boundary, validation &amp; error-handling test cases from the AI analysis above.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleStartPipeline}
+            disabled={isPipelineRunning || currentStatus === 'generation_running'}
+            className="qet-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold shadow-md whitespace-nowrap cursor-pointer rounded-xl self-stretch sm:self-auto justify-center"
+          >
+            {isPipelineRunning || currentStatus === 'generation_running' ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Running Test Generation...</span>
+              </>
+            ) : (
+              <>
+                <PlayCircle className="w-4 h-4" />
+                <span>Run Test Generation Agent</span>
+              </>
+            )}
+          </button>
         </div>
       )}
 

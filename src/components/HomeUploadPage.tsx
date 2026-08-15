@@ -669,38 +669,6 @@ export const HomeUploadPage: React.FC<HomeUploadPageProps> = ({
           {zipError && renderUploadError(zipError)}
         </div>
       </div>
-
-      {/* ── Single Unified AI Understanding Action Banner ──── */}
-      {isIntakeReady && (
-        <div className="p-5 rounded-2xl qet-card-elevated border border-blue-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 animate-file-item shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 border border-blue-500/20 shrink-0">
-              <Bot className="w-5 h-5 text-blue-500" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold" style={{ color: 'var(--qet-text-primary)' }}>
-                  Intake Ready &middot; Application Understanding
-                </h3>
-                <span className="qet-badge-success px-2 py-0.5 text-[10px] font-bold uppercase">
-                  Ready
-                </span>
-              </div>
-              <p className="text-xs" style={{ color: 'var(--qet-text-muted)' }}>
-                Synthesize component DOM locators, API routes, user flows, and 15-point requirement validation.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onProceedToUnderstanding}
-            className="qet-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold shadow-md whitespace-nowrap cursor-pointer rounded-xl self-stretch sm:self-auto justify-center"
-          >
-            <span>Proceed to AI Understanding</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   );
 };
