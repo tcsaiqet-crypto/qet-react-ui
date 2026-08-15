@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Moon, Sun, ZoomIn, ZoomOut, Sparkles, Copy, Check } from 'lucide-react';
 import { AISettingsPanel } from './components/AISettingsPanel';
 import { RunsDashboard } from './components/RunsDashboard';
@@ -8,8 +8,9 @@ import { AgentPipelineRail } from './components/AgentPipelineRail';
 import { ActiveProcessBar } from './components/ActiveProcessBar';
 import { UnderstandingPage } from './components/UnderstandingPage';
 import { ExecutionPage } from './components/ExecutionPage';
+import { ConsoleLogDrawer, LogEntry } from './components/ConsoleLogDrawer';
 import { AISettingsResponse, AppState } from './types';
-import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings } from './services/apiClient';
+import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings, getRunLogs, getBackendLogsDownloadUrl, cancelRun } from './services/apiClient';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -19,6 +20,12 @@ export const App: React.FC = () => {
   const [switchingProvider, setSwitchingProvider] = useState(false);
   const [copiedRunId, setCopiedRunId] = useState(false);
   const scrolledEventsRef = useRef<Set<string>>(new Set());
+  
+  // Console logging state variables
+  const [logDrawerOpen, setLogDrawerOpen] = useState<boolean>(true);
+  const [uiLogs, setUiLogs] = useState<LogEntry[]>([]);
+  const [backendLogs, setBackendLogs] = useState<string>('');
+
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const stored = window.localStorage.getItem('qet-ui-theme');
     return stored === 'dark' ? 'dark' : 'light';
@@ -29,7 +36,15 @@ export const App: React.FC = () => {
     return Number.isFinite(parsed) && parsed >= 50 && parsed <= 160 ? parsed : 100;
   });
 
+  // UI Event Logging helper
+  const logUiEvent = (message: string, type: 'info' | 'warn' | 'error' = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    setUiLogs((prev) => [...prev, { timestamp, message, type }]);
+  };
+
   useEffect(() => {
+    logUiEvent('UI Interface Loaded.', 'info');
+    logUiEvent(`Theme: ${theme.toUpperCase()} | Zoom: ${zoomLevel}%`, 'info');
     initRun();
     void loadAISettings();
   }, []);
@@ -41,6 +56,44 @@ export const App: React.FC = () => {
   useEffect(() => {
     window.localStorage.setItem('qet-ui-theme', theme);
   }, [theme]);
+
+  // Log active tab navigation changes
+  useEffect(() => {
+    logUiEvent(`Navigated to Tab: ${activeTab.toUpperCase()}`, 'info');
+  }, [activeTab]);
+
+  // Log document uploads and zip intake manifests
+  useEffect(() => {
+    if (!appState?.intake_manifest) return;
+    const docsCount = appState.intake_manifest.doc_files?.length || 0;
+    const totalFiles = appState.intake_manifest.total_files || 0;
+    if (docsCount > 0) {
+      logUiEvent(`Document intake updated: ${docsCount} requirement files loaded.`, 'info');
+    }
+    if (totalFiles > 0) {
+      logUiEvent(`Codebase intake updated: ZIP archive unpacked. Total files indexed: ${totalFiles} (${Math.round(appState.intake_manifest.total_size_bytes / 1024)} KB)`, 'info');
+    }
+  }, [appState?.intake_manifest?.created_at, appState?.intake_manifest?.total_files, appState?.intake_manifest?.doc_files?.length]);
+
+  // Poll backend execution logs when drawer is open and run ID is active
+  useEffect(() => {
+    const runId = appState?.run_id;
+    if (!runId || !logDrawerOpen) return;
+
+    const fetchLogs = async () => {
+      try {
+        const res = await getRunLogs(runId);
+        setBackendLogs(res.backend_logs);
+      } catch (err) {
+        console.error('Failed to fetch backend logs:', err);
+      }
+    };
+
+    void fetchLogs(); // initial fetch
+
+    const interval = setInterval(fetchLogs, 3000);
+    return () => clearInterval(interval);
+  }, [appState?.run_id, logDrawerOpen]);
 
   const scrollToSection = (elementId: string) => {
     const element = document.getElementById(elementId);
@@ -87,11 +140,15 @@ export const App: React.FC = () => {
 
   const initRun = async () => {
     setLoading(true);
+    logUiEvent('Initializing new Quality Engineering and Testing run...', 'info');
     try {
       const res = await createRun('CFA Digital Journey');
       setAppState(res.state);
+      logUiEvent(`New Run created successfully: ${res.state.run_id}`, 'info');
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error('Run init failed:', err);
+      logUiEvent(`Failed to initialize run: ${msg}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -104,6 +161,12 @@ export const App: React.FC = () => {
       const res = await getRunStatus(targetId);
       setAppState((prev) => {
         if (!prev) return null;
+        if (prev.status !== res.state) {
+          logUiEvent(`Run status transitioned: ${prev.status} -> ${res.state} (${res.progress}%)`, 'info');
+          if (res.error) {
+            logUiEvent(`Error encountered: ${res.error.error_message}`, 'error');
+          }
+        }
         return {
           ...prev,
           status: res.state,
@@ -121,6 +184,7 @@ export const App: React.FC = () => {
       });
     } catch (err) {
       console.error('Failed to poll status:', err);
+      logUiEvent('Failed to poll run status from FastAPI backend.', 'warn');
     }
   };
 
@@ -128,19 +192,26 @@ export const App: React.FC = () => {
     try {
       const settings = await getAISettings();
       setAISettings(settings);
+      logUiEvent(`AI Settings loaded. Active Provider: ${settings.active_provider}`, 'info');
+      logUiEvent(`Active Model config: ${settings.runtime_state.model || 'Auto'} (${settings.runtime_state.provider} - ${settings.runtime_state.state})`, 'info');
     } catch (err) {
       console.error('Failed to load AI settings:', err);
+      logUiEvent('Failed to load active AI Provider settings from backend.', 'warn');
     }
   };
 
   const switchProvider = async (provider: 'gemini' | 'gpt') => {
     if (switchingProvider || aiSettings?.active_provider === provider) return;
     setSwitchingProvider(true);
+    logUiEvent(`Switching active AI Provider to ${provider === 'gemini' ? 'Google Gemini' : 'OpenAI'}...`, 'info');
     try {
       const settings = await updateAISettings({ active_provider: provider, provider_keys: {} });
       setAISettings(settings);
+      logUiEvent(`Successfully switched active AI Provider to ${provider === 'gemini' ? 'Google Gemini' : 'OpenAI'}.`, 'info');
+      logUiEvent(`Model config: ${settings.runtime_state.model || 'Auto'} (${settings.runtime_state.provider} - ${settings.runtime_state.state})`, 'info');
     } catch (err) {
       console.error('Failed to switch provider:', err);
+      logUiEvent(`Failed to switch AI Provider: ${err instanceof Error ? err.message : String(err)}`, 'error');
     } finally {
       setSwitchingProvider(false);
     }
@@ -149,10 +220,13 @@ export const App: React.FC = () => {
   const openExistingRun = async (runId: string) => {
     try {
       setLoading(true);
+      logUiEvent(`Opening existing run: ${runId}...`, 'info');
       const res = await getRunFullState(runId);
       setAppState(res.state);
+      logUiEvent(`Successfully opened run: ${runId}. Status: ${res.state.status}`, 'info');
     } catch (err) {
       console.error('Failed to open run full state:', err);
+      logUiEvent(`Failed to open run ${runId}: ${err instanceof Error ? err.message : String(err)}`, 'error');
       await refreshStatus(runId);
     } finally {
       setLoading(false);
@@ -166,7 +240,11 @@ export const App: React.FC = () => {
   );
 
   const adjustZoom = (delta: number) => {
-    setZoomLevel((prev) => Math.max(50, Math.min(160, prev + delta)));
+    setZoomLevel((prev) => {
+      const nextZoom = Math.max(50, Math.min(160, prev + delta));
+      logUiEvent(`UI zoom level adjusted to ${nextZoom}%.`, 'info');
+      return nextZoom;
+    });
   };
 
   const scrollToUnderstanding = () => {
@@ -174,8 +252,11 @@ export const App: React.FC = () => {
   };
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    logUiEvent(`UI theme changed to ${nextTheme}.`, 'info');
   };
+
 
   const copyRunId = () => {
     if (!appState?.run_id) return;
@@ -183,6 +264,51 @@ export const App: React.FC = () => {
     setCopiedRunId(true);
     setTimeout(() => setCopiedRunId(false), 2000);
   };
+
+  const downloadFrontendLogs = () => {
+    logUiEvent('Downloading Frontend UI Application logs...', 'info');
+    const content = uiLogs
+      .map((entry) => `[${entry.timestamp}] [${entry.type.toUpperCase()}] ${entry.message}`)
+      .join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `frontend_logs_${appState?.run_id || 'general'}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadBackendLogs = () => {
+    if (!appState?.run_id) {
+      logUiEvent('Cannot download backend logs: No active run.', 'warn');
+      return;
+    }
+    logUiEvent('Triggering download of Backend execution logs...', 'info');
+    const link = document.createElement('a');
+    link.href = getBackendLogsDownloadUrl(appState.run_id);
+    link.download = `backend_logs_${appState.run_id}.txt`;
+    link.click();
+  };
+
+  const clearFrontendLogs = () => {
+    setUiLogs([]);
+    logUiEvent('Frontend UI Console logs cleared.', 'info');
+  };
+
+  const handleCancelRun = async () => {
+    if (!appState?.run_id) return;
+    logUiEvent(`Attempting to stop process run: ${appState.run_id}...`, 'info');
+    try {
+      await cancelRun(appState.run_id);
+      logUiEvent(`Process run stopped successfully.`, 'info');
+      await refreshStatus(appState.run_id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logUiEvent(`Failed to stop process run: ${msg}`, 'error');
+    }
+  };
+
 
   const tabs: Array<{ id: TabId; label: string }> = [
     { id: 'home', label: 'Home' },
@@ -420,7 +546,7 @@ export const App: React.FC = () => {
                 {activeTab === 'home' && (
                   <div key={activeTab} className="animate-fade-in-up space-y-6">
                     <div className="animate-slide-down">
-                      <ActiveProcessBar appState={appState} />
+                      <ActiveProcessBar appState={appState} onCancelRun={handleCancelRun} />
                     </div>
 
                     <HomeUploadPage
@@ -435,6 +561,7 @@ export const App: React.FC = () => {
                         <UnderstandingPage
                           appState={appState}
                           onRefreshStatus={() => refreshStatus()}
+                          onCancelRun={handleCancelRun}
                         />
                       </section>
                     )}
@@ -453,6 +580,18 @@ export const App: React.FC = () => {
                 {activeTab === 'tools' && (
                   <AISettingsPanel onSaved={setAISettings} />
                 )}
+
+                <ConsoleLogDrawer
+                  isOpen={logDrawerOpen}
+                  onToggle={() => setLogDrawerOpen(!logDrawerOpen)}
+                  frontendLogs={uiLogs}
+                  backendLogs={backendLogs}
+                  onClearFrontend={clearFrontendLogs}
+                  onDownloadFrontend={downloadFrontendLogs}
+                  onDownloadBackend={downloadBackendLogs}
+                  activeProvider={aiSettings?.active_provider || 'Unknown'}
+                  activeModel={aiSettings?.runtime_state?.model || 'Auto'}
+                />
               </div>
             </div>
           )}
@@ -460,7 +599,7 @@ export const App: React.FC = () => {
 
         {/* Clean Footer */}
         <footer
-          className="border-t py-4 text-center text-xs transition-colors"
+          className="border-t py-4 text-center text-xs transition-colors pb-16"
           style={{
             borderColor: 'var(--qet-border)',
             backgroundColor: 'var(--qet-surface)',

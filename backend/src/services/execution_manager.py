@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from schemas.contracts import AppState, ExecutionRequest, ExecutionResult, ExecutionStatus, ExecutionStatusResponse
 from src.services.execution_engine import ExecutionEngine
+from src.utils.logger import log_run_context
 
 
 @dataclass
@@ -90,6 +91,10 @@ class ExecutionManager:
             )
 
     def _run(self, managed: ManagedExecution, request: ExecutionRequest) -> None:
+        with log_run_context(managed.run_id):
+            self._run_internal(managed, request)
+
+    def _run_internal(self, managed: ManagedExecution, request: ExecutionRequest) -> None:
         with self._lock:
             if managed.cancelled:
                 return

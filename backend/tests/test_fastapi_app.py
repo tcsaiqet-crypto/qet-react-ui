@@ -1,4 +1,4 @@
-﻿"""Tests for FastAPI Runtime Layer, state persistence, and failfast AI understanding."""
+"""Tests for FastAPI Runtime Layer, state persistence, and failfast AI understanding."""
 
 import io
 import json
@@ -350,7 +350,7 @@ def test_verify_ai_settings_success(monkeypatch: pytest.MonkeyPatch):
     from src.config import config
     from src.services.llm_service import LLMService
 
-    monkeypatch.setattr(type(config), "get_provider_api_key", lambda self, provider: "gem-key" if provider == "gemini" else "gpt-key")
+    monkeypatch.setattr(type(config), "get_provider_api_keys", lambda self, provider: ["gem-key"] if provider == "gemini" else ["gpt-key"])
     monkeypatch.setattr(LLMService, "list_gemini_candidates", lambda self, api_key: ["gemini-2.5-flash", "gemini-2.0-flash"])
     monkeypatch.setattr(LLMService, "get_gemini_model", lambda self, api_key: "gemini-2.5-flash")
 

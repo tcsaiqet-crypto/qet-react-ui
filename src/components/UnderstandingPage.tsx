@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BrainCircuit, 
   Sparkles, 
@@ -13,7 +13,8 @@ import {
   Clock,
   Layers,
   ChevronRight,
-  Info
+  Info,
+  Square
 } from 'lucide-react';
 import { AppState, ApplicationUnderstanding } from '../types';
 import { startUnderstanding, getUnderstanding, startPipeline } from '../services/apiClient';
@@ -21,12 +22,15 @@ import { startUnderstanding, getUnderstanding, startPipeline } from '../services
 interface UnderstandingPageProps {
   appState: AppState | null;
   onRefreshStatus: () => void;
+  onCancelRun?: () => void;
 }
 
 export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
   appState,
-  onRefreshStatus
+  onRefreshStatus,
+  onCancelRun
 }) => {
+
   const [isRunning, setIsRunning] = useState(false);
   const [isPipelineRunning, setIsPipelineRunning] = useState(false);
   const [understanding, setUnderstanding] = useState<ApplicationUnderstanding | undefined>(appState?.understanding);
@@ -193,6 +197,16 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
                     <span>Run Test Generation Agents</span>
                   </>
                 )}
+              </button>
+            )}
+
+            {(isRunning || isPipelineRunning || currentStatus === 'ai_understanding_running' || currentStatus === 'generation_running') && onCancelRun && (
+              <button
+                onClick={onCancelRun}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors cursor-pointer dark:bg-red-950/20 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-950/40"
+              >
+                <Square className="w-4 h-4 fill-current" />
+                <span>Stop Execution</span>
               </button>
             )}
           </div>

@@ -73,11 +73,28 @@ class SequentialQETPipeline:
             return state
 
         for stage in self.STAGES[self.STAGES.index(start_stage):]:
+            from src.services.run_state_service import load_run_state
+            latest_state = load_run_state(state.run_id)
+            if latest_state and latest_state.status in ("stopped", "cancelled"):
+                logger.info(f"Pipeline execution for run {state.run_id} was stopped by user.")
+                state.status = "stopped"
+                state.active_agent = None
+                return state
+
             state = self._execute_stage(stage, state)
+
+            latest_state = load_run_state(state.run_id)
+            if latest_state and latest_state.status in ("stopped", "cancelled"):
+                logger.info(f"Pipeline execution for run {state.run_id} was stopped by user after {stage}.")
+                state.status = "stopped"
+                state.active_agent = None
+                return state
+
             if state.errors:
                 logger.error("Pipeline stopped at %s: %s", stage, state.errors)
                 return state
         return state
+
 
     def retry_stage(self, state: AppState, stage: str) -> AppState:
         """Retry selected stage and reset all downstream outputs before re-running."""

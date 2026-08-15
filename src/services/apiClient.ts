@@ -1,4 +1,4 @@
-﻿import { 
+import { 
   AISettingsResponse,
   VerifyAISettingsResponse,
   CreateRunResponse, 
@@ -208,4 +208,26 @@ export async function cancelExecution(runId: string, executionId: string): Promi
   if (!res.ok) await throwApiError(res, 'Failed to cancel execution');
   return res.json();
 }
+
+export async function getRunLogs(runId: string): Promise<{ run_id: string; backend_logs: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/logs`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch logs: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export function getBackendLogsDownloadUrl(runId: string): string {
+  return `${API_BASE_URL}/runs/${runId}/logs/download`;
+}
+
+export async function cancelRun(runId: string): Promise<{ status: string; run_id: string }> {
+  const res = await fetch(`${API_BASE_URL}/runs/${runId}/cancel`, { method: 'POST' });
+  if (!res.ok) {
+    throw new Error(`Failed to stop/cancel run: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+
 

@@ -1,6 +1,7 @@
-﻿"""FastAPI Runtime Layer exposing REST API contracts for React frontend with UI hosting."""
+"""FastAPI Runtime Layer exposing REST API contracts for React frontend with UI hosting."""
 
 import asyncio
+import re
 import shutil
 from uuid import uuid4
 from pathlib import Path
@@ -23,7 +24,7 @@ from src.workflows.pipeline import SequentialQETPipeline
 from src.services.llm_service import LLMService
 from src.services.execution_manager import execution_manager
 from src.utils.security import SecurityError
-from src.utils.logger import logger
+from src.utils.logger import logger, log_run_context
 
 app = FastAPI(
     title="QET Automated Agents API",
@@ -38,6 +39,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+RUN_ID_REGEX = re.compile(r"/api/v1/runs/(RUN-[A-Za-z0-9_-]+)")
+
+@app.middleware("http")
+async def run_logging_middleware(request, call_next):
+    match = RUN_ID_REGEX.search(request.url.path)
+    if match:
+        run_id = match.group(1)
+        with log_run_context(run_id):
+            return await call_next(request)
+    return await call_next(request)
 
 
 class CreateRunRequest(BaseModel):
@@ -469,6 +482,42 @@ async def upload_codebase(run_id: str, file: UploadFile = File(...)):
     return CodebaseUploadResponse(intake_manifest=manifest, state=state)
 
 
+@app.get("/api/v1/runs/{run_id}/logs")
+def get_run_logs(run_id: str):
+    """Retrieve backend execution logs for a specific run."""
+    log_file = Path("temp") / f"run_{run_id}.log"
+    if not log_file.exists():
+        settings = load_ai_settings_dict()
+        provider = settings.get("active_provider", "Unknown")
+        model = settings.get("runtime_state", {}).get("model", "Auto")
+        return {
+            "run_id": run_id,
+            "backend_logs": f"[SYSTEM] Log session initialized for run {run_id}.\n[SYSTEM] Active Provider: {provider}\n[SYSTEM] Current Model: {model}\n"
+        }
+    
+    try:
+        content = log_file.read_text(encoding="utf-8", errors="replace")
+        return {"run_id": run_id, "backend_logs": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read log file: {str(e)}")
+
+
+@app.get("/api/v1/runs/{run_id}/logs/download")
+def download_run_logs(run_id: str):
+    """Download backend execution logs for a specific run as a text file."""
+    log_file = Path("temp") / f"run_{run_id}.log"
+    if not log_file.exists():
+        temp_dir = Path("temp")
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        log_file.write_text(f"[SYSTEM] Log session initialized for run {run_id}.\n", encoding="utf-8")
+        
+    return FileResponse(
+        path=str(log_file),
+        media_type="text/plain",
+        filename=f"backend_run_{run_id}.log"
+    )
+
+
 @app.get("/api/v1/runs/{run_id}/status", response_model=StatusResponse)
 def get_run_status(run_id: str):
     state = load_run_state(run_id)
@@ -491,6 +540,16 @@ def get_run_status(run_id: str):
     )
 
 
+def log_run_task(func):
+  from functools import wraps
+  @wraps(func)
+  def wrapper(run_id, *args, **kwargs):
+    with log_run_context(run_id):
+      return func(run_id, *args, **kwargs)
+  return wrapper
+
+
+@log_run_task
 def _execute_understanding_task(run_id: str):
   state = load_run_state(run_id)
   if not state:
@@ -617,6 +676,7 @@ def start_understanding(run_id: str, background_tasks: BackgroundTasks):
     return {"status": "started", "run_id": run_id}
 
 
+@log_run_task
 def _execute_pipeline_task(run_id: str):
     state = load_run_state(run_id)
     if not state:
@@ -664,6 +724,20 @@ def start_pipeline(run_id: str, background_tasks: BackgroundTasks):
 
     background_tasks.add_task(_execute_pipeline_task, run_id)
     return {"status": "started", "run_id": run_id}
+
+
+@app.post("/api/v1/runs/{run_id}/cancel")
+def cancel_run(run_id: str):
+    state = load_run_state(run_id)
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    
+    state.status = "stopped"
+    state.active_agent = None
+    save_run_state(state)
+    logger.info(f"Cancellation requested for run {run_id}. State updated to stopped.")
+    return {"status": "stopped", "run_id": run_id}
+
 
 
 @app.get("/api/v1/runs/{run_id}/understanding")
