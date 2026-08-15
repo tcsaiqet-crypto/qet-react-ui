@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Moon, Sun, ZoomIn, ZoomOut, Sparkles, Copy, Check, PanelRightOpen, PanelRightClose, SlidersHorizontal } from 'lucide-react';
+import { Moon, Sun, ZoomIn, ZoomOut, Sparkles, Copy, Check, PanelRightOpen, PanelRightClose, SlidersHorizontal, Square } from 'lucide-react';
 import { AISettingsPanel } from './components/AISettingsPanel';
 import { RunsDashboard } from './components/RunsDashboard';
 import { TabId } from './components/NavigationHeader';
@@ -10,8 +10,8 @@ import { UnderstandingPage } from './components/UnderstandingPage';
 import { ExecutionPage } from './components/ExecutionPage';
 import { AgentDetailDrawer } from './components/AgentDetailDrawer';
 import { ConsoleLogDrawer, LogEntry } from './components/ConsoleLogDrawer';
-import { AISettingsResponse, AppState, RailViewMode, DrawerTabId } from './types';
-import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings, retryRun, getRunLogs, getBackendLogsDownloadUrl, cancelRun } from './services/apiClient';
+import { AISettingsResponse, AppState, RailViewMode, DrawerTabId, DiscoverableModel } from './types';
+import { createRun, getAISettings, getRunStatus, getRunFullState, updateAISettings, retryRun, getRunLogs, getBackendLogsDownloadUrl, cancelRun, getDiscoverableModels } from './services/apiClient';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('home');
@@ -435,7 +435,7 @@ export const App: React.FC = () => {
               className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5"
               style={{ borderColor: 'var(--qet-border)' }}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <div
                   className="flex items-center gap-2 px-3 py-1 rounded-lg"
                   style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
@@ -462,6 +462,43 @@ export const App: React.FC = () => {
                     {copiedRunId ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                   </button>
                 </div>
+
+                {/* Gemini 3.7 Flash Model Selector */}
+                <div
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
+                  style={{ backgroundColor: 'var(--qet-surface-elevated)', border: '1px solid var(--qet-border)' }}
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-blue-500" />
+                  <span className="text-xs font-semibold" style={{ color: 'var(--qet-text-muted)' }}>
+                    Model:
+                  </span>
+                  <select
+                    value={aiSettings?.active_provider === 'gpt' ? 'gpt-4o-mini' : 'gemini-3.7-flash-medium'}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      const provider = val.startsWith('gpt') ? 'gpt' : 'gemini';
+                      await switchProvider(provider);
+                    }}
+                    className="bg-transparent text-xs font-semibold cursor-pointer outline-none"
+                    style={{ color: 'var(--qet-text-primary)' }}
+                  >
+                    <option value="gemini-3.7-flash-medium">✦ Gemini 3.7 Flash (Medium)</option>
+                    <option value="gemini-3.7-flash-low">✦ Gemini 3.7 Flash (Low)</option>
+                    <option value="gemini-3.7-flash-high">✦ Gemini 3.7 Flash (High)</option>
+                    <option value="gemini-3.1-flash-lite">✦ Gemini 3.1 Flash Lite</option>
+                    <option value="gpt-4o-mini">✦ OpenAI GPT-4o-mini</option>
+                  </select>
+                </div>
+
+                {/* Header Stop Run Button */}
+                <button
+                  onClick={handleCancelRun}
+                  title="Stop active pipeline execution"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-xs"
+                >
+                  <Square className="h-3 w-3 fill-current" />
+                  <span>Stop Run</span>
+                </button>
 
                 {/* Right Drawer Toggle Button */}
                 <button

@@ -9,7 +9,7 @@ from src.config import config
 from src.agents.test_data_agent import TestDataAgent
 from src.agents.playwright_agent import PlaywrightAgent
 from src.agents.report_agent import ReportAgent
-from src.utils.logger import logger
+from src.utils.logger import logger, log_run_context
 
 
 class SequentialQETPipeline:
@@ -53,60 +53,72 @@ class SequentialQETPipeline:
 
     def run_from(self, state: AppState, start_stage: str) -> AppState:
         """Run pipeline from a specific stage to the end while respecting dependencies."""
-        if start_stage not in self.STAGES:
-            state.errors.append(f"Unknown stage '{start_stage}'")
-            return state
-
-        if not self._dependencies_satisfied(state, start_stage):
-            state.errors.append(
-                f"Cannot run from '{start_stage}' because required upstream outputs are missing. "
-                "Please upload sources and complete prior stages first."
-            )
-            self._record_lifecycle_event(
-                state,
-                event_type="agent_failed",
-                stage=start_stage,
-                status="blocked",
-                message=f"{self.STAGE_LABELS.get(start_stage, start_stage)} is blocked by missing upstream output",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-            return state
-
-        state.pipeline_control_state = "running"
-        for stage in self.STAGES[self.STAGES.index(start_stage):]:
-            # Check for pause / stop control state
-            if getattr(state, "pipeline_control_state", "running") == "paused":
-                state.paused_stage = stage
-                logger.info(f"Pipeline paused by user before stage: {stage}")
-                self._record_lifecycle_event(
-                    state,
-                    event_type="pipeline_paused",
-                    stage=stage,
-                    status="paused",
-                    message=f"Pipeline paused at {self.STAGE_LABELS.get(stage, stage)}",
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                )
+        run_id = getattr(state, "run_id", "default")
+        with log_run_context(run_id):
+            if start_stage not in self.STAGES:
+                state.errors.append(f"Unknown stage '{start_stage}'")
                 return state
-            if getattr(state, "pipeline_control_state", "running") == "stopped":
-                logger.info(f"Pipeline stopped by user before stage: {stage}")
-                state.paused_stage = None
+
+            if not self._dependencies_satisfied(state, start_stage):
+                state.errors.append(
+                    f"Cannot run from '{start_stage}' because required upstream outputs are missing. "
+                    "Please upload sources and complete prior stages first."
+                )
                 self._record_lifecycle_event(
                     state,
-                    event_type="pipeline_stopped",
-                    stage=stage,
-                    status="stopped",
-                    message=f"Pipeline stopped by user",
+                    event_type="agent_failed",
+                    stage=start_stage,
+                    status="blocked",
+                    message=f"{self.STAGE_LABELS.get(start_stage, start_stage)} is blocked by missing upstream output",
                     timestamp=datetime.now(timezone.utc).isoformat(),
                 )
                 return state
 
-            state = self._execute_stage(stage, state)
-            if state.errors:
-                logger.error("Pipeline stopped at %s: %s", stage, state.errors)
-                return state
-        state.pipeline_control_state = "completed"
-        state.paused_stage = None
-        return state
+            state.pipeline_control_state = "running"
+            for stage in self.STAGES[self.STAGES.index(start_stage):]:
+                # Check disk state for async cancellation from client
+                if getattr(state, "run_id", None):
+                    try:
+                        from src.services.run_state_store import load_run_state
+                        disk_state = load_run_state(state.run_id)
+                        if disk_state and getattr(disk_state, "pipeline_control_state", None) == "stopped":
+                            state.pipeline_control_state = "stopped"
+                    except Exception:
+                        pass
+
+                # Check for pause / stop control state
+                if getattr(state, "pipeline_control_state", "running") == "paused":
+                    state.paused_stage = stage
+                    logger.info(f"Pipeline paused by user before stage: {stage}")
+                    self._record_lifecycle_event(
+                        state,
+                        event_type="pipeline_paused",
+                        stage=stage,
+                        status="paused",
+                        message=f"Pipeline paused at {self.STAGE_LABELS.get(stage, stage)}",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    )
+                    return state
+                if getattr(state, "pipeline_control_state", "running") == "stopped":
+                    logger.info(f"Pipeline stopped by user before stage: {stage}")
+                    state.paused_stage = None
+                    self._record_lifecycle_event(
+                        state,
+                        event_type="pipeline_stopped",
+                        stage=stage,
+                        status="stopped",
+                        message=f"Pipeline stopped by user",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    )
+                    return state
+
+                state = self._execute_stage(stage, state)
+                if state.errors:
+                    logger.error("Pipeline stopped at %s: %s", stage, state.errors)
+                    return state
+            state.pipeline_control_state = "completed"
+            state.paused_stage = None
+            return state
 
     def pause_pipeline(self, state: AppState) -> AppState:
         """Pause pipeline execution cleanly and save the stage to resume from."""

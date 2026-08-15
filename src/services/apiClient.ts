@@ -341,3 +341,28 @@ export async function applyAIScriptFix(
   if (!res.ok) await throwApiError(res, 'Failed to apply AI script fix');
   return res.json();
 }
+
+export interface DiscoverableModel {
+  id: string;
+  name: string;
+  provider: 'gemini' | 'gpt';
+  thinking_tier?: 'low' | 'medium' | 'high';
+  thinking_budget_tokens?: number;
+  latency_estimate?: string;
+  recommended_for?: string;
+  is_default?: boolean;
+  is_available: boolean;
+}
+
+export async function getDiscoverableModels(): Promise<{
+  active_provider: string;
+  active_model: string;
+  models: DiscoverableModel[];
+}> {
+  const res = await fetch(`${API_BASE_URL}/ai/models`);
+  if (!res.ok) {
+    throw new Error('Failed to fetch models');
+  }
+  return res.json();
+}
+

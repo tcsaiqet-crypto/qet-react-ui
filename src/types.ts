@@ -567,3 +567,16 @@ export interface DrawerState {
   width: number;
 }
 
+export interface DiscoverableModel {
+  id: string;
+  name: string;
+  provider: 'gemini' | 'gpt';
+  thinking_tier?: 'low' | 'medium' | 'high';
+  thinking_budget_tokens?: number;
+  latency_estimate?: string;
+  recommended_for?: string;
+  is_default?: boolean;
+  is_available: boolean;
+}
+
+

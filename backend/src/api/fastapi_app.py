@@ -35,7 +35,7 @@ from src.services.llm_service import LLMService
 from src.services.execution_manager import execution_manager
 from src.services.ai_test_analysis_service import AITestAnalysisService
 from src.utils.security import SecurityError
-from src.utils.logger import logger
+from src.utils.logger import logger, log_run_context
 
 app = FastAPI(
     title="QET Automated Agents API",
@@ -229,6 +229,75 @@ def update_ai_settings(req: UpdateAISettingsRequest):
 
     save_ai_settings_dict(active_provider=active_provider, provider_keys=provider_keys)
     return _build_ai_settings_response()
+
+
+@app.get("/api/v1/ai/models")
+def get_available_models():
+    """Return discoverable AI models including Gemini 3.7 Flash thinking tiers and OpenAI."""
+    active_provider = config.get_active_provider()
+    gemini_keys = config.get_provider_api_keys("gemini")
+    gpt_keys = config.get_provider_api_keys("gpt")
+
+    models = [
+        {
+            "id": "gemini-3.7-flash-medium",
+            "name": "Gemini 3.7 Flash (Medium)",
+            "provider": "gemini",
+            "thinking_tier": "medium",
+            "thinking_budget_tokens": 4096,
+            "latency_estimate": "~2.9s",
+            "recommended_for": "Balanced understanding, test cases, and synthetic data generation",
+            "is_default": True,
+            "is_available": bool(gemini_keys),
+        },
+        {
+            "id": "gemini-3.7-flash-low",
+            "name": "Gemini 3.7 Flash (Low)",
+            "provider": "gemini",
+            "thinking_tier": "low",
+            "thinking_budget_tokens": 1024,
+            "latency_estimate": "~1.9s",
+            "recommended_for": "Ultra-fast AST parsing and requirement categorization",
+            "is_default": False,
+            "is_available": bool(gemini_keys),
+        },
+        {
+            "id": "gemini-3.7-flash-high",
+            "name": "Gemini 3.7 Flash (High)",
+            "provider": "gemini",
+            "thinking_tier": "high",
+            "thinking_budget_tokens": 8192,
+            "latency_estimate": "~4.7s",
+            "recommended_for": "Deep reasoning, Playwright code synthesis, self-correction",
+            "is_default": False,
+            "is_available": bool(gemini_keys),
+        },
+        {
+            "id": "gemini-3.1-flash-lite",
+            "name": "Gemini 3.1 Flash Lite",
+            "provider": "gemini",
+            "thinking_tier": "low",
+            "latency_estimate": "~1.9s",
+            "recommended_for": "Fast lightweight tasks",
+            "is_default": False,
+            "is_available": bool(gemini_keys),
+        },
+        {
+            "id": "gpt-4o-mini",
+            "name": "OpenAI GPT-4o-mini",
+            "provider": "gpt",
+            "latency_estimate": "~2.5s",
+            "recommended_for": "Cross-provider fallback",
+            "is_default": False,
+            "is_available": bool(gpt_keys),
+        },
+    ]
+
+    return {
+        "active_provider": active_provider,
+        "active_model": "gemini-3.7-flash-medium" if active_provider == "gemini" else "gpt-4o-mini",
+        "models": models,
+    }
 
 
 def _verify_gpt_key(llm: LLMService, api_keys: List[str]) -> AIProviderVerificationResult:
@@ -558,103 +627,104 @@ def get_run_status(run_id: str):
 
 
 def _execute_understanding_task(run_id: str):
-  state = load_run_state(run_id)
-  if not state:
-    return
+  with log_run_context(run_id):
+    state = load_run_state(run_id)
+    if not state:
+      return
 
-  generation = getattr(state, "reset_generation", 1) or 1
-  state.subagent_timeline = [
-    event for event in state.subagent_timeline if event.get("generation") != generation
-  ]
-  state.agent_timeline.append({
-    "event_id": str(uuid4()),
-    "event_type": "agent_entered",
-    "agent_id": "Understanding",
-    "label": "Understanding Agent",
-    "subagent_id": None,
-    "status": "running",
-    "generation": generation,
-    "message": "Understanding Agent started",
-    "timestamp": datetime.now(timezone.utc).isoformat(),
-    "source": "backend.fastapi",
-  })
-  state.active_agent = "Understanding"
-  state.upcoming_agent = "Requirement Categorization" if config.features.enable_requirement_categorization else "Test Cases"
-  save_run_state(state)
-  update_run_status(run_id, status="ai_understanding_running", progress=75.0)
-  agent = UnderstandingAgent(run_id=run_id, event_sink=save_run_state)
-  try:
-    updated_state, provenance = agent.run_ai_required(state)
-
-    if config.features.enable_requirement_categorization:
-      from src.agents.requirement_categorizer import RequirementCategorizer
-      categorizer = RequirementCategorizer(run_id=run_id)
-      if not categorizer.llm.is_enabled():
-        updated_state = categorizer.run(updated_state)
-      else:
-        updated_state, cat_prov = categorizer.run_ai_required(updated_state)
-
-    updated_state.agent_timeline.append({
+    generation = getattr(state, "reset_generation", 1) or 1
+    state.subagent_timeline = [
+      event for event in state.subagent_timeline if event.get("generation") != generation
+    ]
+    state.agent_timeline.append({
       "event_id": str(uuid4()),
-      "event_type": "agent_completed",
+      "event_type": "agent_entered",
       "agent_id": "Understanding",
       "label": "Understanding Agent",
       "subagent_id": None,
-      "status": "completed",
+      "status": "running",
       "generation": generation,
-      "message": "Understanding Agent completed",
+      "message": "Understanding Agent started",
       "timestamp": datetime.now(timezone.utc).isoformat(),
       "source": "backend.fastapi",
     })
-    updated_state.active_agent = updated_state.upcoming_agent
-    save_run_state(updated_state)
-    update_run_status(run_id, status="understanding_ready", progress=100.0)
-  except AIRequiredFailureException as e:
-    err_payload = {
-      "error_code": e.error_code,
-      "error_message": e.error_message,
-      "diagnostics": e.diagnostics,
-      "retryable": True,
-    }
-    failed_state = load_run_state(run_id) or state
-    failed_state.agent_timeline.append({
-      "event_id": str(uuid4()),
-      "event_type": "agent_failed",
-      "agent_id": "Understanding",
-      "label": "Understanding Agent",
-      "subagent_id": None,
-      "status": "failed",
-      "generation": generation,
-      "message": e.error_message,
-      "timestamp": datetime.now(timezone.utc).isoformat(),
-      "source": "backend.fastapi",
-    })
-    failed_state.active_agent = "Understanding"
-    save_run_state(failed_state)
-    update_run_status(run_id, status="error", progress=75.0, error=err_payload)
-  except Exception as e:
-    err_payload = {
-      "error_code": "understanding_execution_error",
-      "error_message": str(e),
-      "diagnostics": {"exception": str(e)},
-      "retryable": True,
-    }
-    failed_state = load_run_state(run_id) or state
-    failed_state.agent_timeline.append({
-      "event_id": str(uuid4()),
-      "event_type": "agent_failed",
-      "agent_id": "Understanding",
-      "label": "Understanding Agent",
-      "subagent_id": None,
-      "status": "failed",
-      "generation": generation,
-      "message": str(e),
-      "timestamp": datetime.now(timezone.utc).isoformat(),
-      "source": "backend.fastapi",
-    })
-    failed_state.active_agent = "Understanding"
-    save_run_state(failed_state)
-    update_run_status(run_id, status="error", progress=75.0, error=err_payload)
+    state.active_agent = "Understanding"
+    state.upcoming_agent = "Requirement Categorization" if config.features.enable_requirement_categorization else "Test Cases"
+    save_run_state(state)
+    update_run_status(run_id, status="ai_understanding_running", progress=75.0)
+    agent = UnderstandingAgent(run_id=run_id, event_sink=save_run_state)
+    try:
+      updated_state, provenance = agent.run_ai_required(state)
+
+      if config.features.enable_requirement_categorization:
+        from src.agents.requirement_categorizer import RequirementCategorizer
+        categorizer = RequirementCategorizer(run_id=run_id)
+        if not categorizer.llm.is_enabled():
+          updated_state = categorizer.run(updated_state)
+        else:
+          updated_state, cat_prov = categorizer.run_ai_required(updated_state)
+
+      updated_state.agent_timeline.append({
+        "event_id": str(uuid4()),
+        "event_type": "agent_completed",
+        "agent_id": "Understanding",
+        "label": "Understanding Agent",
+        "subagent_id": None,
+        "status": "completed",
+        "generation": generation,
+        "message": "Understanding Agent completed",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "source": "backend.fastapi",
+      })
+      updated_state.active_agent = updated_state.upcoming_agent
+      save_run_state(updated_state)
+      update_run_status(run_id, status="understanding_ready", progress=100.0)
+    except AIRequiredFailureException as e:
+      err_payload = {
+        "error_code": e.error_code,
+        "error_message": e.error_message,
+        "diagnostics": e.diagnostics,
+        "retryable": True,
+      }
+      failed_state = load_run_state(run_id) or state
+      failed_state.agent_timeline.append({
+        "event_id": str(uuid4()),
+        "event_type": "agent_failed",
+        "agent_id": "Understanding",
+        "label": "Understanding Agent",
+        "subagent_id": None,
+        "status": "failed",
+        "generation": generation,
+        "message": e.error_message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "source": "backend.fastapi",
+      })
+      failed_state.active_agent = "Understanding"
+      save_run_state(failed_state)
+      update_run_status(run_id, status="error", progress=75.0, error=err_payload)
+    except Exception as e:
+      err_payload = {
+        "error_code": "understanding_execution_error",
+        "error_message": str(e),
+        "diagnostics": {"exception": str(e)},
+        "retryable": True,
+      }
+      failed_state = load_run_state(run_id) or state
+      failed_state.agent_timeline.append({
+        "event_id": str(uuid4()),
+        "event_type": "agent_failed",
+        "agent_id": "Understanding",
+        "label": "Understanding Agent",
+        "subagent_id": None,
+        "status": "failed",
+        "generation": generation,
+        "message": str(e),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "source": "backend.fastapi",
+      })
+      failed_state.active_agent = "Understanding"
+      save_run_state(failed_state)
+      update_run_status(run_id, status="error", progress=75.0, error=err_payload)
 
 
 @app.post("/api/v1/runs/{run_id}/understanding/start")
@@ -684,30 +754,31 @@ def start_understanding(run_id: str, background_tasks: BackgroundTasks):
 
 
 def _execute_pipeline_task(run_id: str):
-    state = load_run_state(run_id)
-    if not state:
-        return
+    with log_run_context(run_id):
+        state = load_run_state(run_id)
+        if not state:
+            return
 
-    update_run_status(run_id, status="generation_running", progress=80.0)
-    state = load_run_state(run_id)
-    pipeline = SequentialQETPipeline()
-    updated_state = pipeline.run_from(state, "Test Cases")
-    save_run_state(updated_state)
+        update_run_status(run_id, status="generation_running", progress=80.0)
+        state = load_run_state(run_id)
+        pipeline = SequentialQETPipeline()
+        updated_state = pipeline.run_from(state, "Test Cases")
+        save_run_state(updated_state)
 
-    if updated_state.errors:
-        update_run_status(
-            run_id,
-            status="error",
-            progress=80.0,
-            error={
-                "error_code": "pipeline_stage_failed",
-                "error_message": updated_state.errors[-1],
-                "diagnostics": {"errors": updated_state.errors},
-                "retryable": True,
-            },
-        )
-    else:
-        update_run_status(run_id, status="pipeline_complete", progress=100.0)
+        if updated_state.errors:
+            update_run_status(
+                run_id,
+                status="error",
+                progress=80.0,
+                error={
+                    "error_code": "pipeline_stage_failed",
+                    "error_message": updated_state.errors[-1],
+                    "diagnostics": {"errors": updated_state.errors},
+                    "retryable": True,
+                },
+            )
+        else:
+            update_run_status(run_id, status="pipeline_complete", progress=100.0)
 
 
 @app.post("/api/v1/runs/{run_id}/pipeline/start")
