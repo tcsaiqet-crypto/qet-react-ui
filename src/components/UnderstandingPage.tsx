@@ -19,10 +19,14 @@ import {
   Globe,
   Gauge,
   Accessibility,
-  PlayCircle
+  PlayCircle,
+  KeyRound,
+  Plus,
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { AppState, ApplicationUnderstanding } from '../types';
-import { startUnderstanding, getUnderstanding, startPipeline } from '../services/apiClient';
+import { startUnderstanding, getUnderstanding, startPipeline, updateAISettings } from '../services/apiClient';
 
 interface UnderstandingPageProps {
   appState: AppState | null;
@@ -152,6 +156,36 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
     .filter(Boolean);
 
   const [activeTestingTab, setActiveTestingTab] = useState<'ui' | 'api' | 'performance' | 'accessibility'>('ui');
+  const [newKeyInput, setNewKeyInput] = useState('');
+  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [keySaveMsg, setKeySaveMsg] = useState<string | null>(null);
+  const [isKeyBannerDismissed, setIsKeyBannerDismissed] = useState(false);
+
+  const isKeysExhausted = [
+    'all_gemini_keys_exhausted',
+    'provider_auth_failed',
+    'provider_key_missing',
+  ].includes(errorDetails?.error_code || '') && !isKeyBannerDismissed;
+
+  const handleSaveNewKey = async () => {
+    const trimmed = newKeyInput.trim();
+    if (!trimmed) return;
+    setIsSavingKey(true);
+    setKeySaveMsg(null);
+    try {
+      await updateAISettings({ provider_keys: { gemini: trimmed } });
+      setKeySaveMsg('Key saved. Retrying analysis...');
+      setNewKeyInput('');
+      setTimeout(() => {
+        setKeySaveMsg(null);
+        handleStartAnalysis();
+      }, 1200);
+    } catch {
+      setKeySaveMsg('Failed to save key. Try the Tools → AI Settings tab.');
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -288,6 +322,62 @@ export const UnderstandingPage: React.FC<UnderstandingPageProps> = ({
               <p style={{ color: 'var(--qet-text-primary)' }}>{errorDetails?.error_message || appState?.last_error?.error_message || 'Stage execution failed'}</p>
             </div>
           </div>
+
+          {/* Key Exhausted — Inline Add New Key */}
+          {isKeysExhausted && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4 space-y-3 relative">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-amber-300">All API keys exhausted or rejected</p>
+                    <p className="text-[11px] text-amber-400/80 mt-0.5">
+                      The system tried every configured Gemini key. Add a fresh key below to retry immediately — no need to leave this page.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsKeyBannerDismissed(true)}
+                  title="Hide this key prompt"
+                  className="p-1 rounded text-amber-400/70 hover:text-amber-200 hover:bg-amber-500/20 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={newKeyInput}
+                  onChange={e => setNewKeyInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !isSavingKey && handleSaveNewKey()}
+                  placeholder="Paste new Gemini API key (AIza...)"
+                  className="flex-1 text-xs font-mono rounded-lg px-3 py-2 border outline-none focus:ring-1 focus:ring-amber-500"
+                  style={{
+                    backgroundColor: 'var(--qet-surface-elevated)',
+                    borderColor: 'var(--qet-border)',
+                    color: 'var(--qet-text-primary)',
+                  }}
+                />
+                <button
+                  onClick={handleSaveNewKey}
+                  disabled={isSavingKey || !newKeyInput.trim()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50 transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  {isSavingKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>Save & Retry</span>
+                </button>
+              </div>
+              {keySaveMsg && (
+                <p className="text-[11px] font-semibold" style={{ color: keySaveMsg.includes('Failed') ? 'var(--qet-danger)' : 'var(--qet-success)' }}>
+                  {keySaveMsg}
+                </p>
+              )}
+              <p className="text-[10px]" style={{ color: 'var(--qet-text-muted)' }}>
+                Keys are stored in <code className="font-mono">keys/gemini keys.txt</code> or via Tools → AI Settings.
+                The system rotates through all keys automatically on each attempt.
+              </p>
+            </div>
+          )}
 
           {errorDetails?.diagnostics && (
             <div className="space-y-1.5">
