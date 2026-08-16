@@ -99,8 +99,8 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
             QET
           </div>
           <div>
-            <h1 className="text-xs font-bold text-slate-900 tracking-tight">QET Agent Pipeline</h1>
-            <p className="text-[10px] text-slate-500 font-medium">Autonomous QA Engine</p>
+            <h1 className="text-xs font-bold text-slate-900 tracking-tight">QET Agent</h1>
+            <p className="text-[10px] text-slate-500 font-medium">Autonomous Quality Engine</p>
           </div>
         </div>
       </div>
