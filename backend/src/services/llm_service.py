@@ -176,10 +176,12 @@ class LLMService:
         self.last_error = None
         self.last_generation = None
         if not self.is_enabled():
+            logger.warning("[AI LLM] Provider is disabled or missing valid API key.")
             self.last_error = {"error_code": "provider_disabled", "error_message": "LLM provider disabled or missing API key."}
             return None
 
         selected_provider = self._active_provider()
+        logger.info(f"[AI LLM] Initializing AI synthesis request (provider={selected_provider.upper()}, profile={profile})...")
         provider_order = [selected_provider, "gpt" if selected_provider == "gemini" else "gemini"]
         failures = []
         for provider in provider_order:
@@ -188,18 +190,24 @@ class LLMService:
                 failures.append({"provider": provider, "error_code": "provider_key_missing"})
                 continue
             if provider == "gemini":
+                logger.info(f"[AI GEMINI] Dispatching generation prompt with {len(api_keys)} candidate key(s)...")
                 text, attempts = self.generate_with_gemini(prompt, api_keys, profile=profile)
                 if text is not None:
+                    gen = self.last_generation or {}
+                    logger.info(f"[AI GEMINI] Generation succeeded using model '{gen.get('model', 'gemini')}' ({len(text)} chars).")
                     return text
                 failures.extend({"provider": "gemini", **attempt} for attempt in attempts)
                 continue
             for key_index, api_key in enumerate(api_keys):
+                logger.info(f"[AI GPT] Dispatching generation prompt to OpenAI '{self.gpt_model}'...")
                 text = self._generate_with_gpt(prompt, api_key, policy=AGENT_MODEL_POLICIES.get(profile, AGENT_MODEL_POLICIES["default"]))
                 if text is not None:
                     self.last_generation = {"provider": "gpt", "model": self.gpt_model, "key_index": key_index, "profile": profile, "fallback_used": provider != selected_provider}
+                    logger.info(f"[AI GPT] Generation succeeded using OpenAI '{self.gpt_model}' ({len(text)} chars).")
                     return text
                 failures.append({"provider": "gpt", "key_index": key_index, **(self.last_error or {})})
         self.last_error = self._summarize_failures(failures)
+        logger.warning(f"[AI LLM] Provider attempts failed: {self.last_error.get('error_message')}")
         return None
 
     @staticmethod
@@ -634,6 +642,3 @@ class LLMService:
                 depth -= 1
 
         return depth != 0 or in_string or escape
-
-
-

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { startUnderstanding, updateAISettings } from '../../services/apiClient';
 import { AppState } from '../../types';
+import { frontendLogger } from '../../utils/frontendLogger';
 
 interface RequirementUnderstandingWorkspaceProps {
   appState: AppState | null;
@@ -62,6 +63,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
     let textTimer: NodeJS.Timeout;
 
     if (isRunning) {
+      frontendLogger.info(`[AI START] AI Understanding analysis initiated for run ${appState?.run_id || 'active'}`);
       setProgressPercent(15);
       
       const stepMessages = [
@@ -74,10 +76,12 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
       ];
       let msgIndex = 0;
       setActiveStepText(stepMessages[0]);
+      frontendLogger.info(`[AI PIPELINE] ${stepMessages[0]}`);
 
       textTimer = setInterval(() => {
         msgIndex = (msgIndex + 1) % stepMessages.length;
         setActiveStepText(stepMessages[msgIndex]);
+        frontendLogger.info(`[AI PIPELINE] ${stepMessages[msgIndex]}`);
       }, 3000);
 
       progressTimer = setInterval(() => {
@@ -88,6 +92,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
       }, 800);
     } else if (isCompleted) {
       setProgressPercent(100);
+      frontendLogger.info(`[AI COMPLETE] Application understanding validated with structured UI & requirement components.`);
     }
 
     return () => {
@@ -100,10 +105,12 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
     if (!appState?.run_id) return;
     try {
       setIsAnalyzing(true);
+      frontendLogger.info(`[AI START] Dispatched AI Understanding task for run ${appState.run_id}...`);
       await startUnderstanding(appState.run_id);
       await onRefresh(appState.run_id);
       setIsAnalyzing(false);
     } catch (err) {
+      frontendLogger.error(`[AI ERROR] Understanding analysis failed: ${String(err)}`);
       setIsAnalyzing(false);
       await onRefresh(appState.run_id);
     }
@@ -121,6 +128,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
         clear_provider_keys: [],
       });
       setKeySaveMsg('Key saved! Retrying analysis...');
+      frontendLogger.info('[SETTINGS] Fresh API Key configured. Retrying AI analysis...');
       setNewKeyInput('');
       setIsKeyBannerDismissed(true);
       if (appState?.run_id) {
@@ -129,6 +137,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
       }
     } catch (err: any) {
       setKeySaveMsg(`Failed to save key: ${err.message || String(err)}`);
+      frontendLogger.error(`[SETTINGS] Failed to save key: ${err.message || String(err)}`);
     } finally {
       setIsSavingKey(false);
     }
@@ -156,7 +165,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
             <button
               onClick={handleStartAnalysis}
               disabled={isRunning}
-              className="qet-btn-secondary text-xs font-semibold px-4 py-2 flex items-center gap-2 shadow-xs hover:bg-slate-100"
+              className="qet-btn-secondary text-xs font-semibold px-4 py-2 flex items-center gap-2 shadow-xs hover:bg-slate-100 cursor-pointer"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin text-blue-600' : ''}`} />
               <span>{isCompleted ? 'Re-Analyze' : isRunning ? 'AI Synthesizing...' : 'Run AI Understanding'}</span>
@@ -348,7 +357,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600"
         >
           <Gauge className="w-4 h-4" />
-          <span>📈 Performance Testing</span>
+          <span>⚡ Performance</span>
           <span className="qet-badge-secondary text-[9px] px-1.5 py-0.2">Coming Soon</span>
         </button>
 
@@ -357,57 +366,51 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600"
         >
           <Accessibility className="w-4 h-4" />
-          <span>♿ Accessibility Testing</span>
+          <span>♿ Accessibility</span>
           <span className="qet-badge-secondary text-[9px] px-1.5 py-0.2">Coming Soon</span>
         </button>
       </div>
 
-      {/* Tab Content: UI Testing (Active) */}
+      {/* Main Content Area */}
       {activeDomainTab === 'ui' && (
-        isCompleted && !isRunning ? (
-          <div className="space-y-6 animate-fade-in">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="qet-card p-5 space-y-2 bg-white">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-700 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Executive Application Summary</span>
-                </h3>
-                <p className="text-xs leading-relaxed text-slate-700">
-                  {understanding?.summary}
-                </p>
-              </div>
-
-              <div className="qet-card p-5 space-y-2 bg-white">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-700 flex items-center gap-2">
-                  <Layers className="w-4 h-4" />
-                  <span>Architecture & Tech Stack</span>
-                </h3>
-                <p className="text-xs leading-relaxed text-slate-700">
-                  {understanding?.architecture_notes || 'React SPA with stateful client components and REST API integration.'}
-                </p>
-              </div>
+        isCompleted ? (
+          <div className="space-y-6">
+            {/* Overview Summary */}
+            <div className="qet-card p-5 space-y-3 bg-white border border-slate-200">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Application Architecture & Domain Overview
+              </h3>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                {understanding?.summary || 'CFA Digital Candidate Journey application extracted and mapped successfully.'}
+              </p>
             </div>
 
-            {/* Discovered UI Components */}
-            <div className="qet-card p-5 space-y-4 bg-white">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-blue-600" />
-                <span>Discovered UI Components & Grounded Selectors ({understanding?.components?.length || 0})</span>
-              </h3>
+            {/* Components & Interactive Elements */}
+            <div className="qet-card p-5 space-y-4 bg-white border border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  <span>Interactive UI Components ({understanding?.components?.length || 0})</span>
+                </h3>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {understanding?.components?.map((comp, idx) => (
-                  <div key={idx} className="qet-panel p-3.5 space-y-2 border border-slate-200 bg-slate-50 rounded-xl">
+                  <div key={idx} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-900">{comp.name}</span>
-                      <span className="qet-badge-secondary text-[10px]">{comp.type}</span>
+                      <span className="text-[10px] font-mono font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                        {comp.type || 'Component'}
+                      </span>
                     </div>
-                    <p className="text-[11px] text-slate-600">{comp.description}</p>
+                    {comp.description && (
+                      <p className="text-xs text-slate-600">{comp.description}</p>
+                    )}
                     {comp.selectors && comp.selectors.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {comp.selectors.map((sel, sIdx) => (
-                          <span key={sIdx} className="text-[10px] font-mono bg-white text-[#2D6A4F] px-2 py-0.5 rounded border border-slate-200 font-semibold">
+                      <div className="flex flex-wrap gap-1 pt-1">
+                        {comp.selectors.slice(0, 3).map((sel, sIdx) => (
+                          <code key={sIdx} className="text-[10px] bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded font-mono">
                             {sel}
-                          </span>
+                          </code>
                         ))}
                       </div>
                     )}
@@ -416,26 +419,39 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
               </div>
             </div>
 
-            {/* User Flows */}
-            <div className="qet-card p-5 space-y-4 bg-white">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
-                <Network className="w-4 h-4 text-blue-600" />
-                <span>End-to-End User Flows ({understanding?.flows?.length || 0})</span>
+            {/* User Journeys & Routes */}
+            <div className="qet-card p-5 space-y-4 bg-white border border-slate-200">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <Network className="w-4 h-4 text-indigo-600" />
+                <span>Extracted User Navigation Flows ({understanding?.flows?.length || 0})</span>
               </h3>
               <div className="space-y-3">
                 {understanding?.flows?.map((flow, idx) => (
-                  <div key={idx} className="qet-panel p-4 space-y-2 border border-slate-200 bg-slate-50 rounded-xl">
+                  <div key={idx} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-900">{flow.name}</span>
-                      <span className="text-[10px] text-slate-500 font-mono">{flow.start_point} → {flow.end_point}</span>
+                      {(flow as any).complexity && (
+                        <span className="text-[10px] uppercase font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
+                          {(flow as any).complexity}
+                        </span>
+                      )}
                     </div>
-                    <p className="text-[11px] text-slate-600">{flow.description}</p>
-                    {flow.steps && (
-                      <ol className="list-decimal list-inside text-[11px] text-slate-700 space-y-0.5">
-                        {flow.steps.map((step, sIdx) => (
-                          <li key={sIdx}>{step}</li>
+                    {flow.description && (
+                      <p className="text-xs text-slate-600">{flow.description}</p>
+                    )}
+                    {flow.steps && flow.steps.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 pt-1">
+                        {flow.steps.map((step, stIdx) => (
+                          <React.Fragment key={stIdx}>
+                            <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-[11px] font-medium text-slate-700">
+                              {step}
+                            </span>
+                            {stIdx < (flow.steps?.length || 0) - 1 && (
+                              <ArrowRight className="w-3 h-3 text-slate-400" />
+                            )}
+                          </React.Fragment>
                         ))}
-                      </ol>
+                      </div>
                     )}
                   </div>
                 ))}

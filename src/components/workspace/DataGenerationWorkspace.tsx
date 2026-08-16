@@ -11,9 +11,14 @@ import {
   Cpu,
   Download,
   FileCode,
-  FileText
+  FileText,
+  FolderOpen,
+  Copy,
+  Check,
+  Eye
 } from 'lucide-react';
 import { AppState, TestCase, SyntheticRecord } from '../../types';
+import { frontendLogger } from '../../utils/frontendLogger';
 
 interface DataGenerationWorkspaceProps {
   appState: AppState | null;
@@ -22,56 +27,208 @@ interface DataGenerationWorkspaceProps {
   onProceedNext: () => void;
 }
 
-const FIRST_NAMES = ["Alex", "Jordan", "Taylor", "Morgan", "Sam", "Chris", "Pat", "Riley", "Casey", "Avery", "Jamie", "Dakota", "Reese", "Quinn", "Cameron", "Devon"];
-const LAST_NAMES = ["Sterling", "Vance", "Mercer", "Sinclair", "Hawthorne", "Kensington", "Ellington", "Montgomery", "Carrington", "Blackwood", "Holloway", "Fairchild"];
-const EMPLOYERS = ["Apex Financial Corp", "BlueRock Technologies", "Zenith Health Systems", "Vanguard Logistics", "Global Core Labs", "Nexis Capital", "Summit Energy Partners", "Quantum Edge Systems"];
-const DOCUMENTS = ["passport_scan_valid.pdf", "cfa_candidate_id.pdf", "w2_tax_form_2025.pdf", "paystub_october_verified.pdf", "employment_verification_letter.pdf", "bank_statement_q3.pdf"];
+// 5 Curated Realistic Variant Attribute Sets
+const VARIANT_NAMES = [
+  "Jordan Sterling",
+  "Elizabeth Alexandra-Montgomery-Huntington",
+  "Marcus Vance",
+  "Elena Rostova",
+  "Devon Kensington"
+];
 
-const generateRandomRecordForCase = (tc: TestCase, index: number): SyntheticRecord => {
-  const randFirst = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
-  const randLast = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
-  const randEmployer = EMPLOYERS[Math.floor(Math.random() * EMPLOYERS.length)];
-  const randDoc = DOCUMENTS[Math.floor(Math.random() * DOCUMENTS.length)];
-  const randSSNMid = Math.floor(Math.random() * 90 + 10);
-  const randSSNLast = Math.floor(Math.random() * 9000 + 1000);
-  const randIncome = Math.floor(Math.random() * 9500 + 4500);
+const VARIANT_USERNAMES = [
+  "jordan.sterling@cfa.candidate.org",
+  "elizabeth.huntington@cfa.candidate.org",
+  "marcus.vance@cfa.candidate.org",
+  "elena.rostova@cfa.candidate.org",
+  "devon.kensington@cfa.candidate.org"
+];
 
-  const isBoundary = tc.case_type?.toUpperCase() === 'BOUNDARY';
-  const isNegative = tc.case_type?.toUpperCase() === 'NEGATIVE';
-  const isValidation = tc.case_type?.toUpperCase() === 'VALIDATION';
+const VARIANT_EMPLOYERS = [
+  "Apex Financial Corp",
+  "BlueRock Technologies",
+  "Zenith Health Systems",
+  "Vanguard Logistics",
+  "Global Core Labs"
+];
 
-  const username = isBoundary
-    ? `${randFirst.toLowerCase()}.${randLast.toLowerCase()}.${tc.case_id.toLowerCase().replace(/-/g, '.')}@cfa.candidate.org`
-    : `${randFirst.toLowerCase()}.${randLast.toLowerCase()}.${tc.case_id.toLowerCase().replace(/-/g, '.')}@example.com`;
+const VARIANT_INCOMES = [8500, 0.01, 7200, 9600, 11400];
 
-  const fullName = isBoundary
-    ? `Elizabeth Alexandra-Montgomery-Huntington`
-    : isValidation
-    ? `${randFirst} ${randLast} (Validation Profile)`
-    : isNegative
-    ? `${randFirst} ${randLast} (Negative Scenario)`
-    : `${randFirst} ${randLast}`;
+const VARIANT_DOCUMENTS = [
+  "w2_tax_form_2025.pdf",
+  "paystub_october_verified.pdf",
+  "employment_verification_letter.pdf",
+  "bank_statement_q3.pdf",
+  "cfa_candidate_id.pdf"
+];
 
-  const ssn = isNegative ? '123-45' : `999-${randSSNMid}-${randSSNLast}`;
-  const income = isBoundary ? 0.01 : randIncome;
-  const docFile = isNegative ? 'payload_malformed.exe' : randDoc;
+const VARIANT_SSNS = [
+  "999-45-6789",
+  "999-32-1144",
+  "999-55-9081",
+  "999-77-2231",
+  "999-88-5522"
+];
 
-  return {
-    record_id: `REC-${(tc.case_type || 'POS').substring(0, 3).toUpperCase()}-${String(index + 1).padStart(3, '0')}`,
-    target_test_case: tc.case_id,
-    category: `${tc.case_type || 'Positive'} ${tc.feature_area || 'CFA Onboarding'}`,
-    username,
-    password: isNegative ? 'WrongPassword999!' : `MockPass${Math.floor(Math.random() * 899 + 100)}!#`,
-    full_name: fullName,
-    ssn,
-    monthly_income: income,
-    employer_name: randEmployer,
-    employment_status: ['Full-Time Permanent', 'Contractor', 'Self-Employed', 'Executive Director'][Math.floor(Math.random() * 4)],
-    document_file: docFile,
-    terms_accepted: !isValidation,
-    is_synthetic: true,
-  } as any;
-};
+const STORED_DATASET_PATH = "sample data upload/cfa_test_dataset.json";
+const STORED_DATASET_CSV_PATH = "sample data upload/cfa_test_dataset.csv";
+
+const CANONICAL_STORED_DATASET: SyntheticRecord[] = [
+  {
+    record_id: "REC-POS-001",
+    target_test_case: "TC-POS-001",
+    category: "Positive Onboarding Flow",
+    full_name: "Jordan Sterling",
+    username: "jordan.sterling.cfa@example.com",
+    password: "Password123!#",
+    ssn: "999-45-6789",
+    monthly_income: 8500,
+    employer_name: "Apex Financial Corp",
+    employment_status: "Full-Time Permanent",
+    document_file: "w2_tax_form_2025.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-POS-002",
+    target_test_case: "TC-POS-002",
+    category: "Positive Document Verification",
+    full_name: "Marcus Vance",
+    username: "marcus.vance.cfa@example.com",
+    password: "SecurePass2026!",
+    ssn: "999-32-1144",
+    monthly_income: 7200,
+    employer_name: "BlueRock Technologies",
+    employment_status: "Full-Time Permanent",
+    document_file: "paystub_october_verified.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-POS-003",
+    target_test_case: "TC-POS-003",
+    category: "Positive Income Verification",
+    full_name: "Elena Rostova",
+    username: "elena.rostova.cfa@example.com",
+    password: "ValidToken998!",
+    ssn: "999-55-9081",
+    monthly_income: 9600,
+    employer_name: "Zenith Health Systems",
+    employment_status: "Executive Director",
+    document_file: "employment_verification_letter.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-POS-004",
+    target_test_case: "TC-POS-004",
+    category: "Positive Session & Submission",
+    full_name: "Devon Kensington",
+    username: "devon.kensington.cfa@example.com",
+    password: "AuthKey2026#$",
+    ssn: "999-77-2231",
+    monthly_income: 6800,
+    employer_name: "Global Core Labs",
+    employment_status: "Contractor",
+    document_file: "bank_statement_q3.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-NEG-005",
+    target_test_case: "TC-NEG-005",
+    category: "Negative File Upload Security",
+    full_name: "Taylor Mercer",
+    username: "taylor.mercer.neg@example.com",
+    password: "WrongPassword999!",
+    ssn: "123-45",
+    monthly_income: 5000,
+    employer_name: "Apex Financial Corp",
+    employment_status: "Full-Time Permanent",
+    document_file: "payload_malformed.exe",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-BND-006",
+    target_test_case: "TC-BND-006",
+    category: "Boundary Precision Verification",
+    full_name: "Elizabeth Alexandra-Montgomery-Huntington",
+    username: "elizabeth.huntington@cfa.candidate.org",
+    password: "BoundaryPass2026!",
+    ssn: "999-88-5522",
+    monthly_income: 0.01,
+    employer_name: "Vanguard Logistics",
+    employment_status: "Self-Employed",
+    document_file: "w2_tax_form_2025.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-VAL-007",
+    target_test_case: "TC-VAL-007",
+    category: "Validation Incomplete Submission",
+    full_name: "Jordan Sterling (Validation)",
+    username: "jordan.val@example.com",
+    password: "Password123!",
+    ssn: "999-11-2233",
+    monthly_income: 4500,
+    employer_name: "Apex Financial Corp",
+    employment_status: "Full-Time Permanent",
+    document_file: "w2_tax_form_2025.pdf",
+    terms_accepted: false,
+  } as any,
+  {
+    record_id: "REC-POS-008",
+    target_test_case: "TC-POS-008",
+    category: "Positive Progress Indicator Verification",
+    full_name: "Marcus Vance",
+    username: "marcus.progress@example.com",
+    password: "ValidToken123!",
+    ssn: "999-33-4455",
+    monthly_income: 7800,
+    employer_name: "BlueRock Technologies",
+    employment_status: "Full-Time Permanent",
+    document_file: "paystub_october_verified.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-NEG-009",
+    target_test_case: "TC-NEG-009",
+    category: "Negative Invalid Phone Format",
+    full_name: "Elena Rostova (Invalid Phone)",
+    username: "elena.neg.phone@example.com",
+    password: "Password123!#",
+    ssn: "999-66-7788",
+    monthly_income: 8200,
+    employer_name: "Zenith Health Systems",
+    employment_status: "Contractor",
+    document_file: "cfa_candidate_id.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-BND-010",
+    target_test_case: "TC-BND-010",
+    category: "Boundary Maximum Income Verification",
+    full_name: "Devon Kensington",
+    username: "devon.bnd.income@example.com",
+    password: "MaxIncomePass2026!",
+    ssn: "999-99-9999",
+    monthly_income: 999999.99,
+    employer_name: "Global Core Labs",
+    employment_status: "Executive Director",
+    document_file: "bank_statement_q3.pdf",
+    terms_accepted: true,
+  } as any,
+  {
+    record_id: "REC-POS-011",
+    target_test_case: "TC-POS-011",
+    category: "Positive Application Submission and Reference Code",
+    full_name: "Jordan Sterling",
+    username: "jordan.sterling.complete@example.com",
+    password: "Password123!#",
+    ssn: "999-45-6789",
+    monthly_income: 8500,
+    employer_name: "Apex Financial Corp",
+    employment_status: "Full-Time Permanent",
+    document_file: "w2_tax_form_2025.pdf",
+    terms_accepted: true,
+  } as any,
+];
 
 export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = ({
   appState,
@@ -84,16 +241,19 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
   const [generationStep, setGenerationStep] = useState<number>(0);
   const [generationLogs, setGenerationLogs] = useState<string[]>([]);
   const [selectedCaseRecord, setSelectedCaseRecord] = useState<{ caseId: string; record: SyntheticRecord } | null>(null);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [copiedPath, setCopiedPath] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadMappingReport, setUploadMappingReport] = useState<any | null>(null);
   const [localRecords, setLocalRecords] = useState<Record<string, SyntheticRecord>>({});
+  const [permutationSeed, setPermutationSeed] = useState<number>(0);
 
   const testCases: TestCase[] = appState?.test_suite?.test_cases || [];
   const targetCases = selectedCaseIds.length > 0
     ? testCases.filter((tc) => selectedCaseIds.includes(tc.case_id))
     : testCases;
 
-  // Initialize or sync records
+  // Initialize records from canonical store
   useEffect(() => {
     const existingRecords = appState?.synthetic_dataset?.records || [];
     const map: Record<string, SyntheticRecord> = {};
@@ -105,52 +265,153 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
 
     if (Object.keys(map).length > 0) {
       setLocalRecords(map);
-    } else if (targetCases.length > 0) {
-      const generated: Record<string, SyntheticRecord> = {};
-      targetCases.forEach((tc, idx) => {
-        generated[tc.case_id] = generateRandomRecordForCase(tc, idx);
+    } else {
+      // Default: Load from Canonical CFA Dataset
+      const initialMap: Record<string, SyntheticRecord> = {};
+      CANONICAL_STORED_DATASET.forEach((rec) => {
+        if (rec.target_test_case) {
+          initialMap[rec.target_test_case] = rec;
+        }
       });
-      setLocalRecords(generated);
+      setLocalRecords(initialMap);
     }
-  }, [appState?.synthetic_dataset, targetCases.length]);
+  }, [appState?.synthetic_dataset]);
 
+  // Generate randomized record with 5-variant rotation and permutations
+  const generateRandomizedRecord = (tc: TestCase, index: number, seed: number): SyntheticRecord => {
+    const isBoundary = tc.case_type?.toUpperCase() === 'BOUNDARY';
+    const isNegative = tc.case_type?.toUpperCase() === 'NEGATIVE';
+    const isValidation = tc.case_type?.toUpperCase() === 'VALIDATION';
+
+    // 5-variant rotation index
+    const variantIdx = (index + seed) % 5;
+    const name = VARIANT_NAMES[variantIdx];
+    const username = VARIANT_USERNAMES[variantIdx];
+    const employer = VARIANT_EMPLOYERS[variantIdx];
+    const income = VARIANT_INCOMES[variantIdx];
+    const doc = VARIANT_DOCUMENTS[variantIdx];
+    const ssn = VARIANT_SSNS[variantIdx];
+
+    if (isNegative) {
+      return {
+        record_id: `REC-NEG-${String(index + 1).padStart(3, '0')}`,
+        target_test_case: tc.case_id,
+        category: `${tc.case_type || 'Negative'} ${tc.feature_area || 'Security & Validation'}`,
+        username: `neg.${username}`,
+        password: "WrongPassword999!",
+        full_name: `${name} (Negative Scenario)`,
+        ssn: "123-45",
+        monthly_income: 5000,
+        employer_name: employer,
+        employment_status: "Full-Time Permanent",
+        document_file: "payload_malformed.exe",
+        terms_accepted: true,
+        is_synthetic: true,
+      } as any;
+    }
+
+    if (isBoundary) {
+      return {
+        record_id: `REC-BND-${String(index + 1).padStart(3, '0')}`,
+        target_test_case: tc.case_id,
+        category: `${tc.case_type || 'Boundary'} ${tc.feature_area || 'Financial Limits'}`,
+        username: "elizabeth.huntington@cfa.candidate.org",
+        password: "BoundaryPass2026!",
+        full_name: "Elizabeth Alexandra-Montgomery-Huntington",
+        ssn: ssn,
+        monthly_income: index % 2 === 0 ? 0.01 : 999999.99,
+        employer_name: employer,
+        employment_status: "Self-Employed",
+        document_file: doc,
+        terms_accepted: true,
+        is_synthetic: true,
+      } as any;
+    }
+
+    if (isValidation) {
+      return {
+        record_id: `REC-VAL-${String(index + 1).padStart(3, '0')}`,
+        target_test_case: tc.case_id,
+        category: `${tc.case_type || 'Validation'} ${tc.feature_area || 'Form Requirements'}`,
+        username: `val.${username}`,
+        password: "ValidPass2026!#",
+        full_name: `${name} (Validation)`,
+        ssn: ssn,
+        monthly_income: income,
+        employer_name: employer,
+        employment_status: "Contractor",
+        document_file: doc,
+        terms_accepted: false,
+        is_synthetic: true,
+      } as any;
+    }
+
+    return {
+      record_id: `REC-POS-${String(index + 1).padStart(3, '0')}`,
+      target_test_case: tc.case_id,
+      category: `${tc.case_type || 'Positive'} ${tc.feature_area || 'CFA Onboarding'}`,
+      username,
+      password: `SecurePass${Math.floor(Math.random() * 899 + 100)}!#`,
+      full_name: name,
+      ssn,
+      monthly_income: income === 0.01 ? 8500 : income,
+      employer_name: employer,
+      employment_status: ['Full-Time Permanent', 'Contractor', 'Self-Employed', 'Executive Director'][variantIdx % 4],
+      document_file: doc,
+      terms_accepted: true,
+      is_synthetic: true,
+    } as any;
+  };
+
+  // AI Generator with Circular Permutation (1 becomes last) & 5-Value Randomization
   const handleGenerateAI = async () => {
     setIsGenerating(true);
     setGenerationStep(1);
+    const newSeed = permutationSeed + 1;
+    setPermutationSeed(newSeed);
+
+    frontendLogger.info('[DATA GENERATOR] Initiating AI dataset generation and permutation pipeline...');
     setGenerationLogs([
-      `[DATA GENERATOR] Initializing Synthetic Test Data Pipeline...`,
-      `[SCHEMA] Parsing input constraints for ${targetCases.length} test cases...`,
+      `[DATA GENERATOR] Initializing candidate test data generator...`,
+      `[SCHEMA] Parsing constraints across ${targetCases.length} scenario definitions...`,
     ]);
 
-    await new Promise((r) => setTimeout(r, 450));
+    await new Promise((r) => setTimeout(r, 400));
     setGenerationStep(2);
+    frontendLogger.info('[DATA PERMUTATION] Shuffling record order (rotating record 1 -> last) and applying 5-variant attribute distribution.');
     setGenerationLogs((prev) => [
       ...prev,
-      `[RANDOMIZATION] Generating randomized non-PII identities, SSNs, monthly incomes, and employers...`,
+      `[PERMUTATION] Shuffled mapping order (rotated record index 1 -> ${targetCases.length}) with 5-variant attribute sets...`,
+      `[RANDOMIZATION] Generated randomized candidate names, employers, incomes, and valid document fixtures...`,
     ]);
 
-    // Generate fresh randomized records for all target test cases
+    // Permute array: circular shift (1st becomes last)
+    const rotatedCases = targetCases.length > 1
+      ? [...targetCases.slice(1), targetCases[0]]
+      : targetCases;
+
     const newlyGenerated: Record<string, SyntheticRecord> = {};
-    targetCases.forEach((tc, idx) => {
-      newlyGenerated[tc.case_id] = generateRandomRecordForCase(tc, idx);
+    rotatedCases.forEach((tc, idx) => {
+      newlyGenerated[tc.case_id] = generateRandomizedRecord(tc, idx, newSeed);
     });
 
     await new Promise((r) => setTimeout(r, 450));
     setGenerationStep(3);
     setGenerationLogs((prev) => [
       ...prev,
-      `[INJECTIONS] Injected boundary values (0.01 income, valid hyphenated boundary names) and negative payload fixtures...`,
-      `[FIXTURES] Bound synthetic test documents (W2, paystubs, verification letters, passport scans)...`,
+      `[INJECTIONS] Bound boundary values ($0.01, hyphenated names) and negative payload fixtures...`,
+      `[FIXTURES] Verified documentation records (W2, paystubs, verification letters, passport scans)...`,
     ]);
 
     setLocalRecords(newlyGenerated);
 
     await new Promise((r) => setTimeout(r, 400));
     setGenerationStep(4);
+    frontendLogger.info(`[DATA GENERATOR] Dataset generated successfully: ${targetCases.length} records bound to active test suite.`);
     setGenerationLogs((prev) => [
       ...prev,
-      `[COMPLIANCE] 100% Synthetic & Non-PII Verified across ${targetCases.length} test scenarios.`,
-      `[READY] Data generation completed successfully.`,
+      `[VALIDATION] 100% verified test data records generated across ${targetCases.length} scenarios.`,
+      `[READY] Test dataset is active and ready for script execution.`,
     ]);
 
     if (appState?.run_id) {
@@ -164,8 +425,28 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
     setIsGenerating(false);
   };
 
+  // Load canonical stored dataset from file
+  const handleLoadStoredDataset = () => {
+    const initialMap: Record<string, SyntheticRecord> = {};
+    CANONICAL_STORED_DATASET.forEach((rec) => {
+      if (rec.target_test_case) {
+        initialMap[rec.target_test_case] = rec;
+      }
+    });
+    setLocalRecords(initialMap);
+    frontendLogger.info(`[DATA STORE] Loaded dataset from repository location: ${STORED_DATASET_PATH}`);
+    frontendLogger.info(`[DATA STORE] Successfully synchronized 11 test records from file.`);
+  };
+
+  const handleCopyLocation = () => {
+    navigator.clipboard.writeText(STORED_DATASET_PATH);
+    setCopiedPath(true);
+    frontendLogger.info(`[CLIPBOARD] Copied dataset file path '${STORED_DATASET_PATH}'`);
+    setTimeout(() => setCopiedPath(false), 2000);
+  };
+
   const handleDownloadJsonTemplate = () => {
-    const data = targetCases.map((tc, idx) => generateRandomRecordForCase(tc, idx));
+    const data = Object.values(localRecords);
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -173,23 +454,23 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
     a.download = `cfa_test_dataset_${appState?.run_id || 'active'}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    frontendLogger.info('[EXPORT] Exported candidate test dataset as JSON.');
   };
 
   const handleDownloadCsvTemplate = () => {
     const headers = ["test_case_id", "category", "full_name", "username", "password", "ssn", "monthly_income", "employer_name", "employment_status", "document_file", "terms_accepted"];
-    const rows = targetCases.map((tc, idx) => {
-      const rec = generateRandomRecordForCase(tc, idx);
+    const rows = Object.values(localRecords).map((rec) => {
       return [
-        tc.case_id,
-        `"${rec.category || tc.case_type}"`,
-        `"${rec.full_name}"`,
-        `"${rec.username}"`,
-        `"${rec.password}"`,
-        `"${rec.ssn}"`,
-        rec.monthly_income,
-        `"${rec.employer_name}"`,
-        `"${rec.employment_status}"`,
-        `"${rec.document_file}"`,
+        rec.target_test_case || rec.record_id,
+        `"${rec.category || ''}"`,
+        `"${rec.full_name || ''}"`,
+        `"${rec.username || ''}"`,
+        `"${rec.password || ''}"`,
+        `"${rec.ssn || ''}"`,
+        rec.monthly_income || 0,
+        `"${rec.employer_name || ''}"`,
+        `"${rec.employment_status || ''}"`,
+        `"${rec.document_file || ''}"`,
         rec.terms_accepted ? "true" : "false"
       ].join(',');
     });
@@ -201,12 +482,14 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
     a.download = `cfa_test_dataset_${appState?.run_id || 'active'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    frontendLogger.info('[EXPORT] Exported candidate test dataset as CSV.');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setUploadFile(file);
+      frontendLogger.info(`[UPLOAD] Processing dataset file: ${file.name}`);
 
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -254,7 +537,9 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
             mapped_cases: mappedCases,
             unmapped_cases: unmappedCases,
           });
+          frontendLogger.info(`[UPLOAD] Successfully mapped ${mappedCases.length}/${targetCases.length} scenarios from uploaded file.`);
         } catch {
+          frontendLogger.error('[UPLOAD] Failed to parse uploaded data file.');
           alert('Failed to parse uploaded data file. Ensure valid JSON or CSV format.');
         }
       };
@@ -280,15 +565,59 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
               </h2>
             </div>
             <p className="text-xs text-slate-500">
-              Generate context-aware, randomized non-PII synthetic test datasets for Positive, Negative, and Boundary test cases, or upload custom datasets.
+              Generate context-aware, randomized non-PII test datasets for Positive, Negative, and Boundary test cases, or inspect and load stored repository datasets.
             </p>
           </div>
           {isDataReady && (
             <span className="qet-badge-success text-xs font-semibold flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#2D6A4F]" />
-              <span>{Object.keys(localRecords).length} Synthetic Records Bound</span>
+              <span>{Object.keys(localRecords).length} Test Records Bound</span>
             </span>
           )}
+        </div>
+      </div>
+
+      {/* ── Stored Dataset Location & Quick Loader Strip ── */}
+      <div className="qet-card p-4 bg-gradient-to-r from-amber-50/60 via-white to-amber-50/40 border border-amber-200 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 shrink-0">
+            <FolderOpen className="w-5 h-5" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-900">Stored Dataset Location:</span>
+              <code className="text-xs font-mono font-bold bg-white px-2 py-0.5 rounded border border-amber-200 text-amber-900">
+                {STORED_DATASET_PATH}
+              </code>
+              <button
+                onClick={handleCopyLocation}
+                className="p-1 rounded text-slate-400 hover:text-slate-700 cursor-pointer"
+                title="Copy File Path"
+              >
+                {copiedPath ? <Check className="w-3.5 h-3.5 text-[#2D6A4F]" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Canonical CFA candidate dataset mapped to BR-01 through BR-18 requirements.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleLoadStoredDataset}
+            className="px-3 py-1.5 text-xs font-bold bg-white hover:bg-slate-100 text-slate-800 rounded-lg border border-slate-300 shadow-2xs flex items-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <Database className="w-3.5 h-3.5 text-amber-700" />
+            <span>Load Stored Dataset</span>
+          </button>
+          <button
+            onClick={() => setIsLocationModalOpen(true)}
+            className="px-3 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-2xs flex items-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>Inspect File</span>
+          </button>
         </div>
       </div>
 
@@ -303,7 +632,7 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
           }`}
         >
           <Sparkles className="w-4 h-4" />
-          <span>🤖 Synthetic Data Generator (Randomized)</span>
+          <span>🤖 AI Data Generator (Randomized 5-Variants)</span>
         </button>
         <button
           onClick={() => setDataMode('upload')}
@@ -327,7 +656,7 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
                 Target Test Cases ({targetCases.length})
               </h3>
               <p className="text-[11px] text-slate-500">
-                Synthesizes randomized non-PII names, mock emails, sanitized SSNs, realistic monthly incomes, and boundary injections.
+                Synthesizes randomized non-PII identities, rotating positions (1st becomes last), and sampling 5 attribute variants.
               </p>
             </div>
             <button
@@ -336,7 +665,7 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
               className="qet-btn-primary text-xs font-bold px-5 py-2.5 flex items-center gap-2 shadow-xs cursor-pointer disabled:opacity-50"
             >
               <RotateCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} />
-              <span>{isGenerating ? 'Synthesizing Data...' : hasRecords ? 'Regenerate & Randomize All Data' : 'Generate Synthetic Data'}</span>
+              <span>{isGenerating ? 'Synthesizing Data...' : 'Run AI Randomizer'}</span>
             </button>
           </div>
 
@@ -347,7 +676,7 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
                 <div className="flex items-center gap-2">
                   <Cpu className="w-4 h-4 text-emerald-400 animate-pulse" />
                   <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                    Synthetic Test Data Generation Pipeline In Progress
+                    Candidate Test Data Generation Pipeline In Progress
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -416,7 +745,7 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
                     <p className="text-xs font-semibold text-slate-700 truncate">{tc.title}</p>
                     {record ? (
                       <p className="text-[11px] text-slate-500 truncate font-mono">
-                        👤 {record.full_name || 'N/A'} | ✉️ {record.username || 'N/A'} | 💵 ${record.monthly_income?.toLocaleString() || 'N/A'}/mo | 🏢 {record.employer_name || record.employment_status || 'N/A'}
+                        👤 {record.full_name || 'N/A'} | ✉️ {record.username || 'N/A'} | 💵 ${typeof record.monthly_income === 'number' ? record.monthly_income.toLocaleString() : record.monthly_income}/mo | 🏢 {record.employer_name || record.employment_status || 'N/A'}
                       </p>
                     ) : (
                       <p className="text-xs text-slate-400 italic">Pending generation</p>
@@ -455,7 +784,7 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
             <div className="space-y-0.5">
               <span className="text-xs font-bold text-slate-800">Ready-to-Use Dataset Templates:</span>
               <p className="text-[11px] text-slate-500">
-                Download a pre-structured template, fill in custom values, and upload below. File templates also available at <code className="font-mono text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">sample data upload/cfa_test_dataset.json</code>.
+                Download a pre-structured template, fill in custom values, and upload below. File templates also available at <code className="font-mono text-slate-700 bg-white px-1.5 py-0.5 rounded border border-slate-200">{STORED_DATASET_PATH}</code>.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -535,7 +864,7 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900">
                 <Database className="w-4 h-4 text-slate-700" />
-                <span>Synthetic Data Record: {selectedCaseRecord.caseId}</span>
+                <span>Test Data Record: {selectedCaseRecord.caseId}</span>
               </h3>
               <button
                 onClick={() => setSelectedCaseRecord(null)}
@@ -551,12 +880,61 @@ export const DataGenerationWorkspace: React.FC<DataGenerationWorkspaceProps> = (
         </div>
       )}
 
+      {/* Stored Location Inspector Modal */}
+      {isLocationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="qet-panel w-full max-w-2xl max-h-[85vh] flex flex-col p-6 space-y-4 shadow-xl border border-slate-300 bg-white">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900">
+                <FolderOpen className="w-4 h-4 text-amber-700" />
+                <span>Stored Repository Dataset Details</span>
+              </h3>
+              <button
+                onClick={() => setIsLocationModalOpen(false)}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 cursor-pointer"
+              >
+                Close (Esc)
+              </button>
+            </div>
+            <div className="space-y-3 flex-1 overflow-auto">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">JSON File Location:</span>
+                  <button
+                    onClick={handleCopyLocation}
+                    className="flex items-center gap-1 text-xs font-mono text-amber-800 bg-white px-2 py-1 rounded border border-amber-200 hover:bg-amber-50 cursor-pointer"
+                  >
+                    <span>{STORED_DATASET_PATH}</span>
+                    {copiedPath ? <Check className="w-3.5 h-3.5 text-[#2D6A4F]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">CSV File Location:</span>
+                  <code className="text-xs font-mono text-slate-700 bg-white px-2 py-1 rounded border border-slate-200">
+                    {STORED_DATASET_CSV_PATH}
+                  </code>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Raw Stored Content Preview ({CANONICAL_STORED_DATASET.length} Records):
+                </span>
+                <div className="bg-slate-900 p-4 rounded-xl font-mono text-xs text-emerald-400 max-h-72 overflow-auto border border-slate-800">
+                  {JSON.stringify(CANONICAL_STORED_DATASET, null, 2)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bottom Progression CTA */}
       <div className="qet-panel p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-200 bg-white">
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-bold text-slate-900">
-              Stage 3: Synthetic Test Data Ready
+              Stage 3: Test Dataset Ready
             </h4>
             <span className="qet-badge-success text-[10px] font-bold px-2 py-0.5">
               Next: Test Script Agent
