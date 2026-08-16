@@ -47,6 +47,8 @@ export const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [aiSettings, setAISettings] = useState<AISettingsResponse | null>(null);
   const [copiedRunId, setCopiedRunId] = useState(false);
+  // Dashboard is only unlocked after the user clicks "Proceed to Dashboard" from Execute
+  const [dashboardUnlocked, setDashboardUnlocked] = useState(false);
 
   // Drawers & Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -132,7 +134,15 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [appState?.run_id]);
 
-  const handleSelectAgent = (agentId: string) => {
+  const handleSelectAgent = (agentId: string, fromProceed = false) => {
+    // Dashboard can only be navigated to by clicking "Proceed" from Execute, not directly from the rail
+    if (agentId === 'dashboard' && !fromProceed && !dashboardUnlocked) {
+      frontendLogger.warn('[NAV] Dashboard is locked until the Execute stage is completed via the pipeline.');
+      return;
+    }
+    if (agentId === 'dashboard') {
+      setDashboardUnlocked(true);
+    }
     setSelectedAgentId(agentId);
     frontendLogger.info(`[NAV] Switched active pipeline view to: ${agentId}`);
   };
@@ -253,7 +263,10 @@ export const App: React.FC = () => {
             selectedCaseIds={selectedCaseIds}
             onSelectCaseIds={setSelectedCaseIds}
             onRefresh={refreshStatus}
-            onProceedNext={() => handleSelectAgent('dashboard')}
+            onProceedNext={() => {
+              setDashboardUnlocked(true);
+              handleSelectAgent('dashboard', true);
+            }}
           />
         );
       case 'dashboard':
@@ -283,6 +296,7 @@ export const App: React.FC = () => {
         onSelectAgent={handleSelectAgent}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenRunsHistory={() => setIsRunsHistoryOpen(true)}
+        dashboardUnlocked={dashboardUnlocked}
       />
 
       {/* 2. Main Work Area */}

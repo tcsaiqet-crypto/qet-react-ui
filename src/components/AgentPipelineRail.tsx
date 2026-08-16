@@ -30,6 +30,7 @@ export interface AgentPipelineRailProps {
   onToggleViewMode?: any;
   onOpenSettings?: () => void;
   onOpenRunsHistory?: () => void;
+  dashboardUnlocked?: boolean;
 }
 
 const statusIcon = (status: AgentStatus) => {
@@ -65,6 +66,7 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
   onSelectAgent,
   onOpenSettings,
   onOpenRunsHistory,
+  dashboardUnlocked = false,
 }) => {
   const [understandingExpanded, setUnderstandingExpanded] = useState(true);
   const flow = resolveAgentFlow(appState);
@@ -111,34 +113,42 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
           const status = statuses[idx] || 'pending';
           const isSelected = selectedAgentId === stage.id || (stage.id === 'application_understanding' && (selectedAgentId?.startsWith('subagent_1') || selectedAgentId === 'application_understanding'));
           const isParent = stage.id === 'application_understanding';
+          const isDashboard = stage.id === 'dashboard';
+          const isLocked = isDashboard && !dashboardUnlocked;
 
           return (
             <div key={stage.id} className="space-y-1">
               {/* Main Stage Row */}
               <div
                 onClick={() => {
+                  if (isLocked) return;
                   if (isParent) {
                     handleSelect('subagent_1a_req_intake');
                   } else {
                     handleSelect(stage.id);
                   }
                 }}
-                className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-white border border-slate-300 text-slate-900 shadow-sm font-semibold'
-                    : 'hover:bg-slate-200/60 text-slate-600 border border-transparent font-medium'
+                className={`group flex items-center justify-between p-2.5 rounded-xl transition-all ${
+                  isLocked
+                    ? 'opacity-40 cursor-not-allowed text-slate-400 border border-transparent'
+                    : isSelected
+                    ? 'bg-white border border-slate-300 text-slate-900 shadow-sm font-semibold cursor-pointer'
+                    : 'hover:bg-slate-200/60 text-slate-600 border border-transparent font-medium cursor-pointer'
                 }`}
+                title={isLocked ? 'Complete the Execute stage to unlock Dashboard' : undefined}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   {getStageIcon(stage.id)}
                   <div className="truncate">
                     <p className="text-xs font-bold truncate leading-tight text-slate-900">{stage.label}</p>
-                    <p className="text-[10px] text-slate-500 truncate leading-tight">{stage.description}</p>
+                    <p className="text-[10px] text-slate-500 truncate leading-tight">
+                      {isLocked ? 'Complete Execute stage to unlock' : stage.description}
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {statusIcon(status)}
+                  {isLocked ? <Lock className="h-4 w-4 shrink-0 text-slate-300" /> : statusIcon(status)}
                   {isParent && (
                     <button
                       onClick={(e) => {
