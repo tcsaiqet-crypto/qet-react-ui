@@ -7,11 +7,12 @@ import {
   ArrowRight, 
   ChevronDown, 
   ChevronRight, 
-  Sparkles,
-  Loader2,
-  Activity,
-  Bot,
-  Check
+  Sparkles, 
+  Loader2, 
+  Activity, 
+  Bot, 
+  Check,
+  BrainCircuit
 } from 'lucide-react';
 import { startPipeline } from '../../services/apiClient';
 import { AppState, TestCase } from '../../types';
@@ -34,24 +35,53 @@ export const TestCaseWorkspace: React.FC<TestCaseWorkspaceProps> = ({
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('ALL');
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationStep, setGenerationStep] = useState(1);
+  const [progressPercent, setProgressPercent] = useState(15);
+  const [activeStepText, setActiveStepText] = useState('Ingesting discovered UI components, selectors & user journeys...');
 
   const testSuite = appState?.test_suite;
   const testCases: TestCase[] = testSuite?.test_cases || [];
+  const isRunning = isGenerating || appState?.status === 'generation_running';
 
-  // Step cycling during test case generation
+  // Dynamic progress animation
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isGenerating) {
-      setGenerationStep(1);
-      timer = setInterval(() => {
-        setGenerationStep((prev) => (prev < 3 ? prev + 1 : prev));
-      }, 3000);
-    }
-    return () => clearInterval(timer);
-  }, [isGenerating]);
+    let progressTimer: NodeJS.Timeout;
+    let textTimer: NodeJS.Timeout;
 
-  // Filter test cases by selected category
+    if (isRunning) {
+      setProgressPercent(15);
+      
+      const stepMessages = [
+        'Ingesting discovered UI components, selectors & user journeys...',
+        'AI synthesizing Positive happy-path scenarios...',
+        'AI synthesizing Negative & Boundary edge-case scenarios...',
+        'AI synthesizing Validation rules & Error-handling flows...',
+        'Constructing requirement traceability matrix & confidence mapping...',
+        'Validating Playwright locator feasibility across generated tests...',
+      ];
+      let msgIndex = 0;
+      setActiveStepText(stepMessages[0]);
+
+      textTimer = setInterval(() => {
+        msgIndex = (msgIndex + 1) % stepMessages.length;
+        setActiveStepText(stepMessages[msgIndex]);
+      }, 2800);
+
+      progressTimer = setInterval(() => {
+        setProgressPercent((prev) => {
+          if (prev >= 94) return 94; // Hold near completion until response arrives
+          return prev + Math.floor(Math.random() * 8) + 4;
+        });
+      }, 800);
+    } else if (testCases.length > 0) {
+      setProgressPercent(100);
+    }
+
+    return () => {
+      clearInterval(progressTimer);
+      clearInterval(textTimer);
+    };
+  }, [isRunning, testCases.length]);
+
   const filteredCases = testCases.filter((tc) => {
     if (activeCategoryFilter === 'ALL') return true;
     return tc.case_type?.toUpperCase() === activeCategoryFilter.toUpperCase();
@@ -126,61 +156,105 @@ export const TestCaseWorkspace: React.FC<TestCaseWorkspaceProps> = ({
           </div>
           <button
             onClick={handleGenerate}
-            disabled={isGenerating}
-            className="qet-btn-secondary text-xs font-semibold px-3 py-1.5 flex items-center gap-1.5"
+            disabled={isRunning}
+            className="qet-btn-secondary text-xs font-semibold px-4 py-2 flex items-center gap-2 shadow-xs hover:bg-slate-100"
           >
-            <RotateCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
-            <span>{testCases.length > 0 ? 'Regenerate Suite' : isGenerating ? 'Generating...' : 'Generate Test Cases'}</span>
+            <RotateCw className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin text-[#2D6A4F]' : ''}`} />
+            <span>{testCases.length > 0 ? 'Regenerate Suite' : isRunning ? 'AI Synthesizing...' : 'Generate Test Cases'}</span>
           </button>
         </div>
       </div>
 
-      {/* Live AI Generation Progress Card */}
-      {isGenerating && (
-        <div className="qet-card p-6 space-y-4 border border-[#2D6A4F]/40 bg-[#E8F5E9]/30">
+      {/* ── Active AI Progress Dashboard & Animation ── */}
+      {isRunning && (
+        <div className="qet-card p-6 space-y-5 border border-emerald-200 bg-gradient-to-b from-[#E8F5E9]/50 to-white shadow-sm animate-fade-in">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Bot className="w-5 h-5 text-[#2D6A4F] animate-bounce" />
-              <h3 className="text-sm font-bold text-[#1B4332]">
-                Synthesizing AI Test Cases in Progress...
-              </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#E8F5E9] flex items-center justify-center text-[#2D6A4F] animate-pulse">
+                <BrainCircuit className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>Synthesizing AI Test Cases in Progress</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-[#2D6A4F]" />
+                </h3>
+                <p className="text-xs text-[#1B4332] font-medium mt-0.5 animate-pulse">
+                  {activeStepText}
+                </p>
+              </div>
             </div>
-            <span className="text-xs font-mono font-bold text-[#2D6A4F]">
-              Step {generationStep} of 3
+            <span className="text-base font-mono font-bold text-[#2D6A4F] bg-[#E8F5E9] px-3 py-1 rounded-lg border border-[#C8E6C9]">
+              {progressPercent}%
             </span>
           </div>
 
-          {/* Progress Bar */}
-          <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden border border-slate-300">
+          {/* Smooth Animated Progress Bar */}
+          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200 p-0.5">
             <div 
-              className="bg-[#2D6A4F] h-full transition-all duration-700 rounded-full"
-              style={{ width: `${generationStep === 1 ? 35 : generationStep === 2 ? 70 : 95}%` }}
+              className="bg-gradient-to-r from-[#2D6A4F] via-[#386641] to-[#2D6A4F] h-full transition-all duration-500 rounded-full shadow-xs"
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
 
-          {/* Detailed Sub-Steps */}
-          <div className="space-y-2 text-xs">
-            <div className={`flex items-center gap-2 ${generationStep >= 1 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
-              {generationStep > 1 ? <Check className="w-3.5 h-3.5 text-[#2D6A4F] shrink-0" /> : <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2D6A4F] shrink-0" />}
-              <span>Step 1: Ingesting discovered UI components, selectors & user journeys</span>
+          {/* Sub-Agent Micro-Steps */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-xs">
+            <div className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+              progressPercent >= 30 ? 'bg-white border-[#C8E6C9] shadow-2xs text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}>
+              {progressPercent >= 40 ? <Check className="w-4 h-4 text-[#2D6A4F] shrink-0" /> : <Loader2 className="w-4 h-4 animate-spin text-[#2D6A4F] shrink-0" />}
+              <span className="font-medium truncate">1. Component & Flow Ingestion</span>
             </div>
-            <div className={`flex items-center gap-2 ${generationStep >= 2 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
-              {generationStep > 2 ? <Check className="w-3.5 h-3.5 text-[#2D6A4F] shrink-0" /> : generationStep === 2 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2D6A4F] shrink-0" /> : <Activity className="w-3.5 h-3.5 shrink-0" />}
-              <span>Step 2: AI synthesizing Positive, Negative, Boundary, Validation, and Error-Handling scenarios</span>
+
+            <div className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+              progressPercent >= 50 ? 'bg-white border-[#C8E6C9] shadow-2xs text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}>
+              {progressPercent >= 75 ? <Check className="w-4 h-4 text-[#2D6A4F] shrink-0" /> : progressPercent >= 40 ? <Loader2 className="w-4 h-4 animate-spin text-[#2D6A4F] shrink-0" /> : <Activity className="w-4 h-4 shrink-0 text-slate-300" />}
+              <span className="font-medium truncate">2. 5-Category Scenario Synthesis</span>
             </div>
-            <div className={`flex items-center gap-2 ${generationStep >= 3 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
-              {generationStep === 3 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2D6A4F] shrink-0" /> : <Activity className="w-3.5 h-3.5 shrink-0" />}
-              <span>Step 3: Constructing requirement traceability matrix & confidence mapping</span>
+
+            <div className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+              progressPercent >= 80 ? 'bg-white border-[#C8E6C9] shadow-2xs text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}>
+              {progressPercent >= 95 ? <Check className="w-4 h-4 text-[#2D6A4F] shrink-0" /> : progressPercent >= 75 ? <Loader2 className="w-4 h-4 animate-spin text-[#2D6A4F] shrink-0" /> : <Activity className="w-4 h-4 shrink-0 text-slate-300" />}
+              <span className="font-medium truncate">3. Traceability & Assertions</span>
             </div>
           </div>
         </div>
       )}
 
-      {testCases.length > 0 ? (
-        <div className="space-y-4">
+      {/* Shimmer Skeleton Placeholder while Running */}
+      {isRunning && (
+        <div className="space-y-3 animate-pulse">
+          <div className="qet-card p-4 flex items-center justify-between bg-white border border-slate-200">
+            <div className="flex gap-2">
+              <div className="h-6 bg-slate-200 rounded w-16" />
+              <div className="h-6 bg-slate-100 rounded w-20" />
+              <div className="h-6 bg-slate-100 rounded w-20" />
+            </div>
+            <div className="h-6 bg-slate-200 rounded w-24" />
+          </div>
+
+          <div className="qet-card divide-y divide-slate-100 bg-white border border-slate-200">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="p-4 flex items-center justify-between">
+                <div className="space-y-2 w-2/3">
+                  <div className="flex gap-2">
+                    <div className="h-4 bg-slate-200 rounded w-24" />
+                    <div className="h-4 bg-slate-100 rounded w-16" />
+                  </div>
+                  <div className="h-3 bg-slate-100 rounded w-3/4" />
+                </div>
+                <div className="h-6 bg-slate-100 rounded w-8" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {testCases.length > 0 && !isRunning ? (
+        <div className="space-y-4 animate-fade-in">
           {/* Controls Strip: Filters + Bulk Selection */}
           <div className="flex flex-wrap items-center justify-between gap-4 qet-card p-4 bg-white">
-            {/* Category Filter Pills */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
                 <Filter className="w-3.5 h-3.5" />
@@ -201,7 +275,6 @@ export const TestCaseWorkspace: React.FC<TestCaseWorkspaceProps> = ({
               ))}
             </div>
 
-            {/* Bulk Selection Actions */}
             <div className="flex items-center gap-2">
               <button
                 onClick={handleSelectAllFiltered}
@@ -229,7 +302,6 @@ export const TestCaseWorkspace: React.FC<TestCaseWorkspaceProps> = ({
                 <div key={tc.case_id} className="transition-colors hover:bg-slate-50">
                   <div className="p-4 flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 min-w-0">
-                      {/* Checkbox */}
                       <button
                         onClick={() => handleToggleSelect(tc.case_id)}
                         className="mt-0.5 text-slate-400 hover:text-slate-600 transition-colors"
@@ -309,8 +381,8 @@ export const TestCaseWorkspace: React.FC<TestCaseWorkspaceProps> = ({
           </div>
         </div>
       ) : (
-        !isGenerating && (
-          <div className="qet-card p-12 text-center space-y-4 bg-white">
+        !isRunning && (
+          <div className="qet-card p-12 text-center space-y-4 bg-white border border-slate-200">
             <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center bg-[#E8F5E9] text-[#2D6A4F]">
               <Sparkles className="w-6 h-6" />
             </div>
@@ -343,7 +415,7 @@ export const TestCaseWorkspace: React.FC<TestCaseWorkspaceProps> = ({
         </div>
         <button
           onClick={onProceedNext}
-          disabled={selectedCaseIds.length === 0 || isGenerating}
+          disabled={selectedCaseIds.length === 0 || isRunning}
           className="qet-btn-success inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold whitespace-nowrap cursor-pointer rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span>Proceed to Data Generation ({selectedCaseIds.length})</span>

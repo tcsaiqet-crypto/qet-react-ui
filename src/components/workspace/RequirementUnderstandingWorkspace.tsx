@@ -6,24 +6,22 @@ import {
   ShieldAlert, 
   CheckCircle2, 
   RotateCw, 
-  ArrowRight,
-  Monitor,
-  Globe,
-  Gauge,
-  Accessibility,
-  Check,
-  AlertTriangle,
-  FileCode,
-  KeyRound,
-  Plus,
-  ExternalLink,
-  X,
-  Loader2,
-  Activity,
-  Bot
+  ArrowRight, 
+  Monitor, 
+  Globe, 
+  Gauge, 
+  Accessibility, 
+  Check, 
+  FileCode, 
+  KeyRound, 
+  Plus, 
+  X, 
+  Loader2, 
+  Activity, 
+  BrainCircuit
 } from 'lucide-react';
 import { startUnderstanding, updateAISettings } from '../../services/apiClient';
-import { AppState, ApplicationUnderstanding } from '../../types';
+import { AppState } from '../../types';
 
 interface RequirementUnderstandingWorkspaceProps {
   appState: AppState | null;
@@ -40,7 +38,8 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
 }) => {
   const [activeDomainTab, setActiveDomainTab] = useState<'ui' | 'api' | 'performance' | 'accessibility'>('ui');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStep, setAnalysisStep] = useState(1);
+  const [progressPercent, setProgressPercent] = useState(15);
+  const [activeStepText, setActiveStepText] = useState('Parsing uploaded requirements & codebase AST snapshot...');
   const [newKeyInput, setNewKeyInput] = useState('');
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keySaveMsg, setKeySaveMsg] = useState<string | null>(null);
@@ -49,6 +48,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
   const understanding = appState?.understanding;
   const isCompleted = understanding && (understanding.summary || understanding.components?.length > 0);
   const errorDetails = appState?.last_error;
+  const isRunning = isAnalyzing || appState?.status === 'ai_understanding_running';
 
   const isKeysExhausted = [
     'all_gemini_keys_exhausted',
@@ -57,16 +57,45 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
     'provider_key_rejected',
   ].includes(errorDetails?.error_code || '') && !isKeyBannerDismissed;
 
+  // Dynamic progress animation
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isAnalyzing) {
-      setAnalysisStep(1);
-      timer = setInterval(() => {
-        setAnalysisStep((prev) => (prev < 3 ? prev + 1 : prev));
-      }, 3500);
+    let progressTimer: NodeJS.Timeout;
+    let textTimer: NodeJS.Timeout;
+
+    if (isRunning) {
+      setProgressPercent(15);
+      
+      const stepMessages = [
+        'Ingesting requirement specifications and codebase AST symbols...',
+        'AI reasoning across UI routes, buttons, inputs and event handlers...',
+        'Grounding reliable DOM selectors (data-testid, IDs, ARIA roles)...',
+        'Synthesizing end-to-end user navigation flows & decision nodes...',
+        'Evaluating 15-point quality checklist and requirement coverage matrix...',
+        'Finalizing structured intelligence schema payload...',
+      ];
+      let msgIndex = 0;
+      setActiveStepText(stepMessages[0]);
+
+      textTimer = setInterval(() => {
+        msgIndex = (msgIndex + 1) % stepMessages.length;
+        setActiveStepText(stepMessages[msgIndex]);
+      }, 3000);
+
+      progressTimer = setInterval(() => {
+        setProgressPercent((prev) => {
+          if (prev >= 94) return 94;
+          return prev + Math.floor(Math.random() * 8) + 4;
+        });
+      }, 800);
+    } else if (isCompleted) {
+      setProgressPercent(100);
     }
-    return () => clearInterval(timer);
-  }, [isAnalyzing]);
+
+    return () => {
+      clearInterval(progressTimer);
+      clearInterval(textTimer);
+    };
+  }, [isRunning, isCompleted]);
 
   const handleStartAnalysis = async () => {
     if (!appState?.run_id) return;
@@ -108,8 +137,8 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
 
   return (
     <div className="space-y-6 animate-fade-in p-2">
-      {/* Header Banner */}
-      <div className="qet-panel p-6 border-l-4 border-purple-600 bg-white">
+      {/* Header Banner (Blue Accent) */}
+      <div className="qet-panel p-6 border-l-4 border-blue-600 bg-white">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -127,13 +156,13 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
           <div className="flex items-center gap-2">
             <button
               onClick={handleStartAnalysis}
-              disabled={isAnalyzing}
-              className="qet-btn-secondary text-xs font-semibold px-3 py-1.5 flex items-center gap-1.5"
+              disabled={isRunning}
+              className="qet-btn-secondary text-xs font-semibold px-4 py-2 flex items-center gap-2 shadow-xs hover:bg-slate-100"
             >
-              <RotateCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
-              <span>{isCompleted ? 'Re-Analyze' : isAnalyzing ? 'Analyzing...' : 'Run AI Understanding'}</span>
+              <RotateCw className={`w-3.5 h-3.5 ${isRunning ? 'animate-spin text-blue-600' : ''}`} />
+              <span>{isCompleted ? 'Re-Analyze' : isRunning ? 'AI Synthesizing...' : 'Run AI Understanding'}</span>
             </button>
-            {isCompleted && (
+            {isCompleted && !isRunning && (
               <span className="qet-badge-success text-xs font-semibold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#2D6A4F]" />
                 <span>Validated</span>
@@ -143,47 +172,97 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
         </div>
       </div>
 
-      {/* Live AI Progress Card */}
-      {isAnalyzing && (
-        <div className="qet-card p-6 space-y-4 border border-purple-300 bg-purple-50/40">
+      {/* ── Active AI Blue Progress Dashboard & Animation ── */}
+      {isRunning && (
+        <div className="qet-card p-6 space-y-5 border border-blue-200 bg-gradient-to-b from-blue-50/70 to-white shadow-sm">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Bot className="w-5 h-5 text-purple-700 animate-bounce" />
-              <h3 className="text-sm font-bold text-purple-900">
-                AI Application Understanding in Progress...
-              </h3>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 animate-pulse">
+                <BrainCircuit className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>AI Application Understanding in Progress</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                </h3>
+                <p className="text-xs text-blue-700 font-medium mt-0.5 animate-pulse">
+                  {activeStepText}
+                </p>
+              </div>
             </div>
-            <span className="text-xs font-mono font-bold text-purple-700">
-              Step {analysisStep} of 3
+            <span className="text-base font-mono font-bold text-blue-700 bg-blue-100/80 px-3 py-1 rounded-lg border border-blue-200">
+              {progressPercent}%
             </span>
           </div>
 
-          <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden border border-slate-300">
+          {/* Smooth Blue Animated Progress Bar */}
+          <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-200 p-0.5">
             <div 
-              className="bg-purple-600 h-full transition-all duration-700 rounded-full"
-              style={{ width: `${analysisStep === 1 ? 35 : analysisStep === 2 ? 70 : 95}%` }}
+              className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 h-full transition-all duration-500 rounded-full shadow-xs"
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
 
-          <div className="space-y-2 text-xs">
-            <div className={`flex items-center gap-2 ${analysisStep >= 1 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
-              {analysisStep > 1 ? <Check className="w-3.5 h-3.5 text-[#2D6A4F] shrink-0" /> : <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600 shrink-0" />}
-              <span>Step 1: Parsing requirement documents & building AST codebase snapshot</span>
+          {/* Sub-Agent Micro-Steps */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 text-xs">
+            <div className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+              progressPercent >= 30 ? 'bg-white border-blue-200 shadow-2xs text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}>
+              {progressPercent >= 40 ? <Check className="w-4 h-4 text-[#2D6A4F] shrink-0" /> : <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" />}
+              <span className="font-medium truncate">1. Codebase & Doc Ingestion</span>
             </div>
-            <div className={`flex items-center gap-2 ${analysisStep >= 2 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
-              {analysisStep > 2 ? <Check className="w-3.5 h-3.5 text-[#2D6A4F] shrink-0" /> : analysisStep === 2 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600 shrink-0" /> : <Activity className="w-3.5 h-3.5 shrink-0" />}
-              <span>Step 2: Requesting UI components, user flows & DOM selector synthesis from AI</span>
+
+            <div className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+              progressPercent >= 50 ? 'bg-white border-blue-200 shadow-2xs text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}>
+              {progressPercent >= 75 ? <Check className="w-4 h-4 text-[#2D6A4F] shrink-0" /> : progressPercent >= 40 ? <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" /> : <Activity className="w-4 h-4 shrink-0 text-slate-300" />}
+              <span className="font-medium truncate">2. DOM Selector Grounding</span>
             </div>
-            <div className={`flex items-center gap-2 ${analysisStep >= 3 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
-              {analysisStep === 3 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600 shrink-0" /> : <Activity className="w-3.5 h-3.5 shrink-0" />}
-              <span>Step 3: Validating requirement gap coverage & 15-point checklist quality</span>
+
+            <div className={`p-3 rounded-xl border flex items-center gap-2.5 transition-all ${
+              progressPercent >= 80 ? 'bg-white border-blue-200 shadow-2xs text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
+            }`}>
+              {progressPercent >= 95 ? <Check className="w-4 h-4 text-[#2D6A4F] shrink-0" /> : progressPercent >= 75 ? <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" /> : <Activity className="w-4 h-4 shrink-0 text-slate-300" />}
+              <span className="font-medium truncate">3. User Flows & 15-Pt Checklist</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shimmer Skeleton Placeholder while Running */}
+      {isRunning && (
+        <div className="space-y-4 animate-pulse">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="qet-card p-5 space-y-3 bg-white border border-slate-200">
+              <div className="h-4 bg-slate-200 rounded w-1/3" />
+              <div className="space-y-2">
+                <div className="h-3 bg-slate-100 rounded w-full" />
+                <div className="h-3 bg-slate-100 rounded w-4/5" />
+                <div className="h-3 bg-slate-100 rounded w-2/3" />
+              </div>
+            </div>
+            <div className="qet-card p-5 space-y-3 bg-white border border-slate-200">
+              <div className="h-4 bg-slate-200 rounded w-1/3" />
+              <div className="space-y-2">
+                <div className="h-3 bg-slate-100 rounded w-full" />
+                <div className="h-3 bg-slate-100 rounded w-4/5" />
+                <div className="h-3 bg-slate-100 rounded w-1/2" />
+              </div>
+            </div>
+          </div>
+
+          <div className="qet-card p-5 space-y-3 bg-white border border-slate-200">
+            <div className="h-4 bg-slate-200 rounded w-1/4" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="h-20 bg-slate-50 rounded-xl border border-slate-100" />
+              <div className="h-20 bg-slate-50 rounded-xl border border-slate-100" />
             </div>
           </div>
         </div>
       )}
 
       {/* Error Banner */}
-      {(errorDetails || appState?.status === 'error') && !isCompleted && !isAnalyzing && (
+      {(errorDetails || appState?.status === 'error') && !isCompleted && !isRunning && (
         <div className="qet-badge-danger p-5 space-y-4">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
@@ -241,17 +320,17 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
         </div>
       )}
 
-      {/* Multi-Domain Testing Tabs */}
+      {/* Multi-Domain Testing Tabs (Blue Accent) */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => setActiveDomainTab('ui')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             activeDomainTab === 'ui'
-              ? 'bg-purple-50 text-purple-900 border border-purple-200'
+              ? 'bg-blue-50 text-blue-900 border border-blue-200'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Monitor className="w-4 h-4 text-purple-600" />
+          <Monitor className="w-4 h-4 text-blue-600" />
           <span>🖥️ UI Testing Requirement</span>
           <span className="qet-badge-success text-[9px] px-1.5 py-0.2">ACTIVE</span>
         </button>
@@ -285,12 +364,12 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
       </div>
 
       {/* Tab Content: UI Testing (Active) */}
-      {activeDomainTab === 'ui' ? (
-        isCompleted ? (
-          <div className="space-y-6">
+      {activeDomainTab === 'ui' && (
+        isCompleted && !isRunning ? (
+          <div className="space-y-6 animate-fade-in">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="qet-card p-5 space-y-2 bg-white">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-700 flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-700 flex items-center gap-2">
                   <Sparkles className="w-4 h-4" />
                   <span>Executive Application Summary</span>
                 </h3>
@@ -300,7 +379,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
               </div>
 
               <div className="qet-card p-5 space-y-2 bg-white">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-700 flex items-center gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-blue-700 flex items-center gap-2">
                   <Layers className="w-4 h-4" />
                   <span>Architecture & Tech Stack</span>
                 </h3>
@@ -313,7 +392,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
             {/* Discovered UI Components */}
             <div className="qet-card p-5 space-y-4 bg-white">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-purple-600" />
+                <FileCode className="w-4 h-4 text-blue-600" />
                 <span>Discovered UI Components & Grounded Selectors ({understanding?.components?.length || 0})</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -341,7 +420,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
             {/* User Flows */}
             <div className="qet-card p-5 space-y-4 bg-white">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
-                <Network className="w-4 h-4 text-purple-600" />
+                <Network className="w-4 h-4 text-blue-600" />
                 <span>End-to-End User Flows ({understanding?.flows?.length || 0})</span>
               </h3>
               <div className="space-y-3">
@@ -365,9 +444,9 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
             </div>
           </div>
         ) : (
-          !isAnalyzing && (
-            <div className="qet-card p-12 text-center space-y-4 bg-white">
-              <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center bg-purple-50 text-purple-600">
+          !isRunning && (
+            <div className="qet-card p-12 text-center space-y-4 bg-white border border-slate-200">
+              <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center bg-blue-50 text-blue-600">
                 <Sparkles className="w-6 h-6" />
               </div>
               <div className="space-y-1">
@@ -381,23 +460,6 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
             </div>
           )
         )
-      ) : (
-        <div className="qet-card p-12 text-center space-y-4 bg-slate-50 border border-slate-200">
-          <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center bg-white border border-slate-200 text-slate-500">
-            {activeDomainTab === 'api' && <Globe className="w-6 h-6" />}
-            {activeDomainTab === 'performance' && <Gauge className="w-6 h-6" />}
-            {activeDomainTab === 'accessibility' && <Accessibility className="w-6 h-6" />}
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-slate-800 capitalize">{activeDomainTab} Testing Suite</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              This testing domain module is scheduled for future release phases.
-            </p>
-          </div>
-          <span className="qet-badge-secondary text-xs px-3 py-1 font-bold">
-            Coming Soon
-          </span>
-        </div>
       )}
 
       {/* Bottom Progression CTA */}
@@ -417,7 +479,7 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
         </div>
         <button
           onClick={onProceedNext}
-          disabled={!isCompleted || isAnalyzing}
+          disabled={!isCompleted || isRunning}
           className="qet-btn-success inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold whitespace-nowrap cursor-pointer rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span>Proceed to Test Case Generation</span>
