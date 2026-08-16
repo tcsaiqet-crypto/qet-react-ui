@@ -104,13 +104,14 @@ export const App: React.FC = () => {
     init();
   }, []);
 
-  // Poll backend logs
+  // Poll backend status and logs
   useEffect(() => {
     const runId = appState?.run_id;
     if (!runId) return;
     const interval = setInterval(() => {
+      refreshStatus(runId);
       fetchBackendLogs(runId);
-    }, 3000);
+    }, 2000);
     return () => clearInterval(interval);
   }, [appState?.run_id]);
 

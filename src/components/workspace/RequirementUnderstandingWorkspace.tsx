@@ -44,11 +44,10 @@ export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandin
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keySaveMsg, setKeySaveMsg] = useState<string | null>(null);
   const [isKeyBannerDismissed, setIsKeyBannerDismissed] = useState(false);
-
   const understanding = appState?.understanding;
-  const isCompleted = understanding && (understanding.summary || understanding.components?.length > 0);
+  const isCompleted = Boolean(understanding && (understanding.summary || (understanding.components && understanding.components.length > 0)));
   const errorDetails = appState?.last_error;
-  const isRunning = isAnalyzing || appState?.status === 'ai_understanding_running';
+  const isRunning = (isAnalyzing || appState?.status === 'ai_understanding_running') && appState?.status !== 'error' && !isCompleted;
 
   const isKeysExhausted = [
     'all_gemini_keys_exhausted',

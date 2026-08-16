@@ -505,7 +505,7 @@ class LLMService:
                     }
 
         try:
-            data = json.loads(cleaned)
+            data = json.loads(cleaned, strict=False)
             if isinstance(data, dict):
                 return data, None
             return None, {
@@ -515,39 +515,59 @@ class LLMService:
                 "raw_preview": cleaned[:300],
             }
         except json.JSONDecodeError as first_error:
+            likely_truncated = LLMService._looks_truncated_json(cleaned)
+            if likely_truncated:
+                return None, {
+                    "parser_stage": "json_decode",
+                    "issue": "Likely truncated JSON output.",
+                    "recovery_attempted": recovery_attempted,
+                    "truncated": True,
+                    "retry_guidance": (
+                        "Output stopped before the JSON closed, usually an output-token limit. "
+                        "Retry with a larger-output model or a smaller source snapshot."
+                    ),
+                    "line": first_error.lineno,
+                    "column": first_error.colno,
+                    "raw_preview": cleaned[:350],
+                }
+
             # Lightweight repair: remove trailing commas before } or ]
             repaired = re.sub(r",\s*([}\]])", r"\1", cleaned)
             if repaired != cleaned:
                 recovery_attempted = True
                 try:
-                    data = json.loads(repaired)
+                    data = json.loads(repaired, strict=False)
                     if isinstance(data, dict):
                         return data, {
                             "parser_stage": "repair",
                             "issue": "Recovered by removing trailing commas.",
                             "recovery_attempted": True,
                         }
-                    return None, {
-                        "parser_stage": "type_check",
-                        "issue": f"Parsed repaired payload type is {type(data).__name__}; expected object.",
-                        "recovery_attempted": True,
-                        "raw_preview": repaired[:300],
-                    }
                 except json.JSONDecodeError:
                     pass
 
-            likely_truncated = LLMService._looks_truncated_json(cleaned)
+            # Try extracting between first { and last }
+            start_brace = cleaned.find("{")
+            end_brace = cleaned.rfind("}")
+            if start_brace != -1 and end_brace > start_brace:
+                sub = cleaned[start_brace : end_brace + 1]
+                try:
+                    data = json.loads(sub, strict=False)
+                    if isinstance(data, dict):
+                        return data, {
+                            "parser_stage": "repair",
+                            "issue": "Recovered by slicing outermost braces.",
+                            "recovery_attempted": True,
+                        }
+                except json.JSONDecodeError:
+                    pass
+
             return None, {
                 "parser_stage": "json_decode",
-                "issue": "Likely truncated JSON output." if likely_truncated else "JSON syntax decode failed.",
+                "issue": "JSON syntax decode failed.",
                 "recovery_attempted": recovery_attempted,
-                "truncated": likely_truncated,
-                "retry_guidance": (
-                    "Output stopped before the JSON closed, usually an output-token limit. "
-                    "Retry with a larger-output model or a smaller source snapshot."
-                    if likely_truncated
-                    else "Model returned non-JSON content. Retry, or switch model if it repeats."
-                ),
+                "truncated": False,
+                "retry_guidance": "Model returned non-JSON content. Retry, or switch model if it repeats.",
                 "line": first_error.lineno,
                 "column": first_error.colno,
                 "raw_preview": cleaned[:350],
