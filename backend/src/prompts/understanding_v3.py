@@ -1,6 +1,6 @@
 """Prompt contract for evidence-grounded application understanding."""
 
-PROMPT_VERSION = "understanding-v3.1-evidence-grounded"
+PROMPT_VERSION = "understanding-v3.2-evidence-grounded"
 
 
 def build_prompt(doc_files: list[str], source_snapshot: str, json_instruction: str) -> str:
@@ -19,7 +19,8 @@ def build_prompt(doc_files: list[str], source_snapshot: str, json_instruction: s
         "Each api_endpoint needs endpoint_id, method, path, description, source_file. "
         "Each requirement_validation item needs item_id, item_name, "
         "status (Present, Partial, Missing, or Not Applicable), evidence_source, confidence, observations. "
-        "Return an empty array when the evidence does not support entries for a key. "
+        "IMPORTANT: You MUST include at least 1 item in 'components' and at least 1 item in 'flows' — "
+        "infer them from the requirement document names and source snapshot even when evidence is sparse. "
         "When output space is limited, prioritize summary, components, flows, then gaps.\n"
         f"Requirement docs: {doc_files}\n"
         f"Source snapshot:\n{source_snapshot}\n"

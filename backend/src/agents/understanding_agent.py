@@ -294,7 +294,9 @@ class UnderstandingAgent(BaseAgent):
         missing_sections = [
             key for key, value in (("components", components), ("flows", flows)) if not value
         ]
-        if missing_sections:
+        # Only hard-fail if BOTH components AND flows are completely absent.
+        # A single sparse section is acceptable — test case generation can still work from the other.
+        if len(missing_sections) >= 2:
             self._emit_subagent(
                 state,
                 "gap_analyzer",
@@ -305,16 +307,22 @@ class UnderstandingAgent(BaseAgent):
             raise AIRequiredFailureException(
                 error_code="schema_validation_failed",
                 error_message=(
-                    f"AI output did not contain usable {' and '.join(missing_sections)}. "
-                    "No sample or placeholder content is substituted in AI-required mode."
+                    "AI output did not contain usable components or flows. "
+                    "This usually means the uploaded documents are too short or the model output was truncated. "
+                    "Try uploading richer requirement documents or retry the analysis."
                 ),
                 diagnostics={
                     "provider": provider,
                     "model": routing.get("model"),
                     "missing_sections": missing_sections,
                     "received_keys": list(llm_data.keys()),
-                    "remediation": "Retry the analysis, or switch provider/model if the model keeps truncating output.",
+                    "remediation": "Upload more detailed requirement documents and retry, or switch AI provider/model.",
                 },
+            )
+        elif missing_sections:
+            logger.warning(
+                "UnderstandingAgent: AI output missing section(s): %s — proceeding with partial output.",
+                missing_sections,
             )
 
         testability_obs = llm_data.get("testability_observations")
