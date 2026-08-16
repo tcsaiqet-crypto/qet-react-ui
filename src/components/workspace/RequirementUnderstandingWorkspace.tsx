@@ -1,0 +1,429 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Sparkles, 
+  Layers, 
+  Network, 
+  ShieldAlert, 
+  CheckCircle2, 
+  RotateCw, 
+  ArrowRight,
+  Monitor,
+  Globe,
+  Gauge,
+  Accessibility,
+  Check,
+  AlertTriangle,
+  FileCode,
+  KeyRound,
+  Plus,
+  ExternalLink,
+  X,
+  Loader2,
+  Activity,
+  Bot
+} from 'lucide-react';
+import { startUnderstanding, updateAISettings } from '../../services/apiClient';
+import { AppState, ApplicationUnderstanding } from '../../types';
+
+interface RequirementUnderstandingWorkspaceProps {
+  appState: AppState | null;
+  onRefresh: (runId: string) => Promise<void>;
+  onProceedNext: () => void;
+  onOpenSettings?: () => void;
+}
+
+export const RequirementUnderstandingWorkspace: React.FC<RequirementUnderstandingWorkspaceProps> = ({
+  appState,
+  onRefresh,
+  onProceedNext,
+  onOpenSettings,
+}) => {
+  const [activeDomainTab, setActiveDomainTab] = useState<'ui' | 'api' | 'performance' | 'accessibility'>('ui');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStep, setAnalysisStep] = useState(1);
+  const [newKeyInput, setNewKeyInput] = useState('');
+  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [keySaveMsg, setKeySaveMsg] = useState<string | null>(null);
+  const [isKeyBannerDismissed, setIsKeyBannerDismissed] = useState(false);
+
+  const understanding = appState?.understanding;
+  const isCompleted = understanding && (understanding.summary || understanding.components?.length > 0);
+  const errorDetails = appState?.last_error;
+
+  const isKeysExhausted = [
+    'all_gemini_keys_exhausted',
+    'provider_auth_failed',
+    'provider_key_missing',
+    'provider_key_rejected',
+  ].includes(errorDetails?.error_code || '') && !isKeyBannerDismissed;
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isAnalyzing) {
+      setAnalysisStep(1);
+      timer = setInterval(() => {
+        setAnalysisStep((prev) => (prev < 3 ? prev + 1 : prev));
+      }, 3500);
+    }
+    return () => clearInterval(timer);
+  }, [isAnalyzing]);
+
+  const handleStartAnalysis = async () => {
+    if (!appState?.run_id) return;
+    try {
+      setIsAnalyzing(true);
+      await startUnderstanding(appState.run_id);
+      await onRefresh(appState.run_id);
+      setIsAnalyzing(false);
+    } catch (err) {
+      setIsAnalyzing(false);
+      await onRefresh(appState.run_id);
+    }
+  };
+
+  const handleSaveNewKey = async () => {
+    const trimmed = newKeyInput.trim();
+    if (!trimmed) return;
+    try {
+      setIsSavingKey(true);
+      setKeySaveMsg(null);
+      await updateAISettings({
+        active_provider: 'gemini',
+        provider_keys: { gemini: trimmed },
+        clear_provider_keys: [],
+      });
+      setKeySaveMsg('Key saved! Retrying analysis...');
+      setNewKeyInput('');
+      setIsKeyBannerDismissed(true);
+      if (appState?.run_id) {
+        await startUnderstanding(appState.run_id);
+        await onRefresh(appState.run_id);
+      }
+    } catch (err: any) {
+      setKeySaveMsg(`Failed to save key: ${err.message || String(err)}`);
+    } finally {
+      setIsSavingKey(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in p-2">
+      {/* Header Banner */}
+      <div className="qet-panel p-6 border-l-4 border-purple-600 bg-white">
+        <div className="flex items-start justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="qet-badge-primary text-[10px] uppercase font-bold px-2 py-0.5">
+                Sub-Agent 1c
+              </span>
+              <h2 className="text-xl font-bold text-slate-900">
+                Requirement Understanding Sub-Agent
+              </h2>
+            </div>
+            <p className="text-xs text-slate-500">
+              AI-driven synthesis of requirements and codebase AST to ground testable components, selectors, and user flows.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleStartAnalysis}
+              disabled={isAnalyzing}
+              className="qet-btn-secondary text-xs font-semibold px-3 py-1.5 flex items-center gap-1.5"
+            >
+              <RotateCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
+              <span>{isCompleted ? 'Re-Analyze' : isAnalyzing ? 'Analyzing...' : 'Run AI Understanding'}</span>
+            </button>
+            {isCompleted && (
+              <span className="qet-badge-success text-xs font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#2D6A4F]" />
+                <span>Validated</span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Live AI Progress Card */}
+      {isAnalyzing && (
+        <div className="qet-card p-6 space-y-4 border border-purple-300 bg-purple-50/40">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <Bot className="w-5 h-5 text-purple-700 animate-bounce" />
+              <h3 className="text-sm font-bold text-purple-900">
+                AI Application Understanding in Progress...
+              </h3>
+            </div>
+            <span className="text-xs font-mono font-bold text-purple-700">
+              Step {analysisStep} of 3
+            </span>
+          </div>
+
+          <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden border border-slate-300">
+            <div 
+              className="bg-purple-600 h-full transition-all duration-700 rounded-full"
+              style={{ width: `${analysisStep === 1 ? 35 : analysisStep === 2 ? 70 : 95}%` }}
+            />
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <div className={`flex items-center gap-2 ${analysisStep >= 1 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
+              {analysisStep > 1 ? <Check className="w-3.5 h-3.5 text-[#2D6A4F] shrink-0" /> : <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600 shrink-0" />}
+              <span>Step 1: Parsing requirement documents & building AST codebase snapshot</span>
+            </div>
+            <div className={`flex items-center gap-2 ${analysisStep >= 2 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
+              {analysisStep > 2 ? <Check className="w-3.5 h-3.5 text-[#2D6A4F] shrink-0" /> : analysisStep === 2 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600 shrink-0" /> : <Activity className="w-3.5 h-3.5 shrink-0" />}
+              <span>Step 2: Requesting UI components, user flows & DOM selector synthesis from AI</span>
+            </div>
+            <div className={`flex items-center gap-2 ${analysisStep >= 3 ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
+              {analysisStep === 3 ? <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600 shrink-0" /> : <Activity className="w-3.5 h-3.5 shrink-0" />}
+              <span>Step 3: Validating requirement gap coverage & 15-point checklist quality</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Banner */}
+      {(errorDetails || appState?.status === 'error') && !isCompleted && !isAnalyzing && (
+        <div className="qet-badge-danger p-5 space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <ShieldAlert className="w-6 h-6 shrink-0 text-rose-600" />
+              <div>
+                <h4 className="text-sm font-bold text-rose-900">Analysis Stage Error</h4>
+                <p className="text-xs text-rose-700">
+                  {errorDetails?.error_message || 'An error occurred during AI analysis.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Dismissible Key Recovery Prompt */}
+          {isKeysExhausted && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3 relative">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-700 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-amber-900">All Gemini API keys exhausted or rejected</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      Enter a fresh API key below to retry immediately.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsKeyBannerDismissed(true)}
+                  title="Hide prompt"
+                  className="p-1 rounded text-amber-600 hover:text-amber-900"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={newKeyInput}
+                  onChange={(e) => setNewKeyInput(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="flex-1 px-3 py-1.5 text-xs bg-white border border-amber-300 rounded-lg text-slate-900 font-mono focus:outline-none focus:border-amber-600"
+                />
+                <button
+                  onClick={handleSaveNewKey}
+                  disabled={isSavingKey || !newKeyInput.trim()}
+                  className="px-4 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isSavingKey ? 'Saving...' : 'Save & Retry'}</span>
+                </button>
+              </div>
+              {keySaveMsg && <p className="text-[11px] text-amber-800">{keySaveMsg}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Multi-Domain Testing Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          onClick={() => setActiveDomainTab('ui')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            activeDomainTab === 'ui'
+              ? 'bg-purple-50 text-purple-900 border border-purple-200'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Monitor className="w-4 h-4 text-purple-600" />
+          <span>🖥️ UI Testing Requirement</span>
+          <span className="qet-badge-success text-[9px] px-1.5 py-0.2">ACTIVE</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDomainTab('api')}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600"
+        >
+          <Globe className="w-4 h-4" />
+          <span>🌐 API Testing</span>
+          <span className="qet-badge-secondary text-[9px] px-1.5 py-0.2">Coming Soon</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDomainTab('performance')}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600"
+        >
+          <Gauge className="w-4 h-4" />
+          <span>📈 Performance Testing</span>
+          <span className="qet-badge-secondary text-[9px] px-1.5 py-0.2">Coming Soon</span>
+        </button>
+
+        <button
+          onClick={() => setActiveDomainTab('accessibility')}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600"
+        >
+          <Accessibility className="w-4 h-4" />
+          <span>♿ Accessibility Testing</span>
+          <span className="qet-badge-secondary text-[9px] px-1.5 py-0.2">Coming Soon</span>
+        </button>
+      </div>
+
+      {/* Tab Content: UI Testing (Active) */}
+      {activeDomainTab === 'ui' ? (
+        isCompleted ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="qet-card p-5 space-y-2 bg-white">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-700 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" />
+                  <span>Executive Application Summary</span>
+                </h3>
+                <p className="text-xs leading-relaxed text-slate-700">
+                  {understanding?.summary}
+                </p>
+              </div>
+
+              <div className="qet-card p-5 space-y-2 bg-white">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-700 flex items-center gap-2">
+                  <Layers className="w-4 h-4" />
+                  <span>Architecture & Tech Stack</span>
+                </h3>
+                <p className="text-xs leading-relaxed text-slate-700">
+                  {understanding?.architecture_notes || 'React SPA with stateful client components and REST API integration.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Discovered UI Components */}
+            <div className="qet-card p-5 space-y-4 bg-white">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                <FileCode className="w-4 h-4 text-purple-600" />
+                <span>Discovered UI Components & Grounded Selectors ({understanding?.components?.length || 0})</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {understanding?.components?.map((comp, idx) => (
+                  <div key={idx} className="qet-panel p-3.5 space-y-2 border border-slate-200 bg-slate-50 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900">{comp.name}</span>
+                      <span className="qet-badge-secondary text-[10px]">{comp.type}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">{comp.description}</p>
+                    {comp.selectors && comp.selectors.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {comp.selectors.map((sel, sIdx) => (
+                          <span key={sIdx} className="text-[10px] font-mono bg-white text-[#2D6A4F] px-2 py-0.5 rounded border border-slate-200 font-semibold">
+                            {sel}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* User Flows */}
+            <div className="qet-card p-5 space-y-4 bg-white">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-2">
+                <Network className="w-4 h-4 text-purple-600" />
+                <span>End-to-End User Flows ({understanding?.flows?.length || 0})</span>
+              </h3>
+              <div className="space-y-3">
+                {understanding?.flows?.map((flow, idx) => (
+                  <div key={idx} className="qet-panel p-4 space-y-2 border border-slate-200 bg-slate-50 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900">{flow.name}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{flow.start_point} → {flow.end_point}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">{flow.description}</p>
+                    {flow.steps && (
+                      <ol className="list-decimal list-inside text-[11px] text-slate-700 space-y-0.5">
+                        {flow.steps.map((step, sIdx) => (
+                          <li key={sIdx}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          !isAnalyzing && (
+            <div className="qet-card p-12 text-center space-y-4 bg-white">
+              <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center bg-purple-50 text-purple-600">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-slate-800">
+                  Application Understanding Pending
+                </p>
+                <p className="text-xs text-slate-500">
+                  Click "Run AI Understanding" above to extract UI components, selectors, and user journeys.
+                </p>
+              </div>
+            </div>
+          )
+        )
+      ) : (
+        <div className="qet-card p-12 text-center space-y-4 bg-slate-50 border border-slate-200">
+          <div className="w-12 h-12 rounded-2xl mx-auto flex items-center justify-center bg-white border border-slate-200 text-slate-500">
+            {activeDomainTab === 'api' && <Globe className="w-6 h-6" />}
+            {activeDomainTab === 'performance' && <Gauge className="w-6 h-6" />}
+            {activeDomainTab === 'accessibility' && <Accessibility className="w-6 h-6" />}
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-slate-800 capitalize">{activeDomainTab} Testing Suite</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              This testing domain module is scheduled for future release phases.
+            </p>
+          </div>
+          <span className="qet-badge-secondary text-xs px-3 py-1 font-bold">
+            Coming Soon
+          </span>
+        </div>
+      )}
+
+      {/* Bottom Progression CTA */}
+      <div className="qet-panel p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-slate-200 bg-white">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-bold text-slate-900">
+              Step 1c: Application Understanding Complete
+            </h4>
+            <span className="qet-badge-success text-[10px] font-bold px-2 py-0.5">
+              Next: Test Case Generation Agent
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            Advance to synthesize 5-category test cases (Positive, Negative, Boundary, Validation, Error Handling).
+          </p>
+        </div>
+        <button
+          onClick={onProceedNext}
+          disabled={!isCompleted || isAnalyzing}
+          className="qet-btn-success inline-flex items-center gap-2 px-6 py-2.5 text-xs font-bold whitespace-nowrap cursor-pointer rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span>Proceed to Test Case Generation</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};

@@ -1,5 +1,11 @@
 import { AppState, AgentStatus, SubagentTimelineItem, SelectedAgentContext, RailViewMode } from '../types';
 
+export interface RailSubagent {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface RailStage {
   id: string;
   label: string;
@@ -7,48 +13,62 @@ export interface RailStage {
   description: string;
   aliases: string[];
   subagents: string[];
+  childSubagents?: RailSubagent[];
 }
 
 export const canonicalAgentStages: RailStage[] = [
   {
-    id: 'intake',
-    label: 'Intake Agent',
-    phase: 'Intake',
-    description: 'Document and codebase ZIP intake & indexing',
-    aliases: ['intake', 'uploading', 'processing_zip', 'indexing'],
-    subagents: ['Manifest Parser', 'Codebase Unpacker'],
+    id: 'application_understanding',
+    label: '1. Application Understanding Agent',
+    phase: 'Intake & Understand',
+    description: 'Parent orchestrator coordinating intake and requirement analysis',
+    aliases: ['application_understanding', 'understanding', 'intake', 'requirement_intake', 'codebase_intake', 'requirement_understanding'],
+    subagents: ['1a. Requirement Intake', '1b. Codebase Intake', '1c. Requirement Understanding'],
+    childSubagents: [
+      { id: 'subagent_1a_req_intake', label: '1a. Requirement Intake', description: 'Upload & parse requirement documents' },
+      { id: 'subagent_1b_codebase_intake', label: '1b. Codebase Intake', description: 'Upload & index codebase ZIP' },
+      { id: 'subagent_1c_understanding', label: '1c. Requirement Understanding', description: 'AI analysis & selector grounding' },
+    ],
   },
   {
-    id: 'understanding',
-    label: 'Application Understanding Agent',
-    phase: 'Understand',
-    description: 'Document parsing, AST analysis & categorization',
-    aliases: ['understanding', 'ai_understanding_running', 'understanding_ready', 'Understanding', 'Requirement Understanding', 'Requirement Categorization', 'requirement_understanding', 'document_intake', 'application_understanding'],
-    subagents: ['Doc Parser', 'Context Analyzer', 'Requirement Categorizer'],
+    id: 'test_case_generation',
+    label: '2. Test Case Generation Agent',
+    phase: 'Test Synthesis',
+    description: 'Synthesize 5-category test suite mapped to requirements',
+    aliases: ['test_case_generation', 'test_cases', 'Test Cases', 'generation_running'],
+    subagents: ['Positive Synthesizer', 'Negative / Boundary Synthesizer'],
   },
   {
-    id: 'test_generation',
-    label: 'Test Generation Agent',
-    phase: 'Generate',
-    description: '5-category test synthesis & synthetic data',
-    aliases: ['test_generation', 'generation_running', 'Test Cases', 'Test Data', 'Playwright', 'test_cases', 'test_data', 'playwright', 'script_writer'],
-    subagents: ['Test Case Synthesizer', 'Synthetic Data Generator', 'Playwright Code Generator'],
+    id: 'data_generation',
+    label: '3. Data Generation Agent',
+    phase: 'Data Binding',
+    description: 'AI synthetic data generator & custom dataset upload mapping',
+    aliases: ['data_generation', 'test_data', 'Test Data', 'synthetic_data'],
+    subagents: ['AI Data Synthesizer', 'Schema Validator'],
   },
   {
-    id: 'execution',
-    label: 'Execution Agent',
-    phase: 'Execute',
-    description: 'Live Playwright execution & evidence capture',
-    aliases: ['execution', 'execution_running', 'Execution', 'playwright_execution'],
-    subagents: ['Playwright Runner', 'API Runner', 'Evidence Collector'],
+    id: 'test_script',
+    label: '4. Test Script Agent',
+    phase: 'Playwright Synthesis',
+    description: 'Generate modular Python Playwright test scripts per case',
+    aliases: ['test_script', 'playwright', 'Playwright', 'script_generation'],
+    subagents: ['POM Builder', 'Fixture Injector', 'Script Generator'],
   },
   {
-    id: 'quality',
-    label: 'Quality Intelligence Agent',
-    phase: 'Report',
-    description: 'Diagnostics, root-cause analysis & executive report',
-    aliases: ['quality', 'report', 'pipeline_complete', 'Report', 'Quality', 'reporting', 'dashboard'],
-    subagents: ['Diagnostic Engine', 'Self-Correction Agent'],
+    id: 'execute',
+    label: '5. Execute Agent',
+    phase: 'Live Runner',
+    description: 'Selective & sequential live execution with screenshot capture',
+    aliases: ['execute', 'execution', 'Execution', 'playwright_execution'],
+    subagents: ['Sequential Runner', 'Screenshot Capture Hook', 'SSE Streamer'],
+  },
+  {
+    id: 'dashboard',
+    label: '6. Dashboard Agent',
+    phase: 'Reporting',
+    description: 'Executive Allure metrics, per-case screenshots & runtime JSON',
+    aliases: ['dashboard', 'report', 'Report', 'quality', 'pipeline_complete'],
+    subagents: ['Allure Generator', 'PDF Exporter', 'Artifact Indexer'],
   },
 ];
 
@@ -66,7 +86,6 @@ export interface ResolvedAgentFlow {
   activeProcessMessage?: string;
   completedCount: number;
   totalCount: number;
-  understandingCompletedCount?: number;
 }
 
 export function resolveAgentFlow(appState: AppState | null, viewMode?: RailViewMode | string): ResolvedAgentFlow {
@@ -74,142 +93,104 @@ export function resolveAgentFlow(appState: AppState | null, viewMode?: RailViewM
   const status = (appState?.status || 'idle') as string;
   const intakeManifest = appState?.intake_manifest;
   const understanding = appState?.understanding;
-  const testCases = (appState as any)?.test_cases;
+  const testSuite = appState?.test_suite;
+  const dataset = appState?.synthetic_dataset;
+  const scripts = (appState as any)?.playwright_scripts;
 
-  // Determine status for each of the 5 stages
   const statuses: AgentStatus[] = stages.map((stage) => {
     if (!appState) return 'pending';
 
-    if (stage.id === 'intake') {
+    if (stage.id === 'application_understanding') {
+      if (understanding && (understanding.summary || understanding.components?.length > 0)) {
+        return 'completed';
+      }
       if (intakeManifest && (intakeManifest.doc_files?.length || intakeManifest.total_files > 0)) {
-        return 'completed';
-      }
-      if (['uploading', 'processing_zip', 'indexing'].includes(status)) {
         return 'running';
       }
       return 'pending';
     }
 
-    if (stage.id === 'understanding') {
-      if (understanding && ((understanding as any).discovered_endpoints?.length || (understanding as any).flows?.length || status === 'understanding_ready' || status === 'generation_running' || status === 'pipeline_complete')) {
+    if (stage.id === 'test_case_generation') {
+      if (testSuite && testSuite.test_cases?.length > 0) {
         return 'completed';
       }
-      if (status === 'ai_understanding_running') {
+      if (understanding && status === 'running') {
         return 'running';
       }
-      if (status === 'error' && appState.last_error && !understanding) {
-        return 'failed';
-      }
-      return 'pending';
+      return understanding ? 'pending' : 'blocked';
     }
 
-    if (stage.id === 'test_generation') {
-      if (testCases && testCases.length > 0 && status !== 'generation_running') {
+    if (stage.id === 'data_generation') {
+      if (dataset && dataset.records?.length > 0) {
         return 'completed';
       }
-      if (status === 'generation_running') {
-        return 'running';
-      }
-      return 'pending';
+      return testSuite?.test_cases?.length ? 'pending' : 'blocked';
     }
 
-    if (stage.id === 'execution') {
-      if (status === 'execution_running') {
-        return 'running';
-      }
-      if (status === 'pipeline_complete') {
+    if (stage.id === 'test_script') {
+      if (scripts && scripts.length > 0) {
         return 'completed';
       }
-      return 'pending';
+      return dataset?.records?.length ? 'pending' : 'blocked';
     }
 
-    if (stage.id === 'quality') {
-      if (status === 'pipeline_complete') {
-        return 'completed';
-      }
-      return 'pending';
+    if (stage.id === 'execute') {
+      return scripts?.length ? 'pending' : 'blocked';
+    }
+
+    if (stage.id === 'dashboard') {
+      return scripts?.length ? 'pending' : 'blocked';
     }
 
     return 'pending';
   });
 
-  // Calculate active index
-  let activeIndex = statuses.findIndex((s) => s === 'running');
-  if (activeIndex === -1) {
-    activeIndex = statuses.findIndex((s) => s === 'pending');
-  }
-  if (activeIndex === -1) {
-    activeIndex = stages.length - 1;
-  }
-
-  const activeStage = stages[activeIndex] || stages[0];
-  const activeStatus = statuses[activeIndex] || 'pending';
+  const activeIndex = statuses.findIndex((s) => s === 'running' || s === 'pending');
+  const safeIndex = activeIndex >= 0 ? activeIndex : 0;
   const completedCount = statuses.filter((s) => s === 'completed').length;
 
-  const runningSubagent = appState?.subagent_timeline?.find((s) => s.status === 'running') || appState?.subagent_timeline?.[(appState?.subagent_timeline?.length || 1) - 1];
-  const activeSubagentLabel = runningSubagent?.label || activeStage.subagents[0];
-  const activeProcessMessage = runningSubagent?.message || activeStage.description;
+  const runningSubagent = appState?.subagent_timeline?.find((s) => s.status === 'running') || appState?.subagent_timeline?.[appState.subagent_timeline.length - 1];
 
   return {
     stages,
     statuses,
-    activeIndex,
-    activeStage,
-    activeStatus,
+    activeIndex: safeIndex,
+    activeStage: stages[safeIndex],
+    activeStatus: statuses[safeIndex],
     activeSubagentTimeline: appState?.subagent_timeline || [],
     activeSubagent: runningSubagent,
-    activeSubagentLabel,
-    activeProcessMessage,
+    activeSubagentLabel: runningSubagent?.label || stages[safeIndex]?.subagents?.[0] || 'Orchestrating Sub-Agent',
+    activeProcessMessage: appState?.last_error?.error_message || runningSubagent?.message || 'Processing stage lifecycle execution',
     completedCount,
     totalCount: stages.length,
-    understandingCompletedCount: statuses[1] === 'completed' ? 1 : 0,
   };
 }
 
 export function resolveSelectedAgentContext(
-  arg1: string | AppState | null | undefined,
-  arg2?: string | AppState | null | undefined
-): SelectedAgentContext | null {
-  const selectedAgentId = typeof arg1 === 'string' || arg1 === null || arg1 === undefined ? (arg1 as string) : (arg2 as string);
-  const appState = typeof arg1 === 'object' && arg1 !== null && 'status' in arg1 ? (arg1 as AppState) : (arg2 as AppState);
-
-  const stage = canonicalAgentStages.find((s) => s.id === selectedAgentId || s.aliases.includes(selectedAgentId || '')) || canonicalAgentStages[0];
-  if (!stage) return null;
-
-  let displayLabel = stage.label;
-  if (selectedAgentId === 'requirement_understanding') {
-    displayLabel = 'Requirement Understanding Agent';
-  } else if (selectedAgentId === 'document_intake') {
-    displayLabel = 'Document Intake Agent';
-  } else if (selectedAgentId === 'application_understanding') {
-    displayLabel = 'Application Understanding Agent';
-  }
-
+  appState: AppState | null,
+  agentId?: string | null
+): SelectedAgentContext {
+  const stages = canonicalAgentStages;
+  const currentStage = stages.find((s) => s.id === agentId || s.aliases.includes(agentId || '')) || stages[0];
   return {
-    agent_id: selectedAgentId || stage.id,
-    label: displayLabel,
-    phase: stage.phase,
-    step_number: canonicalAgentStages.indexOf(stage) + 1,
+    agent_id: currentStage.id,
+    label: currentStage.label,
+    phase: currentStage.phase,
+    step_number: 1,
     status: 'pending',
-    description: stage.description,
-    subagents: stage.subagents.map((name, i) => ({
+    description: currentStage.description,
+    subagents: currentStage.subagents.map((name, i) => ({
       subagent_id: `sub_${i}`,
       label: name,
       status: 'pending',
     })),
     inputs_summary: {
-      files: (appState?.intake_manifest?.doc_files || []).map((f) => ({ name: f, extension: f.split('.').pop() || 'doc' })),
+      files: [],
+      parameters: {},
     },
     artifacts_summary: {
       total_artifacts: 0,
-      manifest_available: Boolean(appState?.intake_manifest),
-      checklist_evaluation: appState?.understanding?.gaps?.map((g: any, i: number) => ({
-        check_id: g.gap_id || `CHK-${i + 1}`,
-        title: g.title || `15-Point Checklist Item ${i + 1}`,
-        status: g.severity === 'high' ? 'fail' : 'pass',
-        score: g.confidence === 'high' ? 95 : 80,
-        findings: g.description,
-      })) || [],
+      manifest_available: false,
     },
     execution_logs: [],
     retryable: true,

@@ -207,13 +207,14 @@ describe('Full QET left agent rail', () => {
       ],
     };
 
-    render(<AgentPipelineRail appState={mockState} />);
+    render(<AgentPipelineRail appState={mockState} selectedAgentId="application_understanding" />);
 
-    expect(screen.getByTestId('agent-pipeline-active')).toHaveTextContent('Application Understanding Agent');
-    expect(screen.getByText('Intake Agent')).toBeInTheDocument();
-    expect(screen.getByText('Test Generation Agent')).toBeInTheDocument();
-    expect(screen.getByText('Execution Agent')).toBeInTheDocument();
-    expect(screen.getByText('Quality Intelligence Agent')).toBeInTheDocument();
+    expect(screen.getByText('1. Application Understanding Agent')).toBeInTheDocument();
+    expect(screen.getByText('2. Test Case Generation Agent')).toBeInTheDocument();
+    expect(screen.getByText('3. Data Generation Agent')).toBeInTheDocument();
+    expect(screen.getByText('4. Test Script Agent')).toBeInTheDocument();
+    expect(screen.getByText('5. Execute Agent')).toBeInTheDocument();
+    expect(screen.getByText('6. Dashboard Agent')).toBeInTheDocument();
   });
 });
 
