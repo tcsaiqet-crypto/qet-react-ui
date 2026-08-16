@@ -1,0 +1,12 @@
+test_case_id,category,full_name,username,password,ssn,monthly_income,employer_name,employment_status,document_file,terms_accepted
+TC-POS-001,Positive Onboarding Flow,Jordan Sterling,jordan.sterling.cfa@example.com,Password123!#,999-45-6789,8500,Apex Financial Corp,Full-Time Permanent,w2_tax_form_2025.pdf,true
+TC-POS-002,Positive Document Verification,Alex Vance,alex.vance.cfa@example.com,SecurePass2026!,999-32-1144,7200,BlueRock Technologies,Full-Time Permanent,paystub_october_verified.pdf,true
+TC-POS-003,Positive Income Verification,Morgan Sinclair,morgan.sinclair.cfa@example.com,ValidToken998!,999-55-9081,9600,Zenith Health Systems,Executive Director,employment_verification_letter.pdf,true
+TC-POS-004,Positive Session & Submission,Sam Kensington,sam.kensington.cfa@example.com,AuthKey2026#$,999-77-2231,6800,Global Core Labs,Contractor,bank_statement_q3.pdf,true
+TC-NEG-005,Negative File Upload Security,Taylor Mercer,taylor.mercer.neg@example.com,WrongPassword999!,123-45,4200,Vanguard Logistics,Contractor,payload_malformed.exe,true
+TC-BND-006,Boundary Precision Verification,Elizabeth Alexandra-Montgomery-Huntington,boundary.income.test@cfa.candidate.org,BoundaryPass2026!,999-88-1234,0.01,Nexis Capital,Self-Employed,paystub_october_verified.pdf,true
+TC-VAL-007,Validation & Boundary Verification,Pat Hawthorne (Validation Profile),pat.hawthorne.val@example.com,ValidPass123!#,999-11-4455,5400,Summit Energy Partners,Full-Time Permanent,cfa_candidate_id_scan.pdf,false
+TC-SEC-008,Security & Auth Verification,Riley Ellington,riley.ellington.sec@example.com,Admin' OR '1'='1,999-66-7788,8100,Quantum Edge Systems,Full-Time Permanent,w2_tax_form_2025.pdf,true
+TC-ERR-009,Error Recovery & Resilience,Casey Carrington,casey.carrington.err@example.com,TimeoutRecovery2026!,999-22-3344,6200,Apex Financial Corp,Contractor,employment_verification_letter.pdf,true
+TC-ACC-010,Accessibility & WCAG Flow,Avery Blackwood,avery.blackwood.wcag@example.com,A11yCompliant99!,999-99-0011,7500,BlueRock Technologies,Full-Time Permanent,bank_statement_q3.pdf,true
+TC-PRF-011,Performance & Concurrency,Quinn Holloway,quinn.holloway.perf@example.com,PerfLoadPass2026!,999-33-8899,8900,Zenith Health Systems,Executive Director,w2_tax_form_2025.pdf,true

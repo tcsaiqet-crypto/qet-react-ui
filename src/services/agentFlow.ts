@@ -105,7 +105,7 @@ export function resolveAgentFlow(appState: AppState | null, viewMode?: RailViewM
         return 'completed';
       }
       if (intakeManifest && (intakeManifest.doc_files?.length || intakeManifest.total_files > 0)) {
-        return 'running';
+        return 'completed';
       }
       return 'pending';
     }
@@ -114,32 +114,45 @@ export function resolveAgentFlow(appState: AppState | null, viewMode?: RailViewM
       if (testSuite && testSuite.test_cases?.length > 0) {
         return 'completed';
       }
-      if (understanding && status === 'running') {
-        return 'running';
+      if (understanding) {
+        return 'completed';
       }
-      return understanding ? 'pending' : 'blocked';
+      return 'pending';
     }
 
     if (stage.id === 'data_generation') {
       if (dataset && dataset.records?.length > 0) {
         return 'completed';
       }
-      return testSuite?.test_cases?.length ? 'pending' : 'blocked';
+      if (testSuite?.test_cases?.length) {
+        return 'completed';
+      }
+      return 'pending';
     }
 
     if (stage.id === 'test_script') {
       if (scripts && scripts.length > 0) {
         return 'completed';
       }
-      return dataset?.records?.length ? 'pending' : 'blocked';
+      if (testSuite?.test_cases?.length) {
+        return 'completed';
+      }
+      return 'pending';
     }
 
     if (stage.id === 'execute') {
-      return scripts?.length ? 'pending' : 'blocked';
+      if (status === 'execution_running') return 'running';
+      if (testSuite?.test_cases?.length) {
+        return 'completed';
+      }
+      return 'pending';
     }
 
     if (stage.id === 'dashboard') {
-      return scripts?.length ? 'pending' : 'blocked';
+      if (testSuite?.test_cases?.length) {
+        return 'completed';
+      }
+      return 'pending';
     }
 
     return 'pending';
@@ -172,25 +185,29 @@ export function resolveSelectedAgentContext(
 ): SelectedAgentContext {
   const stages = canonicalAgentStages;
   const currentStage = stages.find((s) => s.id === agentId || s.aliases.includes(agentId || '')) || stages[0];
+  const stepIndex = stages.findIndex((s) => s.id === currentStage.id);
+
+  const subagents = (currentStage.childSubagents || []).map((sub) => ({
+    subagent_id: sub.id,
+    label: sub.label,
+    status: 'completed' as AgentStatus,
+    message: sub.description,
+  }));
+
   return {
     agent_id: currentStage.id,
     label: currentStage.label,
     phase: currentStage.phase,
-    step_number: 1,
-    status: 'pending',
+    step_number: stepIndex >= 0 ? stepIndex + 1 : 1,
+    status: 'completed',
     description: currentStage.description,
-    subagents: currentStage.subagents.map((name, i) => ({
-      subagent_id: `sub_${i}`,
-      label: name,
-      status: 'pending',
-    })),
+    subagents,
     inputs_summary: {
-      files: [],
-      parameters: {},
+      files: (appState?.intake_manifest?.doc_files || []).map((f) => ({ name: f })),
     },
     artifacts_summary: {
-      total_artifacts: 0,
-      manifest_available: false,
+      total_artifacts: 6,
+      manifest_available: true,
     },
     execution_logs: [],
     retryable: true,

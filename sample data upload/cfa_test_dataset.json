@@ -1,0 +1,122 @@
+[
+  {
+    "test_case_id": "TC-POS-001",
+    "category": "Positive Onboarding Flow",
+    "full_name": "Jordan Sterling",
+    "username": "jordan.sterling.cfa@example.com",
+    "password": "Password123!#",
+    "ssn": "999-45-6789",
+    "monthly_income": 8500,
+    "employer_name": "Apex Financial Corp",
+    "employment_status": "Full-Time Permanent",
+    "document_file": "w2_tax_form_2025.pdf",
+    "terms_accepted": true
+  },
+  {
+    "test_case_id": "TC-POS-002",
+    "category": "Positive Document Verification",
+    "full_name": "Alex Vance",
+    "username": "alex.vance.cfa@example.com",
+    "password": "SecurePass2026!",
+    "ssn": "999-32-1144",
+    "monthly_income": 7200,
+    "employer_name": "BlueRock Technologies",
+    "employment_status": "Full-Time Permanent",
+    "document_file": "paystub_october_verified.pdf",
+    "terms_accepted": true
+  },
+  {
+    "test_case_id": "TC-POS-003",
+    "category": "Positive Income Verification",
+    "full_name": "Morgan Sinclair",
+    "username": "morgan.sinclair.cfa@example.com",
+    "password": "ValidToken998!",
+    "ssn": "999-55-9081",
+    "monthly_income": 9600,
+    "employer_name": "Zenith Health Systems",
+    "employment_status": "Executive Director",
+    "document_file": "employment_verification_letter.pdf",
+    "terms_accepted": true
+  },
+  {
+    "test_case_id": "TC-POS-004",
+    "category": "Positive Session & Submission",
+    "full_name": "Sam Kensington",
+    "username": "sam.kensington.cfa@example.com",
+    "password": "AuthKey2026#$",
+    "ssn": "999-77-2231",
+    "monthly_income": 6800,
+    "employer_name": "Global Core Labs",
+    "employment_status": "Contractor",
+    "document_file": "bank_statement_q3.pdf",
+    "terms_accepted": true
+  },
+  {
+    "test_case_id": "TC-NEG-005",
+    "category": "Negative File Upload Security",
+    "full_name": "Taylor Mercer",
+    "username": "taylor.mercer.neg@example.com",
+    "password": "WrongPassword999!",
+    "ssn": "123-45",
+    "monthly_income": 4200,
+    "employer_name": "Vanguard Logistics",
+    "employment_status": "Contractor",
+    "document_file": "payload_malformed.exe",
+    "terms_accepted": true
+  },
+
+    "terms_accepted": false
+  },
+  {
+    "test_case_id": "TC-SEC-008",
+    "category": "Security & Auth Verification",
+    "full_name": "Riley Ellington",
+    "username": "riley.ellington.sec@example.com",
+    "password": "Admin' OR '1'='1",
+    "ssn": "999-66-7788",
+    "monthly_income": 8100,
+    "employer_name": "Quantum Edge Systems",
+    "employment_status": "Full-Time Permanent",
+    "document_file": "w2_tax_form_2025.pdf",
+    "terms_accepted": true
+  },
+  {
+    "test_case_id": "TC-ERR-009",
+    "category": "Error Recovery & Resilience",
+    "full_name": "Casey Carrington",
+    "username": "casey.carrington.err@example.com",
+    "password": "TimeoutRecovery2026!",
+    "ssn": "999-22-3344",
+    "monthly_income": 6200,
+    "employer_name": "Apex Financial Corp",
+    "employment_status": "Contractor",
+    "document_file": "employment_verification_letter.pdf",
+    "terms_accepted": true
+  },
+  {
+    "test_case_id": "TC-ACC-010",
+    "category": "Accessibility & WCAG Flow",
+    "full_name": "Avery Blackwood",
+    "username": "avery.blackwood.wcag@example.com",
+    "password": "A11yCompliant99!",
+    "ssn": "999-99-0011",
+    "monthly_income": 7500,
+    "employer_name": "BlueRock Technologies",
+    "employment_status": "Full-Time Permanent",
+    "document_file": "bank_statement_q3.pdf",
+    "terms_accepted": true
+  },
+  {
+    "test_case_id": "TC-PRF-011",
+    "category": "Performance & Concurrency",
+    "full_name": "Quinn Holloway",
+    "username": "quinn.holloway.perf@example.com",
+    "password": "PerfLoadPass2026!",
+    "ssn": "999-33-8899",
+    "monthly_income": 8900,
+    "employer_name": "Zenith Health Systems",
+    "employment_status": "Executive Director",
+    "document_file": "w2_tax_form_2025.pdf",
+    "terms_accepted": true
+  }
+]

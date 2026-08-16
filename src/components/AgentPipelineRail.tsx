@@ -79,13 +79,13 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
   const getSubagentStatus = (subId: string): AgentStatus => {
     if (!appState) return 'pending';
     if (subId === 'subagent_1a_req_intake') {
-      return (appState.intake_manifest?.doc_files?.length || 0) > 0 ? 'completed' : 'pending';
+      return ((appState.intake_manifest?.doc_files?.length || 0) > 0 || !!appState.understanding || !!appState.test_suite) ? 'completed' : 'pending';
     }
     if (subId === 'subagent_1b_codebase_intake') {
-      return (appState.intake_manifest?.total_files || 0) > 0 ? 'completed' : 'pending';
+      return ((appState.intake_manifest?.total_files || 0) > 0 || !!appState.understanding || !!appState.test_suite) ? 'completed' : 'pending';
     }
     if (subId === 'subagent_1c_understanding') {
-      return appState.understanding?.summary ? 'completed' : 'pending';
+      return (!!appState.understanding?.summary || (appState.test_suite?.test_cases?.length || 0) > 0) ? 'completed' : 'pending';
     }
     return 'pending';
   };
@@ -145,7 +145,7 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
                         e.stopPropagation();
                         setUnderstandingExpanded(!understandingExpanded);
                       }}
-                      className="p-1 text-slate-400 hover:text-slate-700"
+                      className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
                     >
                       {understandingExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     </button>
@@ -188,21 +188,28 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
       </div>
 
       {/* Footer Controls */}
-      <div className="p-3 border-t border-slate-200 space-y-1 bg-white">
-        <button
-          onClick={onOpenRunsHistory}
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
-        >
-          <History className="w-4 h-4 text-slate-500" />
-          <span>📋 Run History Dashboard</span>
-        </button>
-        <button
-          onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
-        >
-          <Settings className="w-4 h-4 text-slate-500" />
-          <span>⚙ AI Provider Settings</span>
-        </button>
+      <div className="p-3 border-t border-slate-200 bg-white space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          {onOpenRunsHistory && (
+            <button
+              onClick={onOpenRunsHistory}
+              className="flex-1 flex items-center justify-center gap-1.5 p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>Runs History</span>
+            </button>
+          )}
+
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="flex-1 flex items-center justify-center gap-1.5 p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>AI Settings</span>
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );

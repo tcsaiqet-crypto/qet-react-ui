@@ -2,6 +2,7 @@
 
 import csv
 import json
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -84,11 +85,22 @@ class TestDataAgent(BaseAgent):
         case_type = test_case.case_type if hasattr(test_case, "case_type") else test_case.get("case_type", "Positive")
         feature_area = test_case.feature_area if hasattr(test_case, "feature_area") else test_case.get("feature_area", "Applicant Info")
 
-        username = self._username_for_case(case_id, case_type, index)
-        password = "WrongPassword999!" if case_type == "Negative" and feature_area == "Authentication" else f"MockPassword{100 + index}!"
-        full_name = self._full_name_for_case(case_type, index)
-        ssn = self._ssn_for_case(case_type, index)
-        monthly_income = self._income_for_case(case_type, index)
+        first_names = ["Alex", "Jordan", "Taylor", "Morgan", "Sam", "Chris", "Pat", "Riley", "Casey", "Avery", "Jamie", "Dakota", "Reese", "Quinn"]
+        last_names = ["Sterling", "Vance", "Mercer", "Sinclair", "Hawthorne", "Kensington", "Ellington", "Montgomery", "Carrington", "Blackwood"]
+        employers = ["Apex Financial Corp", "BlueRock Technologies", "Zenith Health Systems", "Vanguard Logistics", "Global Core Labs", "Nexis Capital", "Summit Energy Partners"]
+
+        rand_first = random.choice(first_names)
+        rand_last = random.choice(last_names)
+        rand_employer = random.choice(employers)
+        rand_ssn_mid = random.randint(10, 99)
+        rand_ssn_last = random.randint(1000, 9999)
+        rand_income = round(random.uniform(4200.0, 14500.0), 2)
+
+        username = self._username_for_case(case_id, case_type, index, rand_first, rand_last)
+        password = "WrongPassword999!" if case_type == "Negative" and "Auth" in feature_area else f"MockPass{random.randint(100, 999)}!#"
+        full_name = self._full_name_for_case(case_type, index, rand_first, rand_last)
+        ssn = self._ssn_for_case(case_type, rand_ssn_mid, rand_ssn_last)
+        monthly_income = self._income_for_case(case_type, rand_income)
         document_file = self._document_for_case(case_type, feature_area)
 
         return {
@@ -100,7 +112,8 @@ class TestDataAgent(BaseAgent):
             "full_name": full_name,
             "ssn": ssn,
             "monthly_income": monthly_income,
-            "employment_status": "Employed" if index % 2 else "Self-Employed",
+            "employer_name": rand_employer,
+            "employment_status": random.choice(["Full-Time Permanent", "Contractor", "Self-Employed", "Director/Executive"]),
             "document_file": document_file,
             "terms_accepted": case_type != "Validation",
             "is_synthetic": True,
@@ -109,51 +122,54 @@ class TestDataAgent(BaseAgent):
     @staticmethod
     def _default_test_case_descriptors() -> List[Dict[str, str]]:
         return [
-            {"case_id": "TC-POS-001", "case_type": "Positive", "feature_area": "Authentication"},
-            {"case_id": "TC-POS-002", "case_type": "Positive", "feature_area": "Applicant Info"},
-            {"case_id": "TC-NEG-001", "case_type": "Negative", "feature_area": "Authentication"},
-            {"case_id": "TC-BND-001", "case_type": "Boundary", "feature_area": "Applicant Info"},
-            {"case_id": "TC-VAL-001", "case_type": "Validation", "feature_area": "Document Upload"},
+            {"case_id": "TC-POS-001", "case_type": "Positive", "feature_area": "Candidate Registration"},
+            {"case_id": "TC-POS-002", "case_type": "Positive", "feature_area": "Identity Verification"},
+            {"case_id": "TC-NEG-001", "case_type": "Negative", "feature_area": "Document Verification"},
+            {"case_id": "TC-BND-001", "case_type": "Boundary", "feature_area": "Enrollment Payment"},
+            {"case_id": "TC-VAL-001", "case_type": "Validation", "feature_area": "Profile Validation"},
         ]
 
     @staticmethod
-    def _username_for_case(case_id: str, case_type: str, index: int) -> str:
-        handle = case_id.lower().replace("-", ".")
+    def _username_for_case(case_id: str, case_type: str, index: int, first: str = "User", last: str = "Test") -> str:
+        handle = f"{first.lower()}.{last.lower()}.{case_id.lower().replace('-', '.')}"
         if case_type == "Boundary":
             return f"{handle}@test.cfa.local"
         return f"{handle}@example.com"
 
     @staticmethod
-    def _full_name_for_case(case_type: str, index: int) -> str:
+    def _full_name_for_case(case_type: str, index: int, first: str = "Synthetic", last: str = "User") -> str:
         if case_type == "Boundary":
-            return "A" * 100
+            return f"Elizabeth Alexandra-Montgomery-Huntington"
         if case_type == "Validation":
-            return "Name <script>alert('XSS')</script>"
+            return f"{first} {last} (Validation Profile)"
         if case_type == "Error-Handling":
-            return "Recovery Scenario User"
-        return f"Synthetic User {index}"
+            return f"{first} {last} (Resilience Profile)"
+        if case_type == "Negative":
+            return f"{first} {last} (Negative Scenario)"
+        return f"{first} {last}"
 
     @staticmethod
-    def _ssn_for_case(case_type: str, index: int) -> str:
+    def _ssn_for_case(case_type: str, mid: int = 12, last: int = 3456) -> str:
         if case_type == "Negative":
             return "123-45"
-        return f"999-00-{1200 + index:04d}"
+        return f"999-{mid:02d}-{last:04d}"
 
     @staticmethod
-    def _income_for_case(case_type: str, index: int) -> float:
+    def _income_for_case(case_type: str, randomized_income: float = 6500.0) -> float:
         if case_type == "Boundary":
             return 0.01
         if case_type == "Error-Handling":
-            return 1000.00
-        return float(3000 + index * 250)
+            return 1250.00
+        return randomized_income
 
     @staticmethod
     def _document_for_case(case_type: str, feature_area: str) -> str:
-        if feature_area == "Document Upload" and case_type == "Negative":
-            return "payload.exe"
-        if feature_area == "Document Upload" and case_type == "Error-Handling":
-            return "timeout_case.pdf"
-        return "sample_paystub.pdf"
+        if ("Document" in feature_area or "Upload" in feature_area) and case_type == "Negative":
+            return "payload_unsupported.exe"
+        if case_type == "Error-Handling":
+            return "timeout_corrupt_stream.pdf"
+        docs = ["passport_scan_valid.pdf", "cfa_candidate_id.pdf", "w2_tax_form_2025.pdf", "paystub_october_verified.pdf", "employment_verification_letter.pdf"]
+        return random.choice(docs)
 
     def _save_artifacts(self, dataset: SyntheticDataset) -> None:
         """Save synthetic_test_data.json and synthetic_test_data.csv inside run folder."""

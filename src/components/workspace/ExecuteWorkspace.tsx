@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Play, 
   Pause, 
@@ -12,8 +12,6 @@ import {
   Globe,
   CheckSquare, 
   Square,
-  AlertCircle,
-  PlayCircle
 } from 'lucide-react';
 import { AppState, TestCase } from '../../types';
 import { launchExecution, pauseExecution, resumeExecution, stopExecution } from '../../services/apiClient';
@@ -304,19 +302,19 @@ export const ExecuteWorkspace: React.FC<ExecuteWorkspaceProps> = ({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="qet-card p-4 space-y-1 bg-white">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Pass Rate</span>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-xl font-bold text-[#2D6A4F]">{metrics.passRate}%</p>
-                  <span className="text-[10px] font-semibold text-slate-400">(65-85% Target)</span>
-                </div>
+                <p className="text-xl font-bold text-[#2D6A4F]">{metrics.passRate}%</p>
               </div>
+
               <div className="qet-card p-4 space-y-1 bg-white">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Total Cases (AI)</span>
                 <p className="text-xl font-bold text-slate-900">{testCases.length}</p>
               </div>
+
               <div className="qet-card p-4 space-y-1 bg-white">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Passed Scenarios</span>
                 <p className="text-xl font-bold text-[#2D6A4F]">{metrics.passedCount}</p>
               </div>
+
               <div className="qet-card p-4 space-y-1 bg-white">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Failed / Gaps</span>
                 <p className="text-xl font-bold text-rose-700">{metrics.failedCount}</p>
