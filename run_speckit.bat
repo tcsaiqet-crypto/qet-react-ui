@@ -14,7 +14,7 @@ echo   [2] Backend Pytest Suite        (.venv\Scripts\pytest.exe backend/tests -
 echo   [3] Spec 013 and 015 Tests      (Live Playwright, AI Analysis and Logs)
 echo   [4] Frontend Vitest Suite       (npm test)
 echo   [5] Frontend Production Build   (npm run build)
-echo   [6] Audit Spec-Kits 001-015     (Verify all 15 Spec folders and governance)
+echo   [6] Audit Spec-Kits 001-024     (Verify all 24 Spec folders and governance)
 echo   [7] Start Full App Servers      (Backend API on 8080 + Frontend on 5173)
 echo   [8] Exit
 echo.
@@ -100,7 +100,7 @@ goto end_script
 
 :run_spec_audit
 echo ==============================================================================
-echo Auditing Spec-Kits 001 through 015...
+echo Auditing Spec-Kits 001 through 024...
 echo ==============================================================================
 echo.
 
@@ -118,7 +118,16 @@ if exist "specs\011-agent-choreography-experience\README.md" (echo   [OK] specs\
 if exist "specs\012-progressive-agent-pipeline\README.md" (echo   [OK] specs\012-progressive-agent-pipeline) else (echo   [MISSING] specs\012)
 if exist "specs\013-live-playwright-execution-and-ai-intelligence\README.md" (echo   [OK] specs\013-live-playwright-execution-and-ai-intelligence) else (echo   [MISSING] specs\013)
 if exist "specs\014-left-rail-interactive-drawer-and-staged-understanding\README.md" (echo   [OK] specs\014-left-rail-interactive-drawer-and-staged-understanding) else (echo   [MISSING] specs\014)
-if exist "specs\015-main-branch-and-log-gap-analysis\README.md" (echo   [OK] specs\015-main-branch-and-log-gap-analysis) else (echo   [MISSING] specs\015)
+if exist "specs\015-backend-logging-context-and-cancellation-engine\README.md" (echo   [OK] specs\015-backend-logging-context-and-cancellation-engine) else (echo   [MISSING] specs\015-cancellation-engine)
+if exist "specs\015-main-branch-and-log-gap-analysis\README.md" (echo   [OK] specs\015-main-branch-and-log-gap-analysis) else (echo   [MISSING] specs\015-gap-analysis)
+if exist "specs\016-subagent-animation-rail-and-task-drawer\README.md" (echo   [OK] specs\016-subagent-animation-rail-and-task-drawer) else (echo   [MISSING] specs\016)
+if exist "specs\017-gemini-model-discovery-and-runtime-switcher\README.md" (echo   [OK] specs\017-gemini-model-discovery-and-runtime-switcher) else (echo   [MISSING] specs\017)
+if exist "specs\020-end-to-end-testing-and-audit\SPEC_020.md" (echo   [OK] specs\020-end-to-end-testing-and-audit) else (echo   [MISSING] specs\020)
+if exist "specs\021-upload-logging-and-gemini-json-resilience\README.md" (echo   [OK] specs\021-upload-logging-and-gemini-json-resilience) else (echo   [MISSING] specs\021)
+if exist "specs\022-testcase-datagen-scriptviewer-and-selective-execution\README.md" (echo   [OK] specs\022-testcase-datagen-scriptviewer-and-selective-execution) else (echo   [MISSING] specs\022)
+if exist "specs\023-e2e-playwright-evidence-and-grounded-intelligence\README.md" (echo   [OK] specs\023-e2e-playwright-evidence-and-grounded-intelligence) else (echo   [MISSING] specs\023-e2e-playwright)
+if exist "specs\023-multi-modal-testing-and-execution-intelligence\README.md" (echo   [OK] specs\023-multi-modal-testing-and-execution-intelligence) else (echo   [MISSING] specs\023-multi-modal)
+if exist "specs\024-agent-pipeline-architectural-redesign\README.md" (echo   [OK] specs\024-agent-pipeline-architectural-redesign) else (echo   [MISSING] specs\024)
 
 echo.
 if exist "specs\constitution.md" (echo   [OK] specs\constitution.md - Master Constitution) else (echo   [MISSING] specs\constitution.md)
@@ -126,7 +135,7 @@ if exist "specs\README.md" (echo   [OK] specs\README.md - Master Sitemap Index) 
 
 echo.
 echo ==============================================================================
-echo [SUCCESS] ALL 15 SPEC-KITS AND GOVERNANCE DOCUMENTS ARE 100 PERCENT INTACT!
+echo [SUCCESS] ALL 24 SPEC-KITS AND GOVERNANCE DOCUMENTS ARE 100 PERCENT INTACT!
 echo ==============================================================================
 goto end_script
 
