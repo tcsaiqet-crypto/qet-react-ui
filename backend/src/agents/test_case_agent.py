@@ -398,7 +398,27 @@ class TestCaseAgent(BaseAgent):
                     writer.writerow(case.model_dump())
 
         # 3. Save Traceability Matrix
-        tm_path = self.artifact_dir / "traceability_matrix.json"
-        with open(tm_path, "w", encoding="utf-8") as f:
-            matrix = [{"case_id": c.case_id, "requirement_id": c.requirement_id} for c in test_cases]
-            json.dump(matrix, f, indent=2)
+        matrix_path = self.artifact_dir / "traceability_matrix.json"
+        req_to_tests: Dict[str, List[str]] = {}
+        comp_to_tests: Dict[str, List[str]] = {}
+        for case in test_cases:
+            req_to_tests.setdefault(case.requirement_id, []).append(case.case_id)
+            comp_to_tests.setdefault(case.feature_area, []).append(case.case_id)
+
+        matrix_content = {
+            "requirement_to_tests": req_to_tests,
+            "component_to_tests": comp_to_tests,
+            "matrix": [
+                {
+                    "case_id": case.case_id,
+                    "requirement_id": case.requirement_id,
+                    "feature_area": case.feature_area,
+                    "automation_candidate": case.automation_candidate,
+                }
+                for case in test_cases
+            ]
+        }
+        with open(matrix_path, "w", encoding="utf-8") as f:
+            json.dump(matrix_content, f, indent=2)
+
+        logger.info(f"Saved Phase 3 test case artifacts in {self.artifact_dir}: test_cases.json, test_cases.csv, traceability_matrix.json")
