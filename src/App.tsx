@@ -38,6 +38,7 @@ import {
   cancelRun, 
   getDiscoverableModels 
 } from './services/apiClient';
+import { frontendLogger, LogEntry } from './utils/frontendLogger';
 
 export const App: React.FC = () => {
   const [selectedAgentId, setSelectedAgentId] = useState<string>('subagent_1a_req_intake');
@@ -54,12 +55,21 @@ export const App: React.FC = () => {
 
   // Logs
   const [backendLogs, setBackendLogs] = useState<string>('');
+  const [frontendLogs, setFrontendLogs] = useState<LogEntry[]>(() => frontendLogger.getHistory());
 
   const [theme, setTheme] = useState<'dark' | 'light'>('light');
 
   useEffect(() => {
     document.documentElement.classList.remove('dark');
     window.localStorage.setItem('qet-ui-theme', 'light');
+  }, []);
+
+  // Subscribe to live frontend logger
+  useEffect(() => {
+    const unsubscribe = frontendLogger.subscribe((entry) => {
+      setFrontendLogs((prev) => [...prev, entry]);
+    });
+    return unsubscribe;
   }, []);
 
   const refreshStatus = async (runId: string) => {
@@ -80,45 +90,58 @@ export const App: React.FC = () => {
     if (!target) return;
     try {
       const res = await getRunLogs(target);
-      setBackendLogs(res.backend_logs);
+      if (res?.backend_logs) {
+        setBackendLogs(res.backend_logs);
+      }
     } catch {
       // silent
     }
   };
 
-  // Initial load: create run or fetch settings
+  // Initial load: create run and fetch settings
   useEffect(() => {
     const init = async () => {
       try {
         setLoading(true);
+        frontendLogger.info('[INIT] Fetching AI Provider and Agent configuration...');
         const settings = await getAISettings();
         setAISettings(settings);
+        frontendLogger.info(`[CONFIG] Active Provider: ${settings.active_provider || 'Gemini'} | Model: ${settings.runtime_state?.model || 'Auto'}`);
 
+        frontendLogger.info('[RUN] Creating new test execution pipeline session for CFA Digital Journey...');
         const newRun = await createRun('CFA Digital Journey');
         setAppState(newRun.state);
+        frontendLogger.info(`[RUN] Session established with Run ID: ${newRun.state.run_id}`);
         setLoading(false);
       } catch (err) {
+        frontendLogger.error(`[ERROR] Initialization failed: ${String(err)}`);
         setLoading(false);
       }
     };
     init();
   }, []);
 
-  // Poll backend status and logs
+  // Fast 1s polling for backend status and logs during active sessions
   useEffect(() => {
     const runId = appState?.run_id;
     if (!runId) return;
     const interval = setInterval(() => {
       refreshStatus(runId);
       fetchBackendLogs(runId);
-    }, 2000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [appState?.run_id]);
+
+  const handleSelectAgent = (agentId: string) => {
+    setSelectedAgentId(agentId);
+    frontendLogger.info(`[NAV] Switched active pipeline view to: ${agentId}`);
+  };
 
   const handleCopyRunId = () => {
     if (appState?.run_id) {
       navigator.clipboard.writeText(appState.run_id);
       setCopiedRunId(true);
+      frontendLogger.info(`[CLIPBOARD] Copied Run ID ${appState.run_id} to clipboard.`);
       setTimeout(() => setCopiedRunId(false), 2000);
     }
   };
@@ -141,6 +164,26 @@ export const App: React.FC = () => {
     a.href = url;
     a.download = `backend_logs_${appState?.run_id || 'active'}.txt`;
     a.click();
+    URL.revokeObjectURL(url);
+    frontendLogger.info(`[EXPORT] Downloaded backend execution logs for run ${appState?.run_id}`);
+  };
+
+  const handleDownloadFrontendLogs = () => {
+    const content = frontendLogs.map((l) => `[${l.timestamp}] [${l.type.toUpperCase()}] ${l.message}`).join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `frontend_logs_${appState?.run_id || 'active'}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    frontendLogger.info(`[EXPORT] Downloaded frontend UI logs for run ${appState?.run_id}`);
+  };
+
+  const handleClearFrontendLogs = () => {
+    frontendLogger.clearHistory();
+    setFrontendLogs([]);
+    frontendLogger.info('[SYSTEM] Frontend log buffer cleared.');
   };
 
   // Render workspace based on selectedAgentId
@@ -151,7 +194,7 @@ export const App: React.FC = () => {
           <RequirementIntakeWorkspace
             appState={appState}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('subagent_1b_codebase_intake')}
+            onProceedNext={() => handleSelectAgent('subagent_1b_codebase_intake')}
           />
         );
       case 'subagent_1b_codebase_intake':
@@ -159,7 +202,7 @@ export const App: React.FC = () => {
           <CodebaseIntakeWorkspace
             appState={appState}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('subagent_1c_understanding')}
+            onProceedNext={() => handleSelectAgent('subagent_1c_understanding')}
           />
         );
       case 'subagent_1c_understanding':
@@ -168,7 +211,7 @@ export const App: React.FC = () => {
           <RequirementUnderstandingWorkspace
             appState={appState}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('test_case_generation')}
+            onProceedNext={() => handleSelectAgent('test_case_generation')}
             onOpenSettings={() => setIsSettingsOpen(true)}
           />
         );
@@ -177,9 +220,12 @@ export const App: React.FC = () => {
           <TestCaseWorkspace
             appState={appState}
             selectedCaseIds={selectedCaseIds}
-            onSelectCaseIds={setSelectedCaseIds}
+            onSelectCaseIds={(ids) => {
+              setSelectedCaseIds(ids);
+              frontendLogger.info(`[TEST SUITE] Selected ${ids.length} test scenario(s) for pipeline execution.`);
+            }}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('data_generation')}
+            onProceedNext={() => handleSelectAgent('data_generation')}
           />
         );
       case 'data_generation':
@@ -188,7 +234,7 @@ export const App: React.FC = () => {
             appState={appState}
             selectedCaseIds={selectedCaseIds}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('test_script')}
+            onProceedNext={() => handleSelectAgent('test_script')}
           />
         );
       case 'test_script':
@@ -197,7 +243,7 @@ export const App: React.FC = () => {
             appState={appState}
             selectedCaseIds={selectedCaseIds}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('execute')}
+            onProceedNext={() => handleSelectAgent('execute')}
           />
         );
       case 'execute':
@@ -207,7 +253,7 @@ export const App: React.FC = () => {
             selectedCaseIds={selectedCaseIds}
             onSelectCaseIds={setSelectedCaseIds}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('dashboard')}
+            onProceedNext={() => handleSelectAgent('dashboard')}
           />
         );
       case 'dashboard':
@@ -222,7 +268,7 @@ export const App: React.FC = () => {
           <RequirementIntakeWorkspace
             appState={appState}
             onRefresh={refreshStatus}
-            onProceedNext={() => setSelectedAgentId('subagent_1b_codebase_intake')}
+            onProceedNext={() => handleSelectAgent('subagent_1b_codebase_intake')}
           />
         );
     }
@@ -234,7 +280,7 @@ export const App: React.FC = () => {
       <AgentPipelineRail
         appState={appState}
         selectedAgentId={selectedAgentId}
-        onSelectAgent={setSelectedAgentId}
+        onSelectAgent={handleSelectAgent}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenRunsHistory={() => setIsRunsHistoryOpen(true)}
       />
@@ -247,7 +293,7 @@ export const App: React.FC = () => {
             <span className="text-xs font-bold text-slate-500 tracking-wider">ACTIVE RUN:</span>
             <button
               onClick={handleCopyRunId}
-              className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-mono font-bold rounded-lg border border-slate-200 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-mono font-bold rounded-lg border border-slate-200 transition-colors cursor-pointer"
               title="Click to copy Run ID"
             >
               <span>{appState?.run_id || 'Initializing...'}</span>
@@ -259,7 +305,7 @@ export const App: React.FC = () => {
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200"
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
               title="Toggle Theme"
             >
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -268,7 +314,7 @@ export const App: React.FC = () => {
             {/* AI Settings Drawer Button */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 transition-colors cursor-pointer"
             >
               <Settings className="w-4 h-4 text-purple-600" />
               <span>AI Settings</span>
@@ -277,12 +323,12 @@ export const App: React.FC = () => {
             {/* Logs Panel Toggle */}
             <button
               onClick={() => setIsLogsPanelOpen(!isLogsPanelOpen)}
-              className={`p-2 rounded-xl border transition-colors ${
+              className={`p-2 rounded-xl border transition-colors cursor-pointer ${
                 isLogsPanelOpen
                   ? 'bg-slate-800 text-white border-slate-800'
                   : 'bg-slate-100 text-slate-600 border-slate-200 hover:text-slate-900'
               }`}
-              title="Toggle Console Logs Panel"
+              title="Toggle Live Console Logs Panel"
             >
               <Terminal className="w-4 h-4" />
             </button>
@@ -297,12 +343,12 @@ export const App: React.FC = () => {
         </main>
       </div>
 
-      {/* 3. Right Logs Panel (Collapsible) */}
+      {/* 3. Right Logs Panel (Collapsible & Live Streaming) */}
       <RightLogsPanel
-        frontendLogs={[]}
+        frontendLogs={frontendLogs}
         backendLogs={backendLogs}
-        onClearFrontend={() => {}}
-        onDownloadFrontend={() => {}}
+        onClearFrontend={handleClearFrontendLogs}
+        onDownloadFrontend={handleDownloadFrontendLogs}
         onDownloadBackend={handleDownloadBackendLogs}
         activeProvider={aiSettings?.active_provider || 'gemini'}
         activeModel={aiSettings?.runtime_state?.model || 'gemini-2.5-flash'}
@@ -321,7 +367,7 @@ export const App: React.FC = () => {
               </h3>
               <button
                 onClick={() => setIsSettingsOpen(false)}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 cursor-pointer"
               >
                 Close (Esc)
               </button>
@@ -330,6 +376,7 @@ export const App: React.FC = () => {
               <AISettingsPanel
                 onSaved={(newSettings) => {
                   setAISettings(newSettings);
+                  frontendLogger.info(`[SETTINGS] AI Settings updated. Provider: ${newSettings.active_provider}`);
                   setIsSettingsOpen(false);
                 }}
               />
@@ -349,7 +396,7 @@ export const App: React.FC = () => {
               </h3>
               <button
                 onClick={() => setIsRunsHistoryOpen(false)}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-900 px-2 py-1 rounded hover:bg-slate-100 cursor-pointer"
               >
                 Close (Esc)
               </button>
@@ -358,6 +405,7 @@ export const App: React.FC = () => {
               <RunsDashboard
                 onOpenRun={(runId: string) => {
                   refreshStatus(runId);
+                  frontendLogger.info(`[RUN] Switched active workspace context to historical run: ${runId}`);
                   setIsRunsHistoryOpen(false);
                 }}
                 activeRunId={appState?.run_id}
