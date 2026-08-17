@@ -225,6 +225,8 @@ export const App: React.FC = () => {
             onOpenSettings={() => setIsSettingsOpen(true)}
           />
         );
+      case 'subagent_2a_coverage_planner':
+      case 'subagent_2b_batch_generator':
       case 'test_case_generation':
         return (
           <TestCaseWorkspace

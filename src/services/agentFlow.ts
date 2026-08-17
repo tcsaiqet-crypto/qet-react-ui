@@ -35,8 +35,12 @@ export const canonicalAgentStages: RailStage[] = [
     label: '2. Test Case Generation Agent',
     phase: 'Test Synthesis',
     description: 'Synthesize 5-category test suite mapped to requirements',
-    aliases: ['test_case_generation', 'test_cases', 'Test Cases', 'generation_running'],
-    subagents: ['Positive Synthesizer', 'Negative / Boundary Synthesizer'],
+    aliases: ['test_case_generation', 'test_cases', 'Test Cases', 'generation_running', 'subagent_2a_coverage_planner', 'subagent_2b_batch_generator'],
+    subagents: ['2a. Strategy & Coverage Planner', '2b. Parallel Batch Generator'],
+    childSubagents: [
+      { id: 'subagent_2a_coverage_planner', label: '2a. Strategy & Coverage Planner', description: 'Determine test count (e.g. 25) & 5-type distribution' },
+      { id: 'subagent_2b_batch_generator', label: '2b. Parallel Batch Generator', description: 'Generate batches of 5 across 5 parallel keys' },
+    ],
   },
   {
     id: 'data_generation',

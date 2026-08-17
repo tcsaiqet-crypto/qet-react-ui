@@ -68,7 +68,10 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
   onOpenRunsHistory,
   dashboardUnlocked = false,
 }) => {
-  const [understandingExpanded, setUnderstandingExpanded] = useState(true);
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({
+    application_understanding: true,
+    test_case_generation: true,
+  });
   const flow = resolveAgentFlow(appState);
   const { stages, statuses } = flow;
 
@@ -76,6 +79,13 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
     if (onSelectAgent) {
       onSelectAgent(id);
     }
+  };
+
+  const toggleExpand = (stageId: string) => {
+    setExpandedStages((prev) => ({
+      ...prev,
+      [stageId]: !prev[stageId],
+    }));
   };
 
   const getSubagentStatus = (subId: string): AgentStatus => {
@@ -88,6 +98,12 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
     }
     if (subId === 'subagent_1c_understanding') {
       return (!!appState.understanding?.summary || (appState.test_suite?.test_cases?.length || 0) > 0) ? 'completed' : 'pending';
+    }
+    if (subId === 'subagent_2a_coverage_planner') {
+      return (appState.test_suite?.test_cases && appState.test_suite.test_cases.length > 0) ? 'completed' : (appState.status === 'generation_running' ? 'running' : 'pending');
+    }
+    if (subId === 'subagent_2b_batch_generator') {
+      return (appState.test_suite?.test_cases && appState.test_suite.test_cases.length > 0) ? 'completed' : (appState.status === 'generation_running' ? 'running' : 'pending');
     }
     return 'pending';
   };
@@ -111,8 +127,9 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
         {stages.map((stage, idx) => {
           const status = statuses[idx] || 'pending';
-          const isSelected = selectedAgentId === stage.id || (stage.id === 'application_understanding' && (selectedAgentId?.startsWith('subagent_1') || selectedAgentId === 'application_understanding'));
-          const isParent = stage.id === 'application_understanding';
+          const hasChildren = Boolean(stage.childSubagents && stage.childSubagents.length > 0);
+          const isSelected = selectedAgentId === stage.id || (hasChildren && stage.childSubagents?.some(sub => sub.id === selectedAgentId));
+          const isExpanded = Boolean(expandedStages[stage.id]);
           const isDashboard = stage.id === 'dashboard';
           const isLocked = isDashboard && !dashboardUnlocked;
 
@@ -122,8 +139,8 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
               <div
                 onClick={() => {
                   if (isLocked) return;
-                  if (isParent) {
-                    handleSelect('subagent_1a_req_intake');
+                  if (hasChildren && stage.childSubagents && stage.childSubagents.length > 0) {
+                    handleSelect(stage.childSubagents[0].id);
                   } else {
                     handleSelect(stage.id);
                   }
@@ -149,22 +166,22 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
 
                 <div className="flex items-center gap-1.5 shrink-0">
                   {isLocked ? <Lock className="h-4 w-4 shrink-0 text-slate-300" /> : statusIcon(status)}
-                  {isParent && (
+                  {hasChildren && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setUnderstandingExpanded(!understandingExpanded);
+                        toggleExpand(stage.id);
                       }}
                       className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
                     >
-                      {understandingExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Sub-Agents for Parent (Agent 1) */}
-              {isParent && understandingExpanded && (
+              {/* Sub-Agents for Stages with Children */}
+              {hasChildren && isExpanded && (
                 <div className="pl-3.5 space-y-1 border-l-2 border-slate-300 ml-4 py-1">
                   {stage.childSubagents?.map((sub) => {
                     const isSubSelected = selectedAgentId === sub.id;
@@ -176,7 +193,9 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
                         onClick={() => handleSelect(sub.id)}
                         className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${
                           isSubSelected
-                            ? 'bg-purple-50 text-purple-900 border border-purple-200 font-semibold'
+                            ? stage.id === 'application_understanding'
+                              ? 'bg-purple-50 text-purple-900 border border-purple-200 font-semibold'
+                              : 'bg-emerald-50 text-emerald-900 border border-emerald-200 font-semibold'
                             : 'hover:bg-slate-200/50 text-slate-600'
                         }`}
                       >
@@ -184,6 +203,8 @@ export const AgentPipelineRail: React.FC<AgentPipelineRailProps> = ({
                           {sub.id.includes('req_intake') && <FileText className="w-3.5 h-3.5 shrink-0 text-slate-500" />}
                           {sub.id.includes('codebase_intake') && <FolderArchive className="w-3.5 h-3.5 shrink-0 text-slate-500" />}
                           {sub.id.includes('understanding') && <Sparkles className="w-3.5 h-3.5 shrink-0 text-purple-600" />}
+                          {sub.id.includes('coverage_planner') && <Layers className="w-3.5 h-3.5 shrink-0 text-emerald-600" />}
+                          {sub.id.includes('batch_generator') && <Sparkles className="w-3.5 h-3.5 shrink-0 text-emerald-600" />}
                           <span className="text-[11px] truncate">{sub.label}</span>
                         </div>
                         {statusIcon(subStatus)}
